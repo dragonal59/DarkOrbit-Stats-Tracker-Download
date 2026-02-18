@@ -1,0 +1,32 @@
+{
+  "name": "darkorbit-stats-tracker",
+  "version": "1.0.0",
+  "description": "DarkOrbit Stats Tracker Pro",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder"
+  },
+  "author": "Ton Nom",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.1.0",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.darkorbit.statstracker",
+    "productName": "DarkOrbit Stats Tracker Pro",
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    },
+    "files": [
+      "src/**/*",
+      "main.js"
+    ]
+  }
+}

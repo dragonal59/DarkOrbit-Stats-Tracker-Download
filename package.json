@@ -1,0 +1,39 @@
+{
+  "name": "darkorbit-stats-tracker",
+  "version": "1.0.0",
+  "description": "DarkOrbit Stats Tracker Pro",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "prebuild": "node scripts/obfuscate-build.js && node scripts/inject-supabase-config.js",
+    "build": "electron-builder"
+  },
+  "author": "Ton Nom",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.1.0",
+    "electron-builder": "^24.9.1",
+    "javascript-obfuscator": "^4.1.1"
+  },
+  "build": {
+    "appId": "com.darkorbit.statstracker",
+    "productName": "DarkOrbit Stats Tracker Pro",
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    },
+    "files": [
+      "main.js",
+      { "from": "electron", "to": "electron" },
+      { "from": "build/src", "to": "src" }
+    ]
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.95.3",
+    "dotenv": "^17.2.4"
+  }
+}

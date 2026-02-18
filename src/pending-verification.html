@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>En attente de vérification — DarkOrbit Stats Tracker Pro</title>
+  <link rel="stylesheet" href="frontend/variables.css">
+  <link rel="stylesheet" href="frontend/style.css">
+  <style>
+    .auth-container { max-width: 520px; margin: 80px auto; padding: 32px; background: var(--bg-secondary); border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 8px 32px var(--shadow); }
+    .auth-header { text-align: center; margin-bottom: 24px; }
+    .auth-header h1 { font-size: 1.5rem; margin-bottom: 8px; }
+    .pending-message { color: var(--text-secondary); line-height: 1.6; margin-bottom: 24px; }
+    .auth-submit { width: 100%; padding: 14px; background: var(--accent); color: #fff; border: none; border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer; }
+    .auth-submit:hover { background: var(--accent-hover); }
+  </style>
+</head>
+<body>
+<div class="auth-container">
+  <div class="auth-header">
+    <h1>🕐 Votre compte est en attente de vérification</h1>
+  </div>
+  <p class="pending-message">
+    Notre équipe d'administration est en train de vérifier votre pseudo DarkOrbit.<br>
+    Vous recevrez un email dès que votre compte sera approuvé et vous pourrez alors accéder à l'application.<br>
+    Ce processus prend généralement moins de 24 heures.<br>
+    Merci de votre patience !
+  </p>
+  <button type="button" class="auth-submit" id="logoutBtn">Se déconnecter</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="backend/supabase-config.js"></script>
+<script src="backend/supabase-client.js"></script>
+<script src="backend/unified-storage.js"></script>
+<script src="backend/auth-manager.js"></script>
+<script>
+(function() {
+  document.getElementById('logoutBtn').addEventListener('click', async function() {
+    await AuthManager.logout();
+    window.location.href = 'auth.html';
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,63 @@
+{
+  "version": "1.0",
+  "generated_at": "2026-02-16T16:30:00.000Z",
+  "total_grades": 21,
+  "description": "Mapping complet des 21 grades DarkOrbit dans toutes les langues des serveurs actifs",
+
+  "grades": [
+    { "id": 1, "level": 1, "en": "Basic Space Pilot", "fr": "Pilote de 1ère classe", "es": "Piloto básico", "ru": "Рядовой космический пилот", "tr": "Acemi Uzay Pilotu", "pl": null },
+    { "id": 2, "level": 2, "en": "Space Pilot", "fr": "Caporal", "es": "Piloto", "ru": "Космический пилот", "tr": "Uzay Pilotu", "pl": null },
+    { "id": 3, "level": 3, "en": "Chief Space Pilot", "fr": "Caporal-chef", "es": "Jefe piloto", "ru": "Старший пилот", "tr": "Acemi Pilot", "pl": null },
+    { "id": 4, "level": 4, "en": "Basic Sergeant", "fr": "Sergent", "es": "Sargento básico", "ru": "Младший сержант", "tr": "Acemi Çavuş", "pl": null },
+    { "id": 5, "level": 5, "en": "Sergeant", "fr": "Sergent-chef", "es": "Sargento", "ru": "Сержант", "tr": "Çavuş", "pl": null },
+    { "id": 6, "level": 6, "en": "Chief Sergeant", "fr": "Adjudant", "es": "Sargento mayor", "ru": "Старший сержант", "tr": "Uzman Çavuş", "pl": null },
+    { "id": 7, "level": 7, "en": "Basic Lieutenant", "fr": "Adjudant-chef", "es": "Teniente básico", "ru": "Старшина", "tr": "Asteğmen", "pl": null },
+    { "id": 8, "level": 8, "en": "Lieutenant", "fr": "Major", "es": "Teniente", "ru": "Прапорщик", "tr": "Teğmen", "pl": null },
+    { "id": 9, "level": 9, "en": "Chief Lieutenant", "fr": "Sous-lieutenant", "es": "Teniente mayor", "ru": "Старший прапорщик", "tr": "Üsteğmen", "pl": null },
+    { "id": 10, "level": 10, "en": "Basic Captain", "fr": "Lieutenant", "es": "Capitán básico", "ru": "Младший лейтенант", "tr": "Acemi Yüzbaşı", "pl": null },
+    { "id": 11, "level": 11, "en": "Captain", "fr": "Capitaine", "es": "Capitán", "ru": "Лейтенант", "tr": "Yüzbaşı", "pl": null },
+    { "id": 12, "level": 12, "en": "Chief Captain", "fr": "Capitaine d'escadron", "es": "Capitán mayor", "ru": "Старший лейтенант", "tr": "Uzman Yüzbaşı", "pl": null },
+    { "id": 13, "level": 13, "en": "Basic Major", "fr": "Commandant", "es": "Mayor básico", "ru": "Капитан", "tr": "Acemi Binbaşı", "pl": null },
+    { "id": 14, "level": 14, "en": "Major", "fr": "Commandant d'escadron", "es": "Mayor", "ru": "Майор", "tr": "Binbaşı", "pl": null },
+    { "id": 15, "level": 15, "en": "Chief Major", "fr": "Lieutenant-colonel", "es": "Jefe mayor", "ru": "Подполковник", "tr": "Kurmay Binbaşı", "pl": null },
+    { "id": 16, "level": 16, "en": "Basic Colonel", "fr": "Colonel", "es": "Coronel básico", "ru": "Полковник", "tr": "Acemi Albay", "pl": null },
+    { "id": 17, "level": 17, "en": "Colonel", "fr": "Général de brigade", "es": "Coronel", "ru": "Генерал-майор", "tr": "Albay", "pl": null },
+    { "id": 18, "level": 18, "en": "Chief Colonel", "fr": "Général de division", "es": "Coronel mayor", "ru": "Генерал-лейтенант", "tr": "Kurmay Albay", "pl": null },
+    { "id": 19, "level": 19, "en": "Basic General", "fr": "Général de corps d'armée", "es": "General básico", "ru": "Генерал-полковник", "tr": "Tümgeneral", "pl": null },
+    { "id": 20, "level": 20, "en": "General", "fr": "Général d'Armée", "es": "General", "ru": "Генерал", "tr": "General", "pl": null },
+    { "id": 21, "level": 21, "en": "Chief General", "fr": "Maréchal", "es": "General Mayor", "ru": "Маршал", "tr": "Genel Kurmay Başkanı", "pl": null }
+  ],
+
+  "servers": {
+    "english_servers": ["gbl1", "gbl3", "gbl4", "gbl5", "int1", "int2", "int5", "int6", "int7", "int11", "int14", "us2", "de2", "de4"],
+    "french_servers": ["fr1"],
+    "spanish_servers": ["es1"],
+    "russian_servers": ["ru1", "ru5"],
+    "turkish_servers": ["tr3", "tr4", "tr5"],
+    "polish_servers": ["pl3"],
+    "dynamic_servers": {
+      "mx1": {
+        "description": "Langue dynamique selon la session utilisateur",
+        "supported_languages": ["en", "fr", "es", "ru", "tr"]
+      }
+    }
+  },
+
+  "language_detection": {
+    "fr1": "fr", "es1": "es", "ru1": "ru", "ru5": "ru", "tr3": "tr", "tr4": "tr", "tr5": "tr", "pl3": "pl", "mx1": "dynamic",
+    "gbl1": "en", "gbl3": "en", "gbl4": "en", "gbl5": "en", "int1": "en", "int2": "en", "int5": "en", "int6": "en", "int7": "en", "int11": "en", "int14": "en", "us2": "en", "de2": "en", "de4": "en"
+  },
+
+  "inactive_languages": {
+    "sk": {
+      "language": "slovenčina",
+      "status": "ancien serveur / inactif",
+      "grades": [
+        "Astronaut-začiatočník", "Astronaut", "Šéf-astronaut", "Seržant-začiatočník", "Seržant", "Šéf-seržant",
+        "Dôstojník-začiatočník", "Dôstojník", "Šéf-dôstojník", "Kapitán-začiatočník", "Kapitán", "Šéf-kapitán",
+        "Major-začiatočník", "Major", "Šéf-major", "Plukovník-začiatočník", "Plukovník", "Šéf-plukovník",
+        "Generál-začiatočník", "Generál", "Šéf-Generál"
+      ]
+    }
+  }
+}

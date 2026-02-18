@@ -1,0 +1,335 @@
+/* ==========================================
+   CLASSEMENT — Styles (filtres, tableau, badges firme, modal)
+   ========================================== */
+
+.ranking-header {
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.ranking-title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+.ranking-subtitle {
+  margin: 0.25rem 0 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.ranking-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem 1.5rem;
+  align-items: flex-end;
+  margin-bottom: 1.5rem;
+  padding: 1.25rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.ranking-last-update {
+  width: 100%;
+  margin: 0 0 0.5rem 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.ranking-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.ranking-filter-group label { font-size: 0.85rem; color: var(--text-secondary); font-weight: 500; }
+.ranking-filter-label { font-size: 0.85rem; color: var(--text-secondary); font-weight: 500; }
+
+.ranking-type-radios,
+.ranking-company-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.ranking-type-radios {
+  display: inline-flex;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  padding: 2px;
+  border: 1px solid var(--border);
+}
+
+.ranking-type-option {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.ranking-type-option:has(input:checked) {
+  background: var(--accent);
+  color: #fff;
+}
+
+.ranking-type-option:hover:not(:has(input:checked)) {
+  background: var(--border);
+}
+
+.ranking-type-option input { display: none; }
+
+.ranking-company-checkboxes label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.ranking-filter-group select {
+  min-width: 140px;
+  padding: 0.5rem 0.75rem;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.ranking-actions {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.ranking-actions-refresh,
+.ranking-actions-import {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ranking-import-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-right: 0.25rem;
+}
+
+.ranking-btn {
+  padding: 0.45rem 0.9rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.ranking-btn-refresh {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.ranking-btn-refresh:hover {
+  background: var(--border);
+}
+
+.ranking-btn-import {
+  background: transparent;
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.ranking-btn-import:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.ranking-table-wrap {
+  overflow-x: auto;
+  margin-bottom: 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+.ranking-table-wrap.ranking-loading { opacity: 0.7; pointer-events: none; }
+
+.ranking-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.ranking-table th,
+.ranking-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  line-height: 1.4;
+}
+
+.ranking-table thead th {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-weight: 600;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.85rem 1rem;
+  border-bottom: 2px solid var(--border);
+}
+
+.ranking-table th[data-col="position"] { text-align: center; }
+.ranking-table th[data-col="pseudo"] { text-align: left; }
+.ranking-table th[data-col="grade"] { text-align: center; }
+.ranking-table th[data-col="honor"],
+.ranking-table th[data-col="xp"],
+.ranking-table th[data-col="rank_points"] { text-align: right; }
+.ranking-table th.ranking-col-sorted { color: var(--accent); }
+.ranking-table th.ranking-col-hidden,
+.ranking-table td.ranking-col-hidden { display: none; }
+
+.ranking-table td.ranking-num { text-align: right; }
+.ranking-table td.ranking-col-honor.ranking-col-sorted,
+.ranking-table td.ranking-col-xp.ranking-col-sorted,
+.ranking-table td.ranking-col-rank_points.ranking-col-sorted { font-weight: 600; color: var(--accent); }
+
+.ranking-table tbody tr.ranking-row {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.ranking-table tbody tr.ranking-row:hover { background: var(--bg-tertiary); }
+
+.ranking-pos { width: 3.5rem; text-align: center; font-weight: 700; font-size: 0.95rem; }
+.ranking-pos-gold { color: #fbbf24; text-shadow: 0 0 8px rgba(251,191,36,0.4); }
+.ranking-pos-silver { color: #9ca3af; }
+.ranking-pos-bronze { color: #d97706; }
+
+.ranking-pseudo { text-align: left; font-weight: 500; }
+
+/* Colonne Grade : largeur fixe, centrage */
+.ranking-table th[data-col="grade"],
+.ranking-table td.ranking-grade {
+  width: 44px;
+  min-width: 44px;
+  max-width: 44px;
+  text-align: center;
+  vertical-align: middle;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+.ranking-grade-img {
+  display: block;
+  margin: 0 auto;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  object-position: center;
+}
+
+.ranking-grade .ranking-grade-img[src*="chief_general"] {
+  transform: translateX(5px);
+}
+
+/* Badges firme avec halo */
+.company-badge {
+  display: inline-block;
+  width: 1.6em;
+  height: 1.6em;
+  line-height: 1.6em;
+  text-align: center;
+  font-weight: 700;
+  font-size: 1rem;
+  border-radius: 4px;
+}
+.company-badge.company-mmo {
+  color: #ff0000;
+  text-shadow: 0 0 8px #ff0000, 0 0 12px #ff0000;
+}
+.company-badge.company-eic {
+  color: #0066ff;
+  text-shadow: 0 0 8px #0066ff, 0 0 12px #0066ff;
+}
+.company-badge.company-vru {
+  color: #00ff00;
+  text-shadow: 0 0 8px #00ff00, 0 0 12px #00ff00;
+}
+.company-badge.company-other {
+  color: var(--text-secondary);
+}
+
+/* Modal popup */
+.ranking-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 1000;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s, visibility 0.2s;
+}
+.ranking-modal-overlay.active { opacity: 1; visibility: visible; }
+
+.ranking-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1001;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px var(--shadow);
+  max-width: 90vw;
+  width: 420px;
+  max-height: 85vh;
+  overflow: auto;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s, visibility 0.2s;
+}
+.ranking-modal.active { opacity: 1; visibility: visible; }
+
+.ranking-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+.ranking-modal-header h3 { margin: 0; font-size: 1.1rem; }
+.ranking-modal-close {
+  padding: 0.4rem 0.8rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.ranking-modal-close:hover { background: var(--border); }
+
+.ranking-modal-body {
+  padding: 1.25rem;
+}
+.ranking-modal-body p {
+  margin-bottom: 0.75rem;
+  font-size: 0.95rem;
+}
+.ranking-modal-body p:last-child { margin-bottom: 0; }
+.ranking-modal-body .ranking-grade-img { margin-right: 0.35rem; }

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Email confirmé — DarkOrbit Stats Tracker Pro</title>
+  <style>
+    :root { --bg-primary: #0f172a; --bg-secondary: #1e293b; --accent: #38bdf8; --text-primary: #fff; --text-secondary: #cbd5e1; --success: #22c55e; --danger: #ef4444; --border: #334155; --shadow: rgba(0,0,0,.5); }
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg-primary); color: var(--text-primary); margin: 0; padding: 20px; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .auth-container { max-width: 420px; width: 100%; padding: 32px; background: var(--bg-secondary); border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 8px 32px var(--shadow); }
+    .auth-header { text-align: center; margin-bottom: 28px; }
+    .auth-header h1 { font-size: 1.5rem; margin-bottom: 8px; }
+    .auth-icon { font-size: 48px; margin-bottom: 16px; }
+    .auth-message { color: var(--text-secondary); line-height: 1.6; margin-bottom: 24px; text-align: center; }
+    .auth-success { background: rgba(34,197,94,.15); color: var(--success); padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; text-align: center; }
+    .auth-error { background: rgba(239,68,68,.15); color: var(--danger); padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; display: none; }
+    .auth-error.visible { display: block; }
+    .auth-btn { width: 100%; padding: 14px; background: var(--accent); color: #fff; border: none; border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer; margin-top: 8px; }
+    .auth-btn:hover { opacity: 0.9; }
+    .auth-link { display: block; text-align: center; margin-top: 16px; color: var(--accent); font-size: 0.9rem; text-decoration: none; }
+    .auth-link:hover { text-decoration: underline; }
+    .auth-loading { text-align: center; padding: 24px; color: var(--text-secondary); }
+    .spinner { display: inline-block; width: 24px; height: 24px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; margin-bottom: 12px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+<div class="auth-container">
+  <div class="auth-header">
+    <div class="auth-icon" id="confirmIcon">✉️</div>
+    <h1 id="confirmTitle">Confirmation de votre email</h1>
+    <p id="confirmSubtitle">Traitement en cours...</p>
+  </div>
+  <div id="authError" class="auth-error"></div>
+  <div id="authSuccess" class="auth-success" style="display:none;"></div>
+  <div id="loadingState" class="auth-loading">
+    <div class="spinner"></div>
+    <p>Vérification en cours...</p>
+  </div>
+  <div id="successState" style="display:none;">
+    <p class="auth-message">Votre adresse email a été confirmée. Redirection vers l'application...</p>
+    <button type="button" class="auth-btn" id="goToAppBtn">Ouvrir l'application</button>
+  </div>
+  <div id="errorState" style="display:none;">
+    <p class="auth-message" id="errorMessage">Une erreur s'est produite.</p>
+    <a href="#" id="backLink" class="auth-link">Retour</a>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+/* TODO: Remplacer par votre URL GitHub Pages déployée, ex. https://GITHUB_USERNAME.github.io/REPO_NAME/ */
+var GH_PAGES_BASE = 'https://GITHUB_USERNAME.github.io/REPO_NAME/';
+/* TODO: Remplacer par vos clés Supabase (anon key uniquement, publique) */
+var SUPABASE_URL = 'https://YOUR_PROJECT.supabase.co';
+var SUPABASE_ANON_KEY = 'YOUR_ANON_KEY';
+var PROTOCOL_APP = 'darkorbit-tracker://';
+
+(function() {
+  var loadingEl = document.getElementById('loadingState');
+  var successEl = document.getElementById('successState');
+  var errorEl = document.getElementById('errorState');
+  var authErrorEl = document.getElementById('authError');
+  var authSuccessEl = document.getElementById('authSuccess');
+  var confirmIcon = document.getElementById('confirmIcon');
+  var confirmTitle = document.getElementById('confirmTitle');
+  var confirmSubtitle = document.getElementById('confirmSubtitle');
+  var goToAppBtn = document.getElementById('goToAppBtn');
+  var backLink = document.getElementById('backLink');
+
+  function show(state) {
+    loadingEl.style.display = state === 'loading' ? 'block' : 'none';
+    successEl.style.display = state === 'success' ? 'block' : 'none';
+    errorEl.style.display = state === 'error' ? 'block' : 'none';
+  }
+  function setError(msg) {
+    if (authErrorEl) { authErrorEl.textContent = msg; authErrorEl.classList.add('visible'); }
+    if (authSuccessEl) authSuccessEl.style.display = 'none';
+  }
+
+  function redirectToApp() {
+    var hash = window.location.hash || '';
+    var deepLink = PROTOCOL_APP + 'confirm-email' + (hash ? '#' + hash.replace(/^#/, '') : '');
+    window.location.href = deepLink;
+  }
+
+  document.getElementById('goToAppBtn').addEventListener('click', redirectToApp);
+  if (backLink) backLink.href = GH_PAGES_BASE + 'auth-fallback.html';
+
+  document.addEventListener('DOMContentLoaded', async function() {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || SUPABASE_ANON_KEY === 'YOUR_ANON_KEY') {
+      setError('Configuration Supabase manquante. Configurez SUPABASE_URL et SUPABASE_ANON_KEY.');
+      show('error');
+      return;
+    }
+    var hash = window.location.hash || '';
+    var query = window.location.search || '';
+    var hasToken = hash.indexOf('access_token') !== -1 || hash.indexOf('token=') !== -1 || query.indexOf('access_token') !== -1;
+    if (!hasToken) {
+      setError('Lien de confirmation invalide ou déjà utilisé.');
+      show('error');
+      confirmIcon.textContent = '⚠️';
+      confirmTitle.textContent = 'Lien invalide';
+      return;
+    }
+    var supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    await new Promise(function(r) { setTimeout(r, 150); });
+    var { data: sessionData } = await supabase.auth.getSession();
+    var session = sessionData && sessionData.session;
+    if (session) {
+      confirmIcon.textContent = '✅';
+      confirmTitle.textContent = 'Email confirmé !';
+      confirmSubtitle.textContent = 'Bienvenue dans DarkOrbit Stats Tracker Pro';
+      if (authSuccessEl) { authSuccessEl.textContent = 'Redirection vers l\'application...'; authSuccessEl.style.display = 'block'; }
+      show('success');
+      setTimeout(redirectToApp, 1500);
+    } else {
+      setError('Lien expiré ou invalide. Demandez un nouvel email de confirmation.');
+      show('error');
+      confirmIcon.textContent = '⚠️';
+      confirmTitle.textContent = 'Confirmation impossible';
+    }
+  });
+})();
+</script>
+</body>
+</html>

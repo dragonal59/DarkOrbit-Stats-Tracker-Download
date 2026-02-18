@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Connexion — DarkOrbit Stats Tracker Pro</title>
+  <link rel="stylesheet" href="frontend/variables.css">
+  <link rel="stylesheet" href="frontend/style.css">
+  <style>
+    .auth-container { max-width: 420px; margin: 80px auto; padding: 32px; background: var(--bg-secondary); border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 8px 32px var(--shadow); }
+    .auth-header { text-align: center; margin-bottom: 28px; }
+    .auth-header h1 { font-size: 1.5rem; margin-bottom: 8px; }
+    .auth-header p { color: var(--text-muted); font-size: 0.9rem; }
+    .auth-tabs { display: flex; gap: 0; margin-bottom: 24px; border-bottom: 1px solid var(--border); }
+    .auth-tab { flex: 1; padding: 12px; background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.95rem; border-bottom: 2px solid transparent; }
+    .auth-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+    .auth-form { display: none; }
+    .auth-form.active { display: block; }
+    .auth-form .field { margin-bottom: 16px; }
+    .auth-form label { display: block; margin-bottom: 6px; font-size: 0.9rem; color: var(--text-secondary); }
+    .auth-form input { width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--input-bg); color: var(--text-primary); font-size: 1rem; }
+    .auth-form input:focus { outline: none; border-color: var(--accent); }
+    .auth-error { background: rgba(239, 68, 68, 0.15); color: var(--danger); padding: 10px 12px; border-radius: 8px; font-size: 0.9rem; margin-bottom: 16px; display: none; }
+    .auth-error.visible { display: block; }
+    .auth-success { background: rgba(34, 197, 94, 0.15); color: var(--success); padding: 10px 12px; border-radius: 8px; font-size: 0.9rem; margin-bottom: 16px; display: none; }
+    .auth-success.visible { display: block; }
+    .auth-submit { width: 100%; padding: 14px; background: var(--accent); color: #fff; border: none; border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer; margin-top: 8px; }
+    .auth-submit:hover { background: var(--accent-hover); }
+    .auth-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+    .auth-link { display: block; text-align: center; margin-top: 16px; color: var(--accent); font-size: 0.9rem; text-decoration: none; cursor: pointer; }
+    .auth-link:hover { text-decoration: underline; }
+    .auth-forgot { font-size: 0.85rem; color: var(--text-muted); margin-top: 8px; }
+    .field-remember { margin-bottom: 12px; }
+    .auth-remember-label { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.9rem; color: var(--text-secondary); }
+    .auth-remember-label input[type="checkbox"] { width: auto; cursor: pointer; }
+    .auth-section-title { font-size: 1rem; font-weight: 600; color: var(--text-primary); margin: 20px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+    .auth-form select { width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--input-bg); color: var(--text-primary); font-size: 1rem; cursor: pointer; }
+    .auth-form select:focus { outline: none; border-color: var(--accent); }
+    .auth-warning { font-size: 0.8rem; color: #e67e22; margin-top: 6px; line-height: 1.35; }
+    .company-option-eic { color: #3498db; }
+    .company-option-mmo { color: #e74c3c; }
+    .company-option-vru { color: #27ae60; }
+    /* Custom dropdown grade avec images */
+    .auth-rank-wrapper { position: relative; }
+    .auth-rank-select-native { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+    .auth-rank-display { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--input-bg); color: var(--text-primary); font-size: 1rem; cursor: pointer; min-height: 48px; }
+    .auth-rank-display:hover { border-color: var(--accent); }
+    .auth-rank-display .auth-rank-option-icon { width: 32px; height: 32px; object-fit: contain; flex-shrink: 0; }
+    .auth-rank-display .auth-rank-option-text { flex: 1; }
+    .auth-rank-display::after { content: '▼'; font-size: 0.7rem; opacity: 0.7; }
+    .auth-rank-options { display: none; position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; max-height: 280px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-secondary); box-shadow: 0 8px 24px var(--shadow); z-index: 10; }
+    .auth-rank-options.open { display: block; }
+    .auth-rank-option { display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--border); }
+    .auth-rank-option:last-child { border-bottom: none; }
+    .auth-rank-option:hover { background: var(--accent); color: #fff; }
+    .auth-rank-option .auth-rank-option-icon { width: 28px; height: 28px; object-fit: contain; flex-shrink: 0; }
+  </style>
+</head>
+<body>
+<div class="auth-container">
+  <div class="auth-header">
+    <h1>🚀 DarkOrbit Stats Tracker Pro</h1>
+    <p>Connectez-vous pour continuer</p>
+  </div>
+
+  <div class="auth-tabs">
+    <button type="button" class="auth-tab active" data-tab="login">Connexion</button>
+    <button type="button" class="auth-tab" data-tab="register">Inscription</button>
+  </div>
+
+  <div id="authError" class="auth-error"></div>
+  <div id="authSuccess" class="auth-success"></div>
+
+  <form id="authLoginForm" class="auth-form active" onsubmit="return false;">
+    <div class="field">
+      <label for="loginEmail">Email</label>
+      <input type="email" id="loginEmail" required placeholder="votre@email.com" autocomplete="email">
+    </div>
+    <div class="field">
+      <label for="loginPassword">Mot de passe</label>
+      <input type="password" id="loginPassword" required placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <div class="field field-remember">
+      <label class="auth-remember-label">
+        <input type="checkbox" id="loginRememberMe" autocomplete="off">
+        <span>Sauvegarder le mot de passe (Remember me)</span>
+      </label>
+    </div>
+    <button type="button" id="authForgotBtn" class="auth-link auth-forgot">Mot de passe oublié ?</button>
+    <button type="submit" class="auth-submit" id="loginSubmit">Se connecter</button>
+  </form>
+
+  <form id="authRegisterForm" class="auth-form" onsubmit="return false;">
+    <div class="field">
+      <label for="registerEmail">Email</label>
+      <input type="email" id="registerEmail" required placeholder="votre@email.com" autocomplete="email">
+    </div>
+    <div class="field">
+      <label for="registerPassword">Mot de passe (min. 6 caractères)</label>
+      <input type="password" id="registerPassword" required minlength="6" placeholder="••••••••" autocomplete="new-password">
+    </div>
+
+    <h3 class="auth-section-title">Informations du jeu</h3>
+    <div class="field">
+      <label for="registerGamePseudo">Pseudo DarkOrbit (exactement comme dans le jeu)</label>
+      <input type="text" id="registerGamePseudo" required placeholder="Votre pseudo exact" autocomplete="off">
+      <p class="auth-warning">&#x26A0;&#xFE0F; Votre pseudo sera vérifié par notre équipe. Si votre pseudo ne correspond pas à un joueur actif de DarkOrbit, votre compte sera supprimé. Vous devrez alors créer un nouveau compte avec les informations correctes.</p>
+    </div>
+    <div class="field">
+      <label for="registerServer">Serveur de jeu</label>
+      <select id="registerServer" required>
+        <option value="">— Choisir un serveur —</option>
+        <!-- Options générées depuis SERVERS_LIST (config.js) -->
+      </select>
+    </div>
+    <div class="field">
+      <label for="registerCompany">Votre firme</label>
+      <select id="registerCompany" required>
+        <option value="">— Choisir une firme —</option>
+        <option value="EIC" class="company-option-eic">EIC</option>
+        <option value="MMO" class="company-option-mmo">MMO</option>
+        <option value="VRU" class="company-option-vru">VRU</option>
+      </select>
+    </div>
+
+    <h3 class="auth-section-title">Statistiques actuelles</h3>
+    <div class="field">
+      <label for="registerHonor">Points d'honneur actuels</label>
+      <input type="number" id="registerHonor" required min="0" placeholder="0" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="registerXp">Points d'expérience actuels</label>
+      <input type="number" id="registerXp" required min="0" placeholder="0" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="registerInitialRank">Grade actuel</label>
+      <div class="auth-rank-wrapper" id="registerInitialRankWrapper">
+        <select id="registerInitialRank" name="registerInitialRank" required class="auth-rank-select-native" aria-hidden="true" tabindex="-1">
+          <option value="">— Choisir un grade —</option>
+        </select>
+        <div class="auth-rank-display" id="registerInitialRankDisplay" tabindex="0" role="listbox" aria-label="Grade actuel">
+          <img src="img/basic_space_pilot.png" alt="" class="auth-rank-option-icon">
+          <span class="auth-rank-option-text">— Choisir un grade —</span>
+        </div>
+        <div class="auth-rank-options" id="registerInitialRankOptions" role="listbox"></div>
+      </div>
+    </div>
+    <div class="field">
+      <label for="registerRankPoints">Points de grade actuels</label>
+      <input type="number" id="registerRankPoints" required min="0" placeholder="0" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="registerNextRankPoints">Points pour le grade suivant</label>
+      <input type="number" id="registerNextRankPoints" required min="1" placeholder="0" autocomplete="off">
+    </div>
+
+    <button type="submit" class="auth-submit" id="registerSubmit">Créer un compte</button>
+  </form>
+</div>
+
+<!-- SDK Supabase EN PREMIER -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<!-- Config et client Supabase -->
+<script src="backend/supabase-config.js"></script>
+<script src="backend/supabase-client.js"></script>
+<script src="config/keys.js"></script>
+<script src="backend/server-mappings.js"></script>
+<script src="backend/config.js"></script>
+<!-- UnifiedStorage puis auth -->
+<script src="backend/unified-storage.js"></script>
+<script src="backend/auth-manager.js"></script>
+<script src="frontend/auth.js"></script>
+<script>
+(function() {
+  document.addEventListener('DOMContentLoaded', function() {
+    var serverSelect = document.getElementById('registerServer');
+    if (serverSelect && typeof SERVERS_LIST !== 'undefined' && Array.isArray(SERVERS_LIST)) {
+      SERVERS_LIST.forEach(function(name) {
+        var opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        serverSelect.appendChild(opt);
+      });
+    }
+    var select = document.getElementById('registerInitialRank');
+    var display = document.getElementById('registerInitialRankDisplay');
+    var optionsEl = document.getElementById('registerInitialRankOptions');
+    if (!select || !display || !optionsEl || typeof RANKS_DATA === 'undefined' || !RANKS_DATA.length) return;
+    RANKS_DATA.forEach(function(r) {
+      var opt = document.createElement('div');
+      opt.className = 'auth-rank-option';
+      opt.setAttribute('data-value', r.name);
+      opt.setAttribute('role', 'option');
+      opt.innerHTML = '<img src="' + r.img + '" alt="" class="auth-rank-option-icon"><span>' + r.name + '</span>';
+      opt.addEventListener('click', function(e) {
+        e.stopPropagation();
+        select.value = r.name;
+        display.querySelector('.auth-rank-option-icon').src = r.img;
+        display.querySelector('.auth-rank-option-text').textContent = r.name;
+        optionsEl.classList.remove('open');
+        optionsEl.setAttribute('aria-expanded', 'false');
+      });
+      optionsEl.appendChild(opt);
+    });
+    display.addEventListener('click', function() {
+      var isOpen = optionsEl.classList.toggle('open');
+      optionsEl.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    });
+    document.addEventListener('click', function(e) {
+      var w = document.getElementById('registerInitialRankWrapper');
+      if (w && !w.contains(e.target)) {
+        optionsEl.classList.remove('open');
+        optionsEl.setAttribute('aria-expanded', 'false');
+      }
+    });
+  });
+})();
+</script>
+</body>
+</html>

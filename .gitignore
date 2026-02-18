@@ -1,0 +1,10 @@
+node_modules/
+dist/
+build/
+# config.supabase.prod.js (généré par inject-supabase-config.js) — dans build/src/
+.env
+.env.local
+.env.*.local
+.supabase/
+*.log
+.DS_Store
