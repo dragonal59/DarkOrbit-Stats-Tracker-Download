@@ -6,16 +6,21 @@
       "type": "standard",
       "changes": {
         "nouveautés": [
-          "Scraping Hall of Fame pour 24 serveurs internationaux",
-          "Sidebar événements DarkOrbit en temps réel"
+          "Scraping Hall of Fame 24h / 7j / 30j directement depuis DOStats",
+          "Mode comparaison temporelle et onglet Progression alignés sur l'historique de sessions",
+          "Sidebar Suivi joueurs avec cartes dédiées et icônes Honneur / XP"
         ],
         "améliorations": [
-          "Performances du scraping optimisées",
-          "Interface dashboard redessinée"
+          "Affichage des classements multi-serveurs avec colonne Serveur et badge sous le pseudo",
+          "Notifications Windows pour booster 50% (une seule fois par jour, badge PRO/ADMIN/SUPERADMIN)",
+          "Persistance fiable du planificateur (heures de déclenchement automatique, paramètres généraux)",
+          "Icône de l'application unifiée (barre des tâches, tray, installeur)"
         ],
         "corrections": [
-          "Correction du remappage serveurs gbl2/gbl3",
-          "Fix sécurité vue profiles_public"
+          "Suppression du fallback estimed RP = points généraux pour garantir la fidélité DOStats",
+          "Alignement complet des popups profils quel que soit le filtre (Aujourd'hui, 24h, 7j, 30j)",
+          "Historique : regroupement par jour avec baseline correcte et gains journaliers cohérents",
+          "Divers correctifs UI (scroll principal masqué, badges inutiles retirés, textes i18n corrigés)"
         ]
       }
     }
