@@ -1,7 +1,11 @@
 # Sécurisation des limites de sessions côté backend
 
-**Date :** 11 février 2026  
-**Règles métier :** FREE = 1 session max | PRO = 10 sessions max | ADMIN/SUPERADMIN = illimité
+> ⚠ **Statut : document historique (obsolète pour la version actuelle).**  
+> Depuis la mise à jour décrite dans `CORRECTIONS_VERSION_FREE.md`, les limites FREE=1 / PRO=10 ont été **désactivées** côté serveur via la migration `remove-session-limits-unlimited.sql`.  
+> Ce fichier décrit donc l’ancienne configuration « sessions limitées » et ne doit plus être appliqué tel quel sur une base qui utilise la version actuelle de l’app.
+
+**Date (configuration historique) :** 11 février 2026  
+**Règles métier à l’époque :** FREE = 1 session max | PRO = 10 sessions max | ADMIN/SUPERADMIN = illimité
 
 ---
 

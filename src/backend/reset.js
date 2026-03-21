@@ -28,12 +28,12 @@ async function hardReset() {
       const user = await AuthManager.getCurrentUser();
       if (user && user.id) {
         const supabase = getSupabaseClient();
-        await supabase.from("user_sessions").delete().eq("user_id", user.id);
+        const { error: delErr } = await supabase.rpc("delete_all_sessions_for_current_user");
+        if (delErr) Logger.warn("[Reset] delete_all_sessions_for_current_user:", delErr.message || delErr);
       }
     }
 
-    // 2. Supprimer toutes les données locales (sessions + stats)
-    SafeStorage.remove(CONFIG.STORAGE_KEYS.SESSIONS);
+    if (typeof setSessionsCache === "function") setSessionsCache([]);
     SafeStorage.remove(CONFIG.STORAGE_KEYS.CURRENT_STATS);
     SafeStorage.remove(CONFIG.STORAGE_KEYS.THEME);
     SafeStorage.remove(CONFIG.STORAGE_KEYS.VIEW_MODE);
@@ -43,13 +43,11 @@ async function hardReset() {
     const xpEl = document.getElementById("xp");
     const rankPointsEl = document.getElementById("rankPoints");
     const nextRankPointsEl = document.getElementById("nextRankPoints");
-    const sessionNoteEl = document.getElementById("sessionNote");
     const currentLevelEl = document.getElementById("currentLevel");
     if (honorEl) honorEl.value = "";
     if (xpEl) xpEl.value = "";
     if (rankPointsEl) rankPointsEl.value = "";
     if (nextRankPointsEl) nextRankPointsEl.value = "";
-    if (sessionNoteEl) sessionNoteEl.value = "";
     if (currentLevelEl) currentLevelEl.value = "";
 
     const selected = document.getElementById("selected");
@@ -65,13 +63,11 @@ async function hardReset() {
 
     // 4. Bloquer l'accès : popup formulaire obligatoire pour saisir de nouvelles stats
     if (typeof setAppAccessFromSessions === "function") setAppAccessFromSessions(0);
-    if (typeof initBaselineSetup === "function") initBaselineSetup(true);
 
     showToast("🔥 Hard Reset effectué ! Saisissez vos stats pour continuer.", "warning");
   } catch (error) {
-    console.error("Hard reset error:", error);
+    Logger.error("Hard reset error:", error);
     showToast("❌ Erreur lors du reset", "error");
   }
 }
 
-console.log('🔥 Module Reset chargé');

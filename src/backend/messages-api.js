@@ -6,7 +6,7 @@
 const MessagesAPI = {
   _unreadCache: null,
   _unreadCacheTime: 0,
-  CACHE_TTL_MS: 30000,
+  CACHE_TTL_MS: 120000,
 
   async getMessages() {
     const supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
@@ -14,12 +14,12 @@ const MessagesAPI = {
     try {
       const { data, error } = await supabase.rpc('get_my_messages');
       if (error) {
-        console.warn('[MessagesAPI] getMessages:', error.message);
+        Logger.warn('[MessagesAPI] getMessages:', error.message);
         return [];
       }
       return data || [];
     } catch (e) {
-      console.error('[MessagesAPI] getMessages:', e);
+      Logger.error('[MessagesAPI] getMessages:', e);
       return [];
     }
   },
@@ -118,4 +118,4 @@ const MessagesAPI = {
 };
 
 window.MessagesAPI = MessagesAPI;
-console.log('✉️ Messages API chargée');
+

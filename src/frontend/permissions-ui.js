@@ -35,7 +35,7 @@ function stopFreePromoImageRotation() {
 
 function applyPermissionsUI() {
   if (typeof getCurrentBadge !== 'function' || typeof currentHasFeature !== 'function' || typeof currentCanAccessTab !== 'function') {
-    console.warn('⚠️ Permissions UI : version-badges.js requis');
+    if (window.DEBUG) Logger.warn('⚠️ Permissions UI : version-badges.js requis');
     return;
   }
 
@@ -105,12 +105,12 @@ async function updateExportButtonVisibility() {
 window.updateExportButtonVisibility = updateExportButtonVisibility;
 
 function applyTabVisibility() {
-  const tabIds = ['stats', 'progression', 'history', 'events', 'classement', 'settings', 'superadmin'];
+  const tabIds = ['stats', 'progression', 'history', 'classement', 'coupons', 'settings', 'superadmin'];
   const visibleTabs = tabIds.filter(id => currentCanAccessTab(id));
   let activeTabVisible = false;
 
   tabIds.forEach(tabId => {
-    const canAccess = currentCanAccessTab(tabId);
+    const canAccess = tabId === 'coupons' ? (typeof currentHasFeature === 'function' && currentHasFeature('couponsTab')) : currentCanAccessTab(tabId);
     const btn = document.querySelector(`[data-tab="${tabId}"]`);
     const content = document.getElementById(`tab-${tabId}`);
     if (btn) btn.style.display = canAccess ? '' : 'none';
@@ -124,17 +124,11 @@ function applyTabVisibility() {
 }
 
 function applySidebarVisibility() {
-  const viewAllBtn = document.getElementById('viewAllEventsBtn');
-  const addBtn = document.getElementById('addEventBtn');
   const eventsSidebar = document.querySelector('.events-sidebar');
   const badge = typeof getCurrentBadge === 'function' ? getCurrentBadge() : '';
-  const hasEventsTab = currentCanAccessTab('events') || ['PRO', 'ADMIN', 'SUPERADMIN'].includes(badge);
-  const isAdminOrSuperadmin = ['ADMIN', 'SUPERADMIN'].includes(badge);
-  const showViewAll = isAdminOrSuperadmin && currentHasFeature('eventsSidebarViewAllButton');
-  const showAdd = isAdminOrSuperadmin && currentHasFeature('eventsSidebarAddButton');
-  if (viewAllBtn) viewAllBtn.style.display = showViewAll ? '' : 'none';
-  if (addBtn) addBtn.style.display = showAdd ? '' : 'none';
-  if (eventsSidebar) eventsSidebar.style.display = hasEventsTab ? '' : 'none';
+  if (!badge) return;
+  const hasEvents = ['PRO', 'ADMIN', 'SUPERADMIN'].includes(badge);
+  if (eventsSidebar) eventsSidebar.style.display = hasEvents ? '' : 'none';
 }
 
 function applySettingsVisibility() {
@@ -150,18 +144,25 @@ function applySettingsVisibility() {
 }
 
 function applyBoosterVisibility() {
-  const badge = typeof getCurrentBadge === 'function' ? getCurrentBadge() : 'FREE';
   const boosterSidebar = document.getElementById('boosterSidebar');
-  const boosterFreePromo = document.getElementById('boosterFreePromo');
-  const boosterWidget = document.getElementById('boosterWidget');
-  const boosterAlert = document.getElementById('boosterAlert');
   const appLayout = document.querySelector('.app-layout');
+
+  var isDashboardActive = document.querySelector('.tab-btn[data-tab="superadmin"]')?.classList.contains('active') ||
+    document.getElementById('tab-superadmin')?.classList.contains('active');
+  if (isDashboardActive) {
+    if (boosterSidebar) boosterSidebar.style.display = 'none';
+    if (appLayout) appLayout.classList.remove('has-booster-sidebar');
+    return;
+  }
+
+  const badge = typeof getCurrentBadge === 'function' ? getCurrentBadge() : 'FREE';
+  const boosterFreePromo = document.getElementById('boosterFreePromo');
+  const boosterAlert = document.getElementById('boosterAlert');
 
   if (badge === 'FREE') {
     if (boosterSidebar) boosterSidebar.style.display = '';
     if (appLayout) appLayout.classList.add('has-booster-sidebar');
     if (boosterFreePromo) boosterFreePromo.style.display = 'flex';
-    if (boosterWidget) boosterWidget.style.display = 'none';
     if (boosterAlert) boosterAlert.style.display = 'none';
     startFreePromoImageRotation();
     return;
@@ -169,10 +170,11 @@ function applyBoosterVisibility() {
 
   stopFreePromoImageRotation();
   if (boosterFreePromo) boosterFreePromo.style.display = 'none';
-  if (boosterSidebar) boosterSidebar.style.display = currentHasFeature('boosterDisplay') ? '' : 'none';
-  if (currentHasFeature('boosterDisplay') && typeof updateBoosterAlert === 'function' && typeof updateBoosterWidget === 'function') {
+  var isProOrAdmin = (badge === 'PRO' || badge === 'ADMIN' || badge === 'SUPERADMIN');
+  var hasBoosterInScraped = isProOrAdmin && typeof getTodayBooster === 'function' && getTodayBooster() !== null;
+  if (boosterSidebar) boosterSidebar.style.display = (currentHasFeature('boosterDisplay') && hasBoosterInScraped) ? '' : 'none';
+  if (currentHasFeature('boosterDisplay') && typeof updateBoosterAlert === 'function') {
     updateBoosterAlert();
-    updateBoosterWidget();
   }
 }
 
@@ -194,7 +196,7 @@ function applyMessagesVisibility() {
   const btn = document.getElementById('messagesInboxBtn');
   if (!btn) return;
   const badge = typeof getCurrentBadge === 'function' ? getCurrentBadge() : '';
-  btn.style.display = ['ADMIN', 'SUPERADMIN'].includes(badge) ? 'none' : '';
+  btn.style.display = ['FREE', 'PRO', 'ADMIN', 'SUPERADMIN'].includes(badge) ? '' : 'none';
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -202,4 +204,4 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 window.applyPermissionsUI = applyPermissionsUI;
 window.applyExportVisibility = applyExportVisibility;
-console.log('🔐 Module Permissions UI chargé');
+window.applyBoosterVisibility = applyBoosterVisibility;

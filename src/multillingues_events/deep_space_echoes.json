@@ -1,0 +1,47 @@
+{
+  "id": "deep_space_echoes",
+  "visible": true,
+  "image": "img/events/deep_space_echoes.jpg",
+  "names": {
+    "fr": "DARKORBIT PRÉSENTE : LES ÉCHOS DE L'ESPACE",
+    "en": "DARKORBIT PRESENTS: DEEP SPACE ECHOES",
+    "de": "DARKORBIT PRÄSENTIERT: TIEFRAUMECHOS",
+    "es": "DARKORBIT PRESENTA: ECOS DEL ESPACIO PROFUNDO",
+    "ru": "DARKORBIT ПРЕДСТАВЛЯЕТ: ЭХО ГЛУБОКОГО КОСМОСА",
+    "tr": "DARKORBIT SUNUYOR: DERİN UZAY YANKILILARI"
+  },
+  "descriptions": {
+    "fr": "Salutations, pilote de l'espace ! Avez-vous entendu la nouvelle ? Un nouveau portail ouvrant sur des régions inexplorées a été découvert ! Retrouvez vos collègues têtes-brûlées de l'autre côté, relevez de nouveaux défis, et améliorez votre vaisseau avec ces noyaux de fluide quantique révolutionnaires dont tout le monde parle…",
+    "en": "Greetings, Space Pilot! Have you heard the news? A new gateway to the uncharted regions has just been uncovered! Join your fellow hotshots on the other side, master new challenges and upgrade your ship with some of those revolutionary Quantum Fluid Cores everyone's talkin' about...",
+    "de": "Grüße, Weltraumpilot! Hast du die Neuigkeit gehört? Ein neues Tor zu unerforschten Regionen wurde entdeckt! Triff deine Kollegen auf der anderen Seite, meistere neue Herausforderungen und rüste dein Schiff mit den revolutionären Quantumflüssigkeitskernen auf, über die alle reden…",
+    "es": "¡Saludos, piloto espacial! ¿Has oído la noticia? ¡Se acaba de descubrir un nuevo portal hacia regiones inexploradas! Únete a tus compañeros al otro lado, domina nuevos desafíos y mejora tu nave con esos revolucionarios Núcleos de Fluido Cuántico de los que todos hablan…",
+    "ru": "Приветствую, космический пилот! Вы слышали новость? Был обнаружен новый портал в неизведанные регионы! Присоединяйтесь к своим товарищам на другой стороне, осваивайте новые испытания и улучшайте корабль с помощью революционных Ядер Квантовой Жидкости, о которых все говорят…",
+    "tr": "Selamlar, Uzay Pilotu! Haberi duydun mu? Keşfedilmemiş bölgelere açılan yeni bir geçit ortaya çıkarıldı! Diğer taraftaki meslektaşlarına katıl, yeni zorluklarla başa çık ve herkesin konuştuğu devrimci Kuantum Sıvı Çekirdekleriyle gemini yükselt…"
+  },
+  "keywords": [
+    "deep space echoes",
+    "darkorbit presents",
+    "les échos de l'espace",
+    "darkorbit présente",
+    "tiefraumechos",
+    "ecos del espacio profundo",
+    "ecos de las profundidades del espacio",
+    "эхо глубокого космоса",
+    "derin uzay yankıları",
+    "quantum fluid cores",
+    "noyaux de fluide quantique"
+  ],
+  "exclude_keywords": [
+    "stellar pathfinder",
+    "stellar pathfinder bundles",
+    "éclaireurs stellaires",
+    "paquetes stellar pathfinder",
+    "наборы stellar pathfinder",
+    "stellar pathfinder paketleri",
+    "galaxy trek",
+    "into the unknown",
+    "vers l'inconnu",
+    "paquetes stellar",
+    "exploradores estelares"
+  ]
+}

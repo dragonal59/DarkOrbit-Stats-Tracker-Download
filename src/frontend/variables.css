@@ -17,11 +17,12 @@
   --border: #334155;
   --shadow: rgba(0, 0, 0, 0.5);
 
-  --card-bg: #1e293b;
-  --border-color: #334155;
-  --input-bg: #0f172a;
-  --primary-color: #38bdf8;
-  --secondary-color: #0ea5e9;
+  /* Alias de compatibilité — référencent les variables canoniques */
+  --card-bg: var(--bg-secondary);
+  --border-color: var(--border);
+  --input-bg: var(--bg-primary);
+  --primary-color: var(--accent);
+  --secondary-color: var(--accent-hover);
 }
 
 [data-theme="light"] {
@@ -39,9 +40,10 @@
   --border: #cbd5e1;
   --shadow: rgba(0, 0, 0, 0.1);
 
-  --card-bg: #ffffff;
-  --border-color: #cbd5e1;
-  --input-bg: #f8fafc;
-  --primary-color: #0ea5e9;
-  --secondary-color: #0284c7;
+  /* Alias de compatibilité — référencent les variables canoniques */
+  --card-bg: var(--bg-secondary);
+  --border-color: var(--border);
+  --input-bg: var(--bg-primary);
+  --primary-color: var(--accent);
+  --secondary-color: var(--accent-hover);
 }

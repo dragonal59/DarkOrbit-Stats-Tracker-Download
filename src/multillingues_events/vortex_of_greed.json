@@ -1,0 +1,22 @@
+{
+  "id": "vortex_of_greed",
+  "visible": true,
+  "image": "img/events/vortex_of_greed.jpg",
+  "names": {
+    "fr": "Vortex de Cupidité",
+    "en": "Vortex of Greed",
+    "de": "Strudel der Gier",
+    "es": "Vórtice de la Codicia",
+    "ru": "Вихрь Жадности",
+    "tr": "Açgözlülük Girdabı"
+  },
+  "descriptions": {
+    "fr": "Salutations, pilote de l'espace ! Nos espions ont découvert une région inexplorée de l'espace, riche en précieux matériaux nécessaires à l'assemblage des LF-5 et LF-5 Anchorlock. Soyez prudent, cependant ! L'extraction de ressources dans cet environnement dangereux peut être une opération extrêmement difficile…",
+    "en": "Greetings, Space Pilot! Our company spies have discovered an undiscovered region of space, rich with precious materials required to assemble the LF-5 and LF-5 Anchorlock. Be cautious, though! Extracting resources from this dangerous environment may turn out to be an immensely challenging operation...",
+    "de": "Grüße, Weltraumpilot! Unsere Unternehmensspione haben eine unerforschte Region des Weltraums entdeckt, reich an wertvollen Materialien, die für den Zusammenbau der LF-5 und LF-5 Anchorlock benötigt werden. Sei jedoch vorsichtig! Die Gewinnung von Ressourcen in dieser gefährlichen Umgebung könnte sich als äußerst schwierige Operation erweisen...",
+    "es": "¡Saludos, piloto espacial! Nuestros espías han descubierto una región inexplorada del espacio, rica en valiosos materiales necesarios para ensamblar el LF-5 y el LF-5 Anchorlock. ¡Sin embargo, ten cuidado! Extraer recursos de este peligroso entorno puede resultar una operación enormemente desafiante...",
+    "ru": "Приветствую, космический пилот! Наши шпионы обнаружили неизведанный регион космоса, богатый ценными материалами для сборки LF-5 и LF-5 Anchorlock. Однако будьте осторожны! Добыча ресурсов в этой опасной среде может оказаться крайне сложной операцией...",
+    "tr": "Selamlar, Uzay Pilotu! Şirket casuslarımız, LF-5 ve LF-5 Anchorlock'u monte etmek için gereken değerli malzemelerle dolu keşfedilmemiş bir uzay bölgesi buldu. Ancak dikkatli ol! Bu tehlikeli ortamdan kaynak çıkarmak son derece zorlu bir operasyon olabilir..."
+  },
+  "keywords": ["vortex of greed", "vortex de cupidité", "vórtice de la codicia", "strudel der gier", "вихрь жадности", "açgözlülük girdabı"]
+}

@@ -1,0 +1,45 @@
+{
+  "id": "xp_day",
+  "visible": true,
+  "image": "img/events/xp_day_2.jpg",
+  "names": {
+    "fr": "Journée double XP",
+    "en": "XP Day",
+    "de": "Experience Tag",
+    "es": "Día de la experiencia",
+    "ru": "День опыта",
+    "tr": "XP Günü"
+  },
+  "descriptions": {
+    "fr": "Booster d'expérience 50 % ! Profitez d'un bonus de points d'XP pendant 24 heures !",
+    "en": "50% experience booster! Benefit from extra XP for 24 hours!",
+    "de": "50% Erfahrungs-Booster! Profitiere 24 Stunden lang von zusätzlichen XP-Punkten!",
+    "es": "¡Potenciador de experiencia al 50%! ¡Disfruta de puntos de XP adicionales durante 24 horas!",
+    "ru": "Бустер опыта 50%! Получайте бонусные очки XP в течение 24 часов!",
+    "tr": "50% Deneyim Güçlendirici! 24 saat boyunca ekstra XP puanı kazanın!"
+  },
+  "keywords": [
+    "xp day",
+    "experience day",
+    "journée double xp","journée d'expérience",
+    "día de la experiencia",
+    "experience tag",
+    "день опыта",
+    "xp günü",
+    "xp booster"
+  ],
+  "exclude_keywords": [
+    "honor day",
+    "journée double honneur",
+    "día del honor",
+    "ehrentag",
+    "ascend",
+    "ascension",
+    "ascenso",
+    "aufstieg",
+    "восхождение",
+    "yükseliş",
+    "ascension booster",
+    "booster ascension"
+  ]
+}

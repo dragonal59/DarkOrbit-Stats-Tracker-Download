@@ -1,0 +1,22 @@
+{
+  "id": "stellar_pathfinder_bundles",
+  "visible": true,
+  "image": "img/events/stellar_pathfinder_bundles.jpg",
+  "names": {
+    "fr": "Stellar Pathfinder Bundles",
+    "en": "Stellar Pathfinder Bundles",
+    "de": "Stellar Pathfinder Bundles",
+    "es": "Paquetes Stellar Pathfinder",
+    "ru": "Наборы Stellar Pathfinder",
+    "tr": "Stellar Pathfinder Paketleri"
+  },
+  "descriptions": {
+    "fr": "Tracez la voie vers de nouvelles frontières à travers tout le cosmos grâce aux nouveaux packs Éclaireurs stellaires ! Ils regorgent d'objets utiles, mais ils ne sont disponibles que pour une durée limitée, alors ne perdez pas de temps !",
+    "en": "Blaze a trail through new frontiers and across the cosmos with the Stellar Pathfinder bundles! They're fully kitted out, but only available for a limited time, so act now!",
+    "de": "Eröffne neue Wege durch unbekannte Grenzen und den gesamten Kosmos mit den Stellar Pathfinder-Bundles! Sie sind vollständig ausgestattet, aber nur für begrenzte Zeit verfügbar, also handle jetzt!",
+    "es": "¡Abre camino hacia nuevas fronteras y a través del cosmos con los paquetes Stellar Pathfinder! Están completamente equipados, pero solo disponibles por tiempo limitado, ¡así que actúa ya!",
+    "ru": "Прокладывайте путь через новые рубежи и весь космос с наборами Stellar Pathfinder! Они полностью укомплектованы, но доступны лишь ограниченное время, так что действуйте сейчас!",
+    "tr": "Stellar Pathfinder paketleriyle yeni sınırlar ve kozmos boyunca yolunuzu açın! Tamamen donanımlı ama yalnızca sınırlı bir süre için mevcut, bu yüzden hemen harekete geçin!"
+  },
+  "keywords": ["stellar pathfinder bundles", "éclaireurs stellaires", "paquetes stellar pathfinder", "stellar pathfinder bundles", "наборы stellar pathfinder", "stellar pathfinder paketleri","abrete paso","nuevas fronteras","exploradores estelares","lotes"],"exclude_keywords":["deep space echoes","ecos del espacio","galaxy trek","hacia lo desconocido"]
+}

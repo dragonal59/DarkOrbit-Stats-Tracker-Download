@@ -108,7 +108,7 @@ Aucune erreur **critique** bloquante identifiée après les correctifs déjà ap
 - **Performance :** Les requêtes RPC (get_ranking, get_user_permissions) et les lectures localStorage sont déjà raisonnables ; pas de boucle évidente à optimiser. Surveiller les appels répétés au chargement (éviter doubles appels inutiles).  
 - **Gestion d’erreurs :** Continuer à appliquer le même pattern (try/catch, log, toast ou message utilisateur) sur les nouveaux appels async/RPC.  
 - **Tests :** Aucun test automatisé repéré ; ajouter des tests ciblés (auth, sync, permissions) réduirait les régressions.  
-- **Documentation :** Garder à jour la liste des migrations Supabase et l’ordre d’exécution recommandé (voir `SYNTHESE_TACHES_RESTANTES.md`).
+- **Documentation :** Garder à jour la liste des migrations Supabase et l’ordre d’exécution recommandé (voir `docs/MIGRATION_ORDER.md` et `docs/README.md`).
 
 ---
 

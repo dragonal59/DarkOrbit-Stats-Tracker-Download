@@ -1,0 +1,35 @@
+{
+  "id": "discord",
+  "visible": true,
+  "image": "img/events/discord.jpg",
+  "names": {
+    "fr": "Rejoignez DO Discord",
+    "en": "Join DO Discord",
+    "de": "Tritt dem DO Discord bei",
+    "es": "Únete al Discord de DO",
+    "ru": "Присоединяйтесь к Discord DO",
+    "tr": "DO Discord'a Katıl"
+  },
+  "descriptions": {
+    "fr": "Ralliez la communauté Discord de DarkOrbit et discutez avec les joueurs, modérateurs et développeurs ! Rejoignez la famille DarkOrbit en participant aux événements Discord.",
+    "en": "Join the DarkOrbit Discord Community, and chat with other players, moderators and developers!! Become a true part of the DarkOrbit family by taking part in all the Discord fun.",
+    "de": "Tritt der DarkOrbit Discord-Community bei und chatte mit anderen Spielern, Moderatoren und Entwicklern! Werde ein echter Teil der DarkOrbit-Familie, indem du an allen Discord-Aktivitäten teilnimmst.",
+    "es": "¡Únete a la comunidad Discord de DarkOrbit y chatea con otros jugadores, moderadores y desarrolladores! Conviértete en un verdadero miembro de la familia DarkOrbit participando en toda la diversión de Discord.",
+    "ru": "Присоединяйтесь к сообществу Discord DarkOrbit и общайтесь с другими игроками, модераторами и разработчиками! Станьте настоящей частью семьи DarkOrbit, участвуя во всех активностях Discord.",
+    "tr": "DarkOrbit Discord Topluluğuna katıl ve diğer oyuncular, moderatörler ve geliştiricilerle sohbet et! Tüm Discord eğlencesine katılarak DarkOrbit ailesinin gerçek bir parçası ol."
+  },
+  "keywords": [
+    "join do discord",
+    "rejoignez do discord",
+    "tritt dem do discord bei",
+    "únete al discord de do",
+    "присоединяйтесь к discord do",
+    "do discord'a katıl",
+    "discord"
+  ],
+  "exclude_keywords": [
+    "instagram",
+    "darkorbit on instagram",
+    "darkorbit sur instagram"
+  ]
+}

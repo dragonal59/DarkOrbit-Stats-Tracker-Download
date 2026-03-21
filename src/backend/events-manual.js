@@ -45,11 +45,11 @@
     var start = startVal ? new Date(startVal).getTime() : 0;
     var end = endVal ? new Date(endVal).getTime() : 0;
     if (isNaN(start)) {
-      if (startVal != null && startVal !== '') console.warn('[Events] isEventCurrent: startDate invalide (NaN)', { name: ev.name || ev.title, startVal: startVal });
+      if (startVal != null && startVal !== '') Logger.warn('[Events] isEventCurrent: startDate invalide (NaN)', { name: ev.name || ev.title, startVal: startVal });
       start = 0;
     }
     if (isNaN(end)) {
-      if (endVal != null && endVal !== '') console.warn('[Events] isEventCurrent: endDate invalide (NaN)', { name: ev.name || ev.title, endVal: endVal });
+      if (endVal != null && endVal !== '') Logger.warn('[Events] isEventCurrent: endDate invalide (NaN)', { name: ev.name || ev.title, endVal: endVal });
       end = now + 1;
     }
     return start <= now && now <= end;
@@ -114,7 +114,7 @@
   }
 
   function buildEventCard(ev, badgeClass) {
-    var name = (ev.name || ev.title || '').trim() || 'Sans nom';
+    var name = (ev.name || ev.title || '').trim() || (typeof window.i18nT === 'function' ? window.i18nT('event_no_name') : 'Sans nom');
     var startStr = formatEventDate(ev.startDate || ev.start_date);
     var endStr = formatEventDate(ev.endDate || ev.end_date);
     var badge = badgeClass === 'current' ? (typeof window.i18nT === 'function' ? window.i18nT('events_current') : 'En cours') : badgeClass === 'completed' ? (typeof window.i18nT === 'function' ? window.i18nT('events_completed') : 'Terminé') : (typeof window.i18nT === 'function' ? window.i18nT('events_upcoming') : 'À venir');
@@ -137,11 +137,56 @@
     return html;
   }
 
-  /** Carte pour le carrousel sidebar : même contenu + bouton ℹ️ + décompte si en cours. */
+  function buildEventCardWithActions(ev, badgeClass) {
+    var id = escapeHtml(String(ev.id || ''));
+    return '<div class="event-card-wrapper">' +
+      buildEventCard(ev, badgeClass) +
+      '<div class="event-card-actions">' +
+        '<button type="button" class="event-action-btn event-action-edit" data-action="edit" data-event-id="' + id + '">✏️ Modifier</button>' +
+        '<button type="button" class="event-action-btn event-action-delete" data-action="delete" data-event-id="' + id + '">🗑️ Supprimer</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function getHiddenEventIds() {
+    if (typeof UserPreferencesAPI !== 'undefined') {
+      return UserPreferencesAPI.getHiddenEventIds();
+    }
+    return [];
+  }
+
+  function saveHiddenEventIds(ids) {
+    if (typeof UserPreferencesAPI !== 'undefined') {
+      UserPreferencesAPI.setHiddenEventIds(ids);
+    }
+  }
+
+  function isEventHidden(evId) {
+    return getHiddenEventIds().indexOf(String(evId)) !== -1;
+  }
+
+  function toggleEventHidden(evId) {
+    var ids = getHiddenEventIds();
+    var idx = ids.indexOf(String(evId));
+    if (idx === -1) ids.push(String(evId));
+    else ids.splice(idx, 1);
+    saveHiddenEventIds(ids);
+    return idx === -1; // true = now hidden
+  }
+
+  /** Carte pour le carrousel sidebar : bouton œil (masquer) + bouton ℹ️ + décompte si en cours. */
   function buildCarouselSlideCard(ev, badgeClass) {
     var cardHtml = buildEventCard(ev, badgeClass);
     var idAttr = escapeHtml(String(ev.id || ''));
-    cardHtml = cardHtml.replace('data-event-id="' + idAttr + '">', 'data-event-id="' + idAttr + '"><button type="button" class="event-card-info-btn" aria-label="Info" data-event-id="' + idAttr + '">ℹ️</button>');
+    var hidden = isEventHidden(ev.id);
+    var eyeTitle = hidden ? 'Afficher dans la sidebar' : 'Masquer de la sidebar';
+    var eyeClass = 'event-card-eye-btn' + (hidden ? ' event-card-eye-btn--hidden' : '');
+    cardHtml = cardHtml.replace(
+      'data-event-id="' + idAttr + '">',
+      'data-event-id="' + idAttr + '">' +
+        '<button type="button" class="event-card-info-btn" aria-label="Info" data-event-id="' + idAttr + '">ℹ️</button>' +
+        '<button type="button" class="' + eyeClass + '" aria-label="' + escapeHtml(eyeTitle) + '" data-action="toggle-hide" data-event-id="' + idAttr + '" title="' + escapeHtml(eyeTitle) + '">' + (hidden ? '🙈' : '👁') + '</button>'
+    );
     var endVal = ev.endDate ?? ev.end_date ?? ev.end;
     var isCurrent = badgeClass === 'current' && endVal;
     if (isCurrent) {
@@ -155,7 +200,7 @@
   }
 
   function formatCountdown(ms) {
-    if (ms <= 0) return (typeof window.i18nT === 'function' ? window.i18nT('events_completed') : 'Terminé');
+    if (ms <= 0) return (typeof window.i18nT === 'function' ? window.i18nT('event_countdown_finished') : 'Terminé');
     var s = Math.floor(ms / 1000) % 60;
     var m = Math.floor(ms / 60000) % 60;
     var h = Math.floor(ms / 3600000) % 24;
@@ -178,46 +223,31 @@
     }
   }
 
+  function _onManualEventImageError(e) {
+    var img = e.target;
+    if (!img || !img.classList || !img.classList.contains('manual-event-img')) return;
+    var fallback = img.getAttribute('data-fallback');
+    if (fallback) {
+      img.removeAttribute('data-fallback');
+      img.src = fallback;
+    } else {
+      img.style.display = 'none';
+      var card = img.closest && img.closest('.manual-event-card');
+      if (card) card.classList.add('manual-event-no-image');
+    }
+  }
   function initManualEventImageFallback() {
     if (window._manualEventImageFallbackInit) return;
     window._manualEventImageFallbackInit = true;
-    document.body.addEventListener('error', function (e) {
-      var img = e.target;
-      if (!img || !img.classList || !img.classList.contains('manual-event-img')) return;
-      var fallback = img.getAttribute('data-fallback');
-      if (fallback) {
-        img.removeAttribute('data-fallback');
-        img.src = fallback;
-      } else {
-        img.style.display = 'none';
-        var card = img.closest && img.closest('.manual-event-card');
-        if (card) card.classList.add('manual-event-no-image');
-      }
-    }, true);
+    document.body.addEventListener('error', _onManualEventImageError, true);
   }
 
   function getCurrentAndUpcomingEvents() {
     var events = getEvents();
-    // VRAIMENT avant tout filtrage (y compris completed)
-    console.log('[Events] Tous les événements AVANT filtrage (' + events.length + ')', events.map(function (ev) {
-      return {
-        name: ev.name || ev.title,
-        id: ev.id,
-        completed: ev.completed,
-        done: ev.done,
-        hidden: ev.hidden,
-        status: ev.status,
-        priority: ev.priority,
-        startDate: ev.startDate,
-        endDate: ev.endDate
-      };
-    }));
     var current = [];
     var upcoming = [];
     for (var i = 0; i < events.length; i++) {
       var ev = events[i];
-      var debug = getEventCurrentDebug(ev);
-      console.log('[Events] isEventCurrent', debug.name, '→', debug.current, debug.reason, { startVal: debug.startVal, endVal: debug.endVal, startTs: debug.startTs, endTs: debug.endTs, now: debug.now });
       if (isEventCurrent(ev)) current.push(ev);
       else if (isEventUpcoming(ev)) upcoming.push(ev);
     }
@@ -225,7 +255,7 @@
   }
 
   function updateEventsTabContent() {
-    var container = document.getElementById('eventsTabContent');
+    var container = document.getElementById('eventsTabContent') || document.getElementById('eventsTabContentDashboard');
     if (!container) return;
     var data = getCurrentAndUpcomingEvents();
     var noEventText = typeof window.i18nT === 'function' ? window.i18nT('no_event') : 'Aucun événement';
@@ -242,12 +272,12 @@
     });
     var currentHtml = data.current.length === 0
       ? '<div class="no-event">' + noEventText + '</div>'
-      : '<div class="events-grid">' + data.current.map(function (ev) { return buildEventCard(ev, 'current'); }).join('') + '</div>';
+      : '<div class="events-grid">' + data.current.map(function (ev) { return buildEventCardWithActions(ev, 'current'); }).join('') + '</div>';
     var upcomingHtml = data.upcoming.length === 0
       ? '<div class="no-event">' + noEventText + '</div>'
-      : '<div class="events-grid">' + data.upcoming.map(function (ev) { return buildEventCard(ev, 'upcoming'); }).join('') + '</div>';
+      : '<div class="events-grid">' + data.upcoming.map(function (ev) { return buildEventCardWithActions(ev, 'upcoming'); }).join('') + '</div>';
     var completedHtml = completed.length === 0 ? '' : completed.map(function (ev) {
-      return '<div class="completed-event-item">' + buildEventCard(ev, 'completed') + '<button type="button" class="btn-remettre-en-cours" data-event-id="' + escapeHtml(String(ev.id || '')) + '">' + escapeHtml(btnRemettre) + '</button></div>';
+      return '<div class="completed-event-item">' + buildEventCardWithActions(ev, 'completed') + '<button type="button" class="btn-remettre-en-cours" data-event-id="' + escapeHtml(String(ev.id || '')) + '">' + escapeHtml(btnRemettre) + '</button></div>';
     }).join('');
     var completedSection = completed.length === 0 ? '' : '<section class="events-section" aria-labelledby="events-tab-completed-title">' +
       '<h3 id="events-tab-completed-title" class="events-section-title">✓ ' + escapeHtml(titleCompleted) + '</h3>' +
@@ -264,23 +294,54 @@
         '</section>' +
         completedSection +
       '</div>';
-    if (!container._remettreEnCoursListener) {
-      container._remettreEnCoursListener = true;
+    if (!container._eventsActionsListener) {
+      container._eventsActionsListener = true;
       container.addEventListener('click', function (e) {
-        var btn = e.target && e.target.closest && e.target.closest('.btn-remettre-en-cours');
-        if (!btn) return;
-        var id = btn.getAttribute('data-event-id');
-        if (!id) return;
-        var list = getEvents();
-        for (var i = 0; i < list.length; i++) {
-          if (String(list[i].id || '') === id) {
-            list[i].completed = false;
-            if (list[i].updatedAt === undefined) list[i].updatedAt = new Date().toISOString();
-            saveEvents(list);
-            if (typeof updateEventsDisplay === 'function') updateEventsDisplay();
-            if (typeof showToast === 'function') showToast(typeof window.i18nT === 'function' ? window.i18nT('events_remettre_ok') : 'Événement remis en cours.', 'success');
-            break;
+        var remBtn = e.target && e.target.closest && e.target.closest('.btn-remettre-en-cours');
+        if (remBtn) {
+          var id = remBtn.getAttribute('data-event-id');
+          if (!id) return;
+          var list = getEvents();
+          for (var i = 0; i < list.length; i++) {
+            if (String(list[i].id || '') === id) {
+              list[i].completed = false;
+              list[i].updatedAt = new Date().toISOString();
+              saveEvents(list);
+              if (typeof updateEventsDisplay === 'function') updateEventsDisplay();
+              if (typeof showToast === 'function') showToast(typeof window.i18nT === 'function' ? window.i18nT('events_remettre_ok') : 'Événement remis en cours.', 'success');
+              break;
+            }
           }
+          return;
+        }
+
+        var actionBtn = e.target && e.target.closest && e.target.closest('[data-action]');
+        if (!actionBtn) return;
+        var action = actionBtn.getAttribute('data-action');
+        var eventId = actionBtn.getAttribute('data-event-id');
+        if (!eventId) return;
+
+        if (action === 'delete') {
+          var confirmMsg = typeof window.i18nT === 'function' ? window.i18nT('event_delete_confirm') : 'Supprimer cet événement ?';
+          if (!window.confirm(confirmMsg)) return;
+          var list2 = getEvents();
+          var filtered = list2.filter(function (ev) { return String(ev.id || '') !== eventId; });
+          // Sauvegarder localement SANS déclencher queueSync (on gère manuellement)
+          if (typeof UnifiedStorage !== 'undefined') {
+            var sk2 = (typeof window !== 'undefined' && window.APP_KEYS && window.APP_KEYS.STORAGE_KEYS) ? window.APP_KEYS.STORAGE_KEYS : {};
+            UnifiedStorage.set(sk2.EVENTS || 'darkOrbitEvents', filtered);
+            if (typeof UnifiedStorage.invalidateCache === 'function') UnifiedStorage.invalidateCache(sk2.EVENTS || 'darkOrbitEvents');
+          }
+          // Supprimer de Supabase avant le prochain pull
+          if (typeof DataSync !== 'undefined' && DataSync.deleteEventRemote) DataSync.deleteEventRemote(eventId);
+          if (typeof updateEventsDisplay === 'function') updateEventsDisplay();
+          if (typeof showToast === 'function') showToast(typeof window.i18nT === 'function' ? window.i18nT('event_deleted') : 'Événement supprimé.', 'success');
+          return;
+        }
+
+        if (action === 'edit') {
+          if (typeof openEditEventModal === 'function') openEditEventModal(eventId);
+          return;
         }
       });
     }
@@ -312,13 +373,18 @@
     var slidesHtml = items.map(function (ev) {
       return '<div class="events-carousel-slide" style="flex:0 0 ' + slidePct + '%">' + buildCarouselSlideCard(ev, badge) + '</div>';
     }).join('');
+    var dotsHtml = items.map(function (_, i) {
+      return '<button type="button" class="events-carousel-dot' + (i === 0 ? ' active' : '') + '" data-index="' + i + '" aria-label="Slide ' + (i + 1) + '"></button>';
+    }).join('');
     container.innerHTML =
       '<div class="events-carousel-viewport">' +
         '<div class="events-carousel-track" style="width:' + items.length * 100 + '%; transform:translateX(0)">' + slidesHtml + '</div>' +
       '</div>' +
-      '<button type="button" class="events-carousel-prev" aria-label="Précédent">‹</button>' +
-      '<button type="button" class="events-carousel-next" aria-label="Suivant">›</button>' +
-      '<div class="events-carousel-dots">' + items.map(function (_, i) { return '<button type="button" class="events-carousel-dot' + (i === 0 ? ' active' : '') + '" data-index="' + i + '" aria-label="Slide ' + (i + 1) + '"></button>'; }).join('') + '</div>';
+      '<div class="events-carousel-nav">' +
+        '<button type="button" class="events-carousel-prev" aria-label="' + escapeHtml(typeof window.i18nT === 'function' ? window.i18nT('carousel_prev') : 'Précédent') + '">‹</button>' +
+        '<div class="events-carousel-dots">' + dotsHtml + '</div>' +
+        '<button type="button" class="events-carousel-next" aria-label="' + escapeHtml(typeof window.i18nT === 'function' ? window.i18nT('carousel_next') : 'Suivant') + '">›</button>' +
+      '</div>';
     container.classList.add('events-carousel--multi');
     container.setAttribute('data-carousel-index', '0');
     container._isTransitioning = false;
@@ -349,17 +415,34 @@
     container._intervalId = setInterval(next, 15000);
   }
 
+  function _onCarouselDelegationClick(e) {
+    var eyeBtn = e.target.closest && e.target.closest('[data-action="toggle-hide"]');
+    if (eyeBtn) {
+      e.stopPropagation();
+      e.preventDefault();
+      var evId = eyeBtn.getAttribute('data-event-id');
+      if (evId) {
+        var nowHidden = toggleEventHidden(evId);
+        var msg = nowHidden ? 'Événement masqué de la sidebar.' : 'Événement affiché dans la sidebar.';
+        if (typeof showToast === 'function') showToast(msg, 'info');
+        if (typeof updateEventsDisplay === 'function') updateEventsDisplay();
+        if (typeof window.updateScrapedEventsDisplay === 'function') window.updateScrapedEventsDisplay();
+      }
+      return;
+    }
+    var carousel = e.target.closest && e.target.closest('.events-carousel');
+    if (!carousel || !carousel._goTo) return;
+    var prev = e.target.closest('.events-carousel-prev');
+    var nextBtn = e.target.closest('.events-carousel-next');
+    var dot = e.target.closest('.events-carousel-dot');
+    if (prev) { carousel._goTo((parseInt(carousel.getAttribute('data-carousel-index'), 10) || 0) - 1); return; }
+    if (nextBtn) { carousel._next(); return; }
+    if (dot && dot.hasAttribute('data-index')) carousel._goTo(parseInt(dot.getAttribute('data-index'), 10));
+  }
   function initCarouselDelegation() {
-    document.body.addEventListener('click', function (e) {
-      var carousel = e.target.closest && e.target.closest('.events-carousel');
-      if (!carousel || !carousel._goTo) return;
-      var prev = e.target.closest('.events-carousel-prev');
-      var nextBtn = e.target.closest('.events-carousel-next');
-      var dot = e.target.closest('.events-carousel-dot');
-      if (prev) { carousel._goTo((parseInt(carousel.getAttribute('data-carousel-index'), 10) || 0) - 1); return; }
-      if (nextBtn) { carousel._next(); return; }
-      if (dot && dot.hasAttribute('data-index')) carousel._goTo(parseInt(dot.getAttribute('data-index'), 10));
-    });
+    if (window._carouselDelegationInit) return;
+    window._carouselDelegationInit = true;
+    document.body.addEventListener('click', _onCarouselDelegationClick);
   }
 
   function attachCarouselHoverOnce(container) {
@@ -375,39 +458,8 @@
 
   function updateEventsDisplay() {
     if (_countdownIntervalId) { clearInterval(_countdownIntervalId); _countdownIntervalId = null; }
-    var containerCurrent = document.getElementById('sidebarEventsCarouselCurrent');
-    var containerUpcoming = document.getElementById('sidebarEventsCarouselUpcoming');
-    var viewAllBtn = document.getElementById('viewAllEventsBtn');
-    var data = getCurrentAndUpcomingEvents();
-
-    var currentSorted = data.current.slice().sort(function (a, b) {
-      var ea = (a.endDate ?? a.end_date ?? a.end) ? new Date(a.endDate ?? a.end_date ?? a.end).getTime() : 0;
-      var eb = (b.endDate ?? b.end_date ?? b.end) ? new Date(b.endDate ?? b.end_date ?? b.end).getTime() : 0;
-      return ea - eb;
-    });
-    var upcomingSorted = data.upcoming.slice().sort(function (a, b) {
-      var sa = (a.startDate ?? a.start_date ?? a.start) ? new Date(a.startDate ?? a.start_date ?? a.start).getTime() : 0;
-      var sb = (b.startDate ?? b.start_date ?? b.start) ? new Date(b.startDate ?? b.start_date ?? b.start).getTime() : 0;
-      return sa - sb;
-    });
-
-    var noEventCurrent = typeof window.i18nT === 'function' ? window.i18nT('no_event_current') : 'Aucun événement en cours';
-    var noEventUpcoming = typeof window.i18nT === 'function' ? window.i18nT('no_event_upcoming') : 'Aucun événement à venir';
-
-    console.log('[Events] En cours (avant render)', currentSorted.map(function (ev) {
-      return { name: ev.name || ev.title, id: ev.id, completed: ev.completed, startDate: ev.startDate ?? ev.start_date, endDate: ev.endDate ?? ev.end_date, isCurrent: isEventCurrent(ev), imageData: !!ev.imageData };
-    }));
-
-    if (viewAllBtn) {
-      var count = data.events.length;
-      var viewAllText = (typeof window.i18nT === 'function' ? window.i18nT('view_all') : 'Voir tous (0)').replace(/\(\d+\)/, '(' + count + ')');
-      viewAllBtn.textContent = viewAllText;
-    }
-
-    renderOneCarousel(containerCurrent, currentSorted, 'current', noEventCurrent);
-    renderOneCarousel(containerUpcoming, upcomingSorted, 'upcoming', noEventUpcoming);
-    attachCarouselHoverOnce(containerCurrent);
-    attachCarouselHoverOnce(containerUpcoming);
+    // Section "Suivi joueurs" dans la sidebar (remplace En cours / À venir)
+    if (typeof window.refreshFollowedPlayersSidebar === 'function') window.refreshFollowedPlayersSidebar();
 
     tickCarouselCountdowns();
     _countdownIntervalId = setInterval(tickCarouselCountdowns, 1000);
@@ -417,12 +469,75 @@
 
   function openAddEventModal() {
     var modal = document.getElementById('addEventModal');
-    if (modal) modal.style.display = 'flex';
+    if (!modal) return;
+    modal._editId = null;
+    var titleEl = document.getElementById('addEventModalTitle');
+    var submitBtn = document.getElementById('submitEventBtn');
+    if (titleEl) titleEl.textContent = '➕ Ajouter un événement';
+    if (submitBtn) submitBtn.textContent = '✅ Ajouter l\'événement';
+    resetAddEventForm();
+    modal.style.display = 'flex';
+  }
+
+  function openEditEventModal(eventId) {
+    var modal = document.getElementById('addEventModal');
+    if (!modal) return;
+    var list = getEvents();
+    var ev = null;
+    for (var i = 0; i < list.length; i++) {
+      if (String(list[i].id || '') === String(eventId)) { ev = list[i]; break; }
+    }
+    if (!ev) return;
+    modal._editId = String(eventId);
+    var titleEl = document.getElementById('addEventModalTitle');
+    var submitBtn = document.getElementById('submitEventBtn');
+    if (titleEl) titleEl.textContent = '✏️ Modifier l\'événement';
+    if (submitBtn) submitBtn.textContent = '💾 Enregistrer';
+    var nameEl = document.getElementById('eventNameInput');
+    var descEl = document.getElementById('eventDescriptionInput');
+    var missionEl = document.getElementById('eventMissionInput');
+    var startEl = document.getElementById('eventStartDateInput');
+    var endEl = document.getElementById('eventEndDateInput');
+    var completedEl = document.getElementById('eventCompletedInput');
+    if (nameEl) nameEl.value = ev.name || ev.title || '';
+    if (descEl) descEl.value = ev.description || '';
+    if (missionEl) missionEl.value = ev.mission || '';
+    if (startEl) startEl.value = (ev.startDate || ev.start_date || '').replace(' ', 'T').substring(0, 16);
+    if (endEl) endEl.value = (ev.endDate || ev.end_date || '').replace(' ', 'T').substring(0, 16);
+    if (completedEl) completedEl.checked = !!ev.completed;
+    var tagInputs = document.querySelectorAll('input[name="eventTags"]');
+    for (var t = 0; t < tagInputs.length; t++) {
+      tagInputs[t].checked = Array.isArray(ev.tags) && ev.tags.indexOf(tagInputs[t].value) !== -1;
+    }
+    modal.style.display = 'flex';
+  }
+
+  function resetAddEventForm() {
+    var nameEl = document.getElementById('eventNameInput');
+    var descEl = document.getElementById('eventDescriptionInput');
+    var missionEl = document.getElementById('eventMissionInput');
+    var startEl = document.getElementById('eventStartDateInput');
+    var endEl = document.getElementById('eventEndDateInput');
+    var completedEl = document.getElementById('eventCompletedInput');
+    var preview = document.getElementById('imagePreview');
+    if (nameEl) nameEl.value = '';
+    if (descEl) descEl.value = '';
+    if (missionEl) missionEl.value = '';
+    if (startEl) startEl.value = '';
+    if (endEl) endEl.value = '';
+    if (completedEl) completedEl.checked = false;
+    if (preview) preview.innerHTML = '';
+    var tagInputs = document.querySelectorAll('input[name="eventTags"]');
+    for (var t = 0; t < tagInputs.length; t++) tagInputs[t].checked = false;
+    var fileInput = document.getElementById('eventImageInput');
+    if (fileInput) fileInput.value = '';
   }
 
   function closeAddEventModal() {
     var modal = document.getElementById('addEventModal');
-    if (modal) modal.style.display = 'none';
+    if (!modal) return;
+    modal._editId = null;
+    modal.style.display = 'none';
   }
 
   function linkifyMission(text) {
@@ -434,7 +549,7 @@
   function openEventInfoModal(ev) {
     var modal = document.getElementById('eventInfoModal');
     if (!modal) return;
-    var name = (ev.name || ev.title || '').trim() || 'Sans nom';
+    var name = (ev.name || ev.title || '').trim() || (typeof window.i18nT === 'function' ? window.i18nT('event_no_name') : 'Sans nom');
     var titleEl = document.getElementById('eventInfoTitle');
     var descEl = document.getElementById('eventInfoDescription');
     var missionEl = document.getElementById('eventInfoMission');
@@ -460,61 +575,83 @@
       else { statusEl.textContent = typeof window.i18nT === 'function' ? window.i18nT('events_completed') : 'Terminé'; statusEl.setAttribute('data-status', 'past'); }
     }
     if (completedContainer) {
-      completedContainer.style.display = 'block';
-      var cb = document.getElementById('eventInfoCompletedCheckbox');
-      if (cb) cb.checked = !!ev.completed;
-      completedContainer.onclick = function () {
-        var list = getEvents();
-        for (var i = 0; i < list.length; i++) {
-          if (String(list[i].id) === String(ev.id)) {
-            list[i].completed = !list[i].completed;
-            if (cb) cb.checked = !!list[i].completed;
-            saveEvents(list);
-            break;
+      if (ev.scraped) {
+        completedContainer.style.display = 'none';
+      } else {
+        var showCompleted = isEventCurrent(ev) || (!isEventUpcoming(ev));
+        completedContainer.style.display = showCompleted ? 'block' : 'none';
+      if (showCompleted) {
+        var cb = document.getElementById('eventInfoCompletedCheckbox');
+        if (cb) cb.checked = !!ev.completed;
+        completedContainer.onclick = function () {
+          var list = getEvents();
+          for (var i = 0; i < list.length; i++) {
+            if (String(list[i].id) === String(ev.id)) {
+              list[i].completed = !list[i].completed;
+              if (cb) cb.checked = !!list[i].completed;
+              saveEvents(list);
+              break;
+            }
           }
-        }
-      };
+        };
+      }
+      }
     }
     modal.style.display = 'flex';
   }
+
+  window.openEventInfoModal = openEventInfoModal;
 
   function closeEventInfoModal() {
     var modal = document.getElementById('eventInfoModal');
     if (modal) modal.style.display = 'none';
   }
 
+  function _onEventInfoModalOverlayClick(e) {
+    if (e.target === _eventInfoModalRef) closeEventInfoModal();
+  }
+  function _onEventInfoModalBodyClick(e) {
+    var btn = e.target && e.target.closest && e.target.closest('.event-card-info-btn');
+    if (!btn) return;
+    var id = btn.getAttribute('data-event-id');
+    if (id == null) return;
+    if (btn.closest('#sidebarScrapedEvents')) {
+      var ev = typeof window.getScrapedEventForModal === 'function' && window.getScrapedEventForModal(id);
+      if (ev) { openEventInfoModal(ev); }
+      return;
+    }
+    var list = getEvents();
+    for (var i = 0; i < list.length; i++) {
+      if (String(list[i].id || '') === String(id)) {
+        openEventInfoModal(list[i]);
+        break;
+      }
+    }
+  }
+  var _eventInfoModalRef = null;
+  var _eventInfoCloseBtnRef = null;
   function initEventInfoModal() {
+    if (window._eventInfoModalInit) return;
+    window._eventInfoModalInit = true;
     var closeBtn = document.getElementById('closeEventInfoBtn');
     var modal = document.getElementById('eventInfoModal');
+    _eventInfoModalRef = modal;
+    _eventInfoCloseBtnRef = closeBtn;
     if (closeBtn) closeBtn.addEventListener('click', closeEventInfoModal);
     if (modal && modal.querySelector('.modal-content')) {
-      modal.addEventListener('click', function (e) {
-        if (e.target === modal) closeEventInfoModal();
-      });
+      modal.addEventListener('click', _onEventInfoModalOverlayClick);
     }
-    document.body.addEventListener('click', function (e) {
-      var btn = e.target && e.target.closest && e.target.closest('.event-card-info-btn');
-      if (!btn) return;
-      var id = btn.getAttribute('data-event-id');
-      if (id == null) return;
-      var list = getEvents();
-      for (var i = 0; i < list.length; i++) {
-        if (String(list[i].id || '') === String(id)) {
-          openEventInfoModal(list[i]);
-          break;
-        }
-      }
-    });
+    document.body.addEventListener('click', _onEventInfoModalBodyClick);
   }
 
   function initAddEventModal() {
-    var addBtn = document.getElementById('addEventBtn');
-    var addBtnTab = document.getElementById('addEventBtnTab');
+    if (window._addEventModalInit) return;
+    window._addEventModalInit = true;
+    var addBtnTab = document.getElementById('addEventBtnTab') || document.getElementById('addEventBtnDashboard');
     var closeBtn = document.getElementById('closeModalBtn');
     var cancelBtn = document.getElementById('cancelEventBtn');
     var submitBtn = document.getElementById('submitEventBtn');
     var modal = document.getElementById('addEventModal');
-    if (addBtn) addBtn.addEventListener('click', openAddEventModal);
     if (addBtnTab) addBtnTab.addEventListener('click', openAddEventModal);
     if (closeBtn) closeBtn.addEventListener('click', closeAddEventModal);
     if (cancelBtn) cancelBtn.addEventListener('click', closeAddEventModal);
@@ -539,36 +676,52 @@
           if (typeof showToast === 'function') showToast('Veuillez saisir les dates de début et de fin.', 'warning');
           return;
         }
-        var priorityEl = document.querySelector('input[name="eventPriority"]:checked');
         var tagsEls = document.querySelectorAll('input[name="eventTags"]:checked');
         var tags = [];
         if (tagsEls && tagsEls.length) for (var t = 0; t < tagsEls.length; t++) tags.push(tagsEls[t].value);
-        var ev = {
-          id: 'ev_' + Date.now(),
-          name: name,
-          description: (document.getElementById('eventDescriptionInput') && document.getElementById('eventDescriptionInput').value) ? document.getElementById('eventDescriptionInput').value.trim() : '',
-          mission: (document.getElementById('eventMissionInput') && document.getElementById('eventMissionInput').value) ? document.getElementById('eventMissionInput').value.trim() : '',
-          priority: priorityEl ? parseInt(priorityEl.value, 10) : 3,
-          tags: tags,
-          startDate: startVal,
-          endDate: endVal,
-          completed: !!(document.getElementById('eventCompletedInput') && document.getElementById('eventCompletedInput').checked),
-          updatedAt: new Date().toISOString()
-        };
-        var list = getEvents();
-        list.unshift(ev);
-        saveEvents(list);
-        closeAddEventModal();
-        if (nameEl) nameEl.value = '';
-        if (document.getElementById('eventDescriptionInput')) document.getElementById('eventDescriptionInput').value = '';
-        if (document.getElementById('eventMissionInput')) document.getElementById('eventMissionInput').value = '';
-        if (startEl) startEl.value = '';
-        if (endEl) endEl.value = '';
-        if (document.getElementById('eventCompletedInput')) document.getElementById('eventCompletedInput').checked = false;
-        if (priorityEl && document.querySelector('input[name="eventPriority"][value="3"]')) document.querySelector('input[name="eventPriority"][value="3"]').checked = true;
-        var tagInputs = document.querySelectorAll('input[name="eventTags"]');
-        if (tagInputs) for (var i = 0; i < tagInputs.length; i++) tagInputs[i].checked = false;
-        if (typeof showToast === 'function') showToast('Événement ajouté.', 'success');
+        var description = (document.getElementById('eventDescriptionInput') && document.getElementById('eventDescriptionInput').value) ? document.getElementById('eventDescriptionInput').value.trim() : '';
+        var mission = (document.getElementById('eventMissionInput') && document.getElementById('eventMissionInput').value) ? document.getElementById('eventMissionInput').value.trim() : '';
+        var completed = !!(document.getElementById('eventCompletedInput') && document.getElementById('eventCompletedInput').checked);
+
+        var editId = modal && modal._editId;
+        if (editId) {
+          var list = getEvents();
+          for (var i = 0; i < list.length; i++) {
+            if (String(list[i].id || '') === editId) {
+              list[i].name = name;
+              list[i].description = description;
+              list[i].mission = mission;
+              list[i].tags = tags;
+              list[i].startDate = startVal;
+              list[i].endDate = endVal;
+              list[i].completed = completed;
+              list[i].updatedAt = new Date().toISOString();
+              break;
+            }
+          }
+          saveEvents(list);
+          closeAddEventModal();
+          if (typeof updateEventsDisplay === 'function') updateEventsDisplay();
+          if (typeof showToast === 'function') showToast('Événement mis à jour.', 'success');
+        } else {
+          var ev = {
+            id: 'ev_' + Date.now(),
+            name: name,
+            description: description,
+            mission: mission,
+            tags: tags,
+            startDate: startVal,
+            endDate: endVal,
+            completed: completed,
+            updatedAt: new Date().toISOString()
+          };
+          var list2 = getEvents();
+          list2.unshift(ev);
+          saveEvents(list2);
+          closeAddEventModal();
+          if (typeof updateEventsDisplay === 'function') updateEventsDisplay();
+          if (typeof showToast === 'function') showToast('Événement ajouté.', 'success');
+        }
       });
     }
   }
@@ -578,10 +731,40 @@
   window.updateEventsDisplay = updateEventsDisplay;
   window.openAddEventModal = openAddEventModal;
   window.closeAddEventModal = closeAddEventModal;
+  window.openEditEventModal = openEditEventModal;
+  window.isEventHidden = isEventHidden;
+  window.toggleEventHidden = toggleEventHidden;
+  window.getHiddenEventIds = getHiddenEventIds;
+  window.saveHiddenEventIds = saveHiddenEventIds;
 
   window.addEventListener('languageChanged', function () {
     updateEventsDisplay();
   });
+
+  function stopAllCarouselIntervals() {
+    if (_countdownIntervalId) { clearInterval(_countdownIntervalId); _countdownIntervalId = null; }
+  }
+  function cleanupBodyListeners() {
+    if (document.body) {
+      document.body.removeEventListener('error', _onManualEventImageError, true);
+      document.body.removeEventListener('click', _onCarouselDelegationClick);
+      document.body.removeEventListener('click', _onEventInfoModalBodyClick);
+    }
+    if (_eventInfoCloseBtnRef) {
+      _eventInfoCloseBtnRef.removeEventListener('click', closeEventInfoModal);
+      _eventInfoCloseBtnRef = null;
+    }
+    if (_eventInfoModalRef && _eventInfoModalRef.querySelector) {
+      _eventInfoModalRef.removeEventListener('click', _onEventInfoModalOverlayClick);
+      _eventInfoModalRef = null;
+    }
+    window._manualEventImageFallbackInit = false;
+    window._carouselDelegationInit = false;
+    window._eventInfoModalInit = false;
+    stopAllCarouselIntervals();
+  }
+  window.addEventListener('beforeunload', cleanupBodyListeners);
+  window.addEventListener('userLoggedOut', cleanupBodyListeners);
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function () {

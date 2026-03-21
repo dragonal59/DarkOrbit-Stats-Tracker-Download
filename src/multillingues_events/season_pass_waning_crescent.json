@@ -1,0 +1,22 @@
+{
+  "id": "season_pass_waning_crescent",
+  "visible": true,
+  "image": "img/events/season_pass_waning_crescent.jpg",
+  "names": {
+    "fr": "Pass de Saison : Dernier Croissant",
+    "en": "Season Pass: Waning Crescent",
+    "de": "Saisonpass: Abnehmende Mondsichel",
+    "es": "Pase de Temporada: Cuarto Menguante",
+    "ru": "Сезонный Пропуск: Убывающий Серп",
+    "tr": "Sezon Paketi: Hilal"
+  },
+  "descriptions": {
+    "fr": "Obtenez des récompenses supplémentaires en améliorant votre Pass de saison ! Ne passez pas à côté de l'ensemble de designs Wyvern Retiarus Plus, ou encore des modules instables de la série XSP01 - avec une probabilité accrue d'obtenir un Pusat Plus ou un Retiarus Plus !",
+    "en": "Get additional rewards by leveling up your Season Pass! Don't miss out on the Wyvern Retiarus Plus Design Set and the XSP01 series Unstable Modules - with boosted chances for Pusat Plus and Retiarus Plus!",
+    "de": "Erhalte zusätzliche Belohnungen, indem du deinen Saisonpass aufwertest! Verpasse nicht das Wyvern Retiarus Plus Design-Set und die XSP01-Serie instabile Module – mit erhöhten Chancen auf Pusat Plus und Retiarus Plus!",
+    "es": "¡Obtén recompensas adicionales mejorando tu Pase de Temporada! No te pierdas el Set de Diseño Wyvern Retiarus Plus y los Módulos Inestables de la serie XSP01, ¡con mayores probabilidades de obtener un Pusat Plus o un Retiarus Plus!",
+    "ru": "Получайте дополнительные награды, повышая уровень Сезонного пропуска! Не упустите набор дизайнов Wyvern Retiarus Plus и нестабильные модули серии XSP01 — с повышенными шансами на Pusat Plus и Retiarus Plus!",
+    "tr": "Sezon Pasını yükselterek ek ödüller kazan! Wyvern Retiarus Plus Tasarım Setini ve XSP01 serisi Kararsız Modülleri kaçırma — Pusat Plus ve Retiarus Plus için artırılmış şanslarla!"
+  },
+  "keywords": ["season pass waning crescent", "pass de saison dernier croissant", "pase de temporada cuarto menguante", "saisonpass abnehmende mondsichel", "сезонный пропуск убывающий серп", "sezon paketi hilal"],"exclude_keywords":["monthly deluxe calendar","calendario deluxe mensual","calendrier deluxe"]
+}

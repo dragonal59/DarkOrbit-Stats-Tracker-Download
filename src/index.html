@@ -3,22 +3,173 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DarkOrbit Stats Tracker Pro</title>
+  <title>DO Stats Tracker</title>
   <link rel="stylesheet" href="frontend/variables.css">
   <link rel="stylesheet" href="frontend/style.css">
   <link rel="stylesheet" href="frontend/events-style.css">
   <link rel="stylesheet" href="frontend/ranking-style.css">
   <link rel="stylesheet" href="frontend/super-admin.css">
+  <link rel="stylesheet" href="frontend/legal.css">
+  <link rel="stylesheet" href="frontend/loading-screen.css">
   <!-- Fix Electron DOIT être chargé en premier (dans le head) -->
   <script src="electron-fix.js"></script>
+  <script src="utils/logger.js"></script>
 </head>
 <body>
+<div id="main-titlebar" class="main-titlebar" role="presentation" aria-hidden="true">
+  <div class="main-titlebar-controls">
+    <button type="button" class="main-titlebar-btn" id="mainTitlebarMinBtn" aria-label="réduire" onclick="window.electronAPI && window.electronAPI.minimizeWindow && window.electronAPI.minimizeWindow();">▃</button>
+    <button type="button" class="main-titlebar-btn" id="mainTitlebarMaxBtn" aria-label="Agrandir/Rétrécir" onclick="window.electronAPI && window.electronAPI.maximizeToggle && window.electronAPI.maximizeToggle();">☐</button>
+    <button type="button" class="main-titlebar-btn main-titlebar-close-btn" id="mainTitlebarCloseBtn" aria-label="Fermer" onclick="window.electronAPI && window.electronAPI.closeWindow && window.electronAPI.closeWindow();">
+      <span class="main-titlebar-close-x" aria-hidden="true">✕</span>
+    </button>
+  </div>
+</div>
+<div id="app-loading-overlay">
+  <div class="app-loading-particles" id="appLoadingParticles" aria-hidden="true"></div>
+  <img class="app-loading-logo" src="img/icon_app/icon_app.png" alt="" width="80" height="80">
+  <div class="app-loading-brand">DO Stats Tracker</div>
+  <div class="app-loading-progress-wrap">
+    <div class="app-loading-bar"><div class="app-loading-bar-fill" id="appLoadingBarFill"></div></div>
+    <div class="app-loading-step" id="appLoadingStep">Connexion<span class="app-loading-dots"></span></div>
+  </div>
+  <div class="app-loading-error-wrap">
+    <div class="app-loading-error-msg" id="appLoadingErrorMsg">Le chargement a pris trop de temps.</div>
+    <button type="button" class="app-loading-retry-btn" id="appLoadingRetryBtn">Réessayer</button>
+  </div>
+  <div class="app-loading-version" id="appLoadingVersion">v2.5</div>
+</div>
+<div id="app-content" style="display:none">
+<button id="btnLegal" type="button" class="btn-legal-info" data-i18n-title="legal_btn_title" title="Informations légales" aria-label="Informations légales">ℹ️</button>
 <div id="languageButtonContainer" class="language-button-fixed"></div>
 
 <!-- Boutons PayPal — coin supérieur gauche, visibilité selon badge -->
 <div id="paypalButtonsContainer" class="paypal-buttons-fixed" style="display:none;">
-  <button type="button" class="paypal-btn paypal-btn--support" id="supportDeveloperBtnTopLeft" data-i18n="support_short">❤️ Soutenir</button>
-  <button type="button" class="paypal-btn paypal-btn--buy-pro" id="buyProBtnTopLeft">💎 <span data-i18n="buy_pro">Acheter PRO</span> — 9.99€</button>
+  <button type="button" class="paypal-btn paypal-btn--support" id="supportDeveloperBtnTopLeft" data-i18n="support_short">❤️ Payer un café</button>
+  <div id="paypalSubscribeBlock" class="paypal-subscribe-block paypal-subscribe-block--passer-pro">
+    <div id="upgradeProBtn" class="paypal-passer-pro-btn" title="Passer PRO" role="button" tabindex="0" aria-label="Passer PRO">
+      <span class="paypal-passer-pro-text">✨ Passer PRO</span>
+      <div id="paypalSubscribeContainer" class="paypal-subscribe-wrap paypal-subscribe-wrap--click-overlay"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Passez PRO (FREE uniquement) -->
+<div id="upgradeProModalOverlay" class="upgrade-pro-modal-overlay" aria-hidden="true"></div>
+<div id="upgradeProModal" class="upgrade-pro-modal" role="dialog" aria-labelledby="upgradeProModalTitle" aria-modal="true">
+  <button type="button" class="upgrade-pro-modal-close" id="upgradeProModalClose" aria-label="Fermer">✕</button>
+  <div class="upgrade-pro-modal-inner">
+    <header class="upgrade-pro-modal-header">
+      <h2 id="upgradeProModalTitle" class="upgrade-pro-modal-title">🚀 Passez PRO</h2>
+      <p class="upgrade-pro-modal-subtitle">Débloquez tout le potentiel de DO Stats Tracker</p>
+    </header>
+    <div class="upgrade-pro-comparison">
+      <div class="upgrade-pro-col upgrade-pro-col--free">
+        <h3 class="upgrade-pro-col-title">FREE</h3>
+        <ul class="upgrade-pro-features">
+          <li class="upgrade-pro-feature upgrade-pro-feature--strike">Stats de base</li>
+          <li class="upgrade-pro-feature upgrade-pro-feature--strike">1 compte</li>
+          <li class="upgrade-pro-feature upgrade-pro-feature--strike">Pas d'alertes boosters</li>
+          <li class="upgrade-pro-feature upgrade-pro-feature--strike">Pas d'events sidebar</li>
+          <li class="upgrade-pro-feature upgrade-pro-feature--strike">Pas d'export</li>
+        </ul>
+      </div>
+      <div class="upgrade-pro-col upgrade-pro-col--pro">
+        <h3 class="upgrade-pro-col-title">PRO</h3>
+        <ul class="upgrade-pro-features">
+          <li class="upgrade-pro-feature"><span class="upgrade-pro-check">✅</span> Toutes les stats</li>
+          <li class="upgrade-pro-feature"><span class="upgrade-pro-check">✅</span> Multi-comptes</li>
+          <li class="upgrade-pro-feature"><span class="upgrade-pro-check">✅</span> Alertes boosters</li>
+          <li class="upgrade-pro-feature"><span class="upgrade-pro-check">✅</span> Events sidebar</li>
+          <li class="upgrade-pro-feature"><span class="upgrade-pro-check">✅</span> Export JSON/CSV</li>
+          <li class="upgrade-pro-feature"><span class="upgrade-pro-check">✅</span> Support prioritaire</li>
+        </ul>
+      </div>
+    </div>
+    <div class="upgrade-pro-price-block">
+      <span class="upgrade-pro-price-badge">7,99€/mois</span>
+      <p class="upgrade-pro-trial-banner">🎯 Essai 7 jours à seulement 1€</p>
+    </div>
+    <div class="upgrade-pro-cta-wrap">
+      <button type="button" class="upgrade-pro-cta" id="upgradeProCtaBtn">Commencer l'essai à 1€</button>
+    </div>
+  </div>
+</div>
+
+<!-- Popup Galaxy Gates détail -->
+<div id="ranking-gg-overlay" class="ranking-modal-overlay"></div>
+<div id="ranking-gg-modal" class="ranking-modal ranking-gg-modal">
+  <div class="ranking-modal-body">
+    <div class="gg-modal-header">
+      <div class="gg-modal-title-block">
+        <span class="gg-modal-label">Galaxy Gate</span>
+        <span class="gg-modal-pseudo" data-gg-modal-pseudo></span>
+      </div>
+      <button class="gg-modal-close" onclick="closeGalaxyGatesModal()" aria-label="Fermer">✕</button>
+    </div>
+    <div class="gg-gates-grid" data-gg-modal-tbody></div>
+  </div>
+</div>
+
+<!-- Popup stats joueur (hors tab pour position fixed viewport) -->
+<div id="ranking-detail-overlay" class="ranking-modal-overlay"></div>
+<div id="ranking-detail-modal" class="ranking-modal">
+  <div class="ranking-modal-body">
+    <div class="ranking-modal-header">
+      <div class="ranking-modal-company-block">
+        <span data-ranking-detail-company-badge class="ranking-modal-company-badge company-badge company-other"></span>
+        <div class="ranking-modal-stat-row ranking-modal-stat-row-compact">
+          <span class="ranking-modal-stat-label">Niveau</span>
+          <span class="ranking-modal-stat-value" data-ranking-detail-level></span>
+        </div>
+      </div>
+      <div class="ranking-modal-pseudo-block">
+        <div class="ranking-modal-pseudo-row">
+          <span class="ranking-modal-pseudo" data-ranking-detail-pseudo></span>
+        </div>
+        <div class="ranking-modal-server" data-ranking-detail-server></div>
+      </div>
+    </div>
+    <div class="ranking-modal-stats">
+      <div class="ranking-modal-stat-row">
+        <span class="ranking-modal-stat-label" data-i18n="points_xp">Points d'expérience</span>
+        <span class="ranking-modal-stat-value" data-ranking-detail-xp></span>
+        <span class="ranking-modal-stat-place">(<span data-ranking-detail-pos-xp></span>)</span>
+      </div>
+      <div class="ranking-modal-stat-row">
+        <span class="ranking-modal-stat-label" data-i18n="points_honor">Points Honneur</span>
+        <span class="ranking-modal-stat-value" data-ranking-detail-honor></span>
+        <span class="ranking-modal-stat-place">(<span data-ranking-detail-pos-honor></span>)</span>
+      </div>
+      <div class="ranking-modal-stat-row">
+        <span class="ranking-modal-stat-label" data-i18n="points_general">Points généraux</span>
+        <span class="ranking-modal-stat-value" data-ranking-detail-rank-points></span>
+        <span class="ranking-modal-stat-place">(<span data-ranking-detail-pos-general></span>)</span>
+      </div>
+      <div class="ranking-modal-stat-row">
+        <span class="ranking-modal-stat-label ranking-modal-stat-label-no-colon" data-i18n="points_grade_estimated">Point de grade : ~</span>
+        <span class="ranking-modal-stat-value" data-ranking-detail-estimated-rp></span>
+      </div>
+      <div class="ranking-modal-stat-row ranking-modal-stat-row-grade">
+        <span class="ranking-modal-stat-label" data-i18n="grade">Grade</span>
+        <img data-ranking-detail-grade-img class="ranking-modal-grade-img" alt="" width="26" height="26">
+        <span data-ranking-detail-grade-text></span>
+      </div>
+    </div>
+    <div class="ranking-modal-chart-wrap" id="ranking-detail-chart-wrap" style="display:none;">
+      <canvas id="ranking-detail-chart"></canvas>
+    </div>
+    <div class="ranking-modal-dostats" id="ranking-detail-dostats" style="display:none;">
+      <div class="ranking-modal-dostats-header">📊 Stats joueur</div>
+      <div class="ranking-modal-dostats-body" id="ranking-detail-dostats-body"></div>
+    </div>
+    <div class="ranking-modal-comparison" id="ranking-detail-comparison" style="display:none;">
+      <div class="ranking-modal-comparison-header" data-i18n="comparison_with_you">Comparaison avec vous</div>
+      <div class="ranking-modal-comparison-body" id="ranking-detail-comparison-body"></div>
+    </div>
+    <button type="button" class="ranking-modal-follow" id="ranking-detail-follow" data-i18n="follow_player">Suivre ce joueur</button>
+    <div class="ranking-modal-footer"><span data-i18n="last_update">Dernière mise à jour</span> : <span data-ranking-detail-date></span></div>
+  </div>
 </div>
 
 <!-- 1. SDK Supabase (en premier) -->
@@ -34,75 +185,166 @@
 <script src="backend/unified-storage.js"></script>
 <script src="backend/auth-manager.js"></script>
 <script src="backend/sync-manager.js"></script>
+<script src="backend/subscription-check.js"></script>
+<script src="frontend/loading-screen.js"></script>
 <script>
 (function() {
-  document.addEventListener('DOMContentLoaded', async function authCheck() {
+  var Loader = typeof AppLoader !== 'undefined' ? AppLoader : null;
+
+  function goToAuth() {
+    if (Loader) Loader.hideOverlay();
+    var hasElectron = typeof electronAPI !== 'undefined';
+    var hasNav = hasElectron && typeof electronAPI.navigateToAuth === 'function';
+    if (hasElectron && hasNav) {
+      electronAPI.navigateToAuth();
+    } else {
+      window.location.href = 'auth.html';
+    }
+  }
+
+  function redirectPending() {
+    if (Loader) Loader.hideOverlay();
+    window.location.href = 'pending-verification.html';
+  }
+
+  function redirectSubscription() {
+    if (Loader) Loader.hideOverlay();
+  }
+
+  async function runAuthCheck() {
+    if (Loader) {
+      Loader.init();
+      Loader.setProgress(0, 'Connexion à Supabase...');
+      Loader.startTimeout();
+    }
     var supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
     try {
       if (supabase) {
+        if (Loader) Loader.setProgress(30, 'Authentification utilisateur...');
         var session = await AuthManager.getValidSession();
         if (!session) {
-          window.location.href = 'auth.html';
+          goToAuth();
           return;
         }
         if (typeof BackendAPI !== 'undefined') {
+          if (Loader) Loader.setProgress(60, 'Chargement des permissions et du rôle...');
           await BackendAPI.loadUserProfile();
           var completed = await AuthManager.completeRegistrationFromMetadata();
-          if (completed.done) {
-            BackendAPI.invalidateProfileCache();
-          }
-          await BackendAPI.getPermissions();
+          if (completed.done) BackendAPI.invalidateProfileCache();
+          await BackendAPI.getPermissions(true);
           var profile = BackendAPI.getUserProfile();
           if (profile && profile.status === 'pending') {
-            window.location.href = 'pending-verification.html';
+            redirectPending();
             return;
           }
           if (profile && profile.status === 'rejected') {
             await AuthManager.logout();
             alert('Votre compte n\'a pas été approuvé. Contactez l\'administration.');
-            window.location.href = 'auth.html';
+            goToAuth();
             return;
           }
           if (profile && profile.status === 'banned') {
-            console.warn('⛔ Utilisateur banni, déconnexion...');
             await AuthManager.logout();
             alert('Votre compte a été banni. Contactez un administrateur.');
-            window.location.href = 'auth.html';
+            goToAuth();
             return;
           }
+          var subCheck = typeof SubscriptionCheck !== 'undefined' && SubscriptionCheck.check ? await SubscriptionCheck.check() : { ok: true };
+          if (!subCheck.ok && subCheck.redirectToSubscription) {
+            redirectSubscription();
+            return;
+          }
+          if (typeof SubscriptionCheck !== 'undefined' && SubscriptionCheck.startHourlyCheck) SubscriptionCheck.startHourlyCheck();
+          if (Loader) Loader.setProgress(90, 'Initialisation de l\'interface...');
           if (typeof applyPermissionsUI === 'function') applyPermissionsUI();
+          if (typeof applyConsoleOverride === 'function') applyConsoleOverride();
           if (typeof updateExportButtonVisibility === 'function') await updateExportButtonVisibility();
+          if (typeof window.startProfileBadgeRealtime === 'function' && session.user && session.user.id) {
+            window.startProfileBadgeRealtime(session.user.id);
+          }
         }
         if (typeof DataSync !== 'undefined' && DataSync.isReady()) {
+          if (typeof AuthManager !== 'undefined' && AuthManager.ensureUserDataIsolation && session?.user) await AuthManager.ensureUserDataIsolation(session.user);
           await DataSync.migrateIfNeeded();
           await DataSync.pull();
+          if (typeof window.updateActiveAccountDisplay === 'function') window.updateActiveAccountDisplay();
           DataSync.startPeriodicSync();
+        }
+        var pendingScan = typeof localStorage !== 'undefined' ? localStorage.getItem('pending_baseline_scan') : null;
+        if (pendingScan && typeof saveBaselineFromScan === 'function') {
+          try {
+            var scanData = JSON.parse(pendingScan);
+            var res = await saveBaselineFromScan(scanData);
+            if (res && res.ok) {
+              localStorage.removeItem('pending_baseline_scan');
+              if (typeof DataSync !== 'undefined' && DataSync.pull) await DataSync.pull();
+              if (typeof window.updateActiveAccountDisplay === 'function') window.updateActiveAccountDisplay();
+            }
+          } catch (e) { if (typeof Logger !== 'undefined' && Logger.error) Logger.error('[AuthManager] Erreur baseline scan:', e); }
         }
         var logoutBtn = document.getElementById('logoutBtn');
         if (logoutBtn) logoutBtn.addEventListener('click', async function() {
           await AuthManager.logout();
-          window.location.href = 'auth.html';
+          goToAuth();
         });
         window.__supabaseAuthenticated = true;
         var sessionCount = typeof getSessions === 'function' ? getSessions().length : 0;
         if (typeof setAppAccessFromSessions === 'function') setAppAccessFromSessions(sessionCount > 0 ? sessionCount : 1);
+        if (typeof window.electronScraper === 'object' && window.electronScraper.setUserContext && session?.user?.id && session?.access_token) {
+          window.electronScraper.setUserContext(session.user.id, session.access_token);
+        }
       } else {
         window.__supabaseAuthenticated = false;
+        if (Loader) Loader.setProgress(60, 'Chargement des permissions...');
         if (typeof BackendAPI !== 'undefined') {
           BackendAPI._syncFromLocalStorage();
-          await BackendAPI.getPermissions();
+          await BackendAPI.getPermissions(true);
+          if (Loader) Loader.setProgress(90, 'Initialisation de l\'interface...');
           if (typeof applyPermissionsUI === 'function') applyPermissionsUI();
+          if (typeof applyConsoleOverride === 'function') applyConsoleOverride();
           if (typeof updateExportButtonVisibility === 'function') await updateExportButtonVisibility();
         }
         var btn = document.getElementById('logoutBtn');
-        if (btn) btn.style.display = 'none';
+        if (btn) {
+          btn.style.display = '';
+          btn.addEventListener('click', async function() {
+            if (typeof AuthManager !== 'undefined' && AuthManager.logout) await AuthManager.logout();
+            goToAuth();
+          });
+        }
+      }
+      if (Loader) Loader.done();
+      else {
+        var c = document.getElementById('app-content');
+        if (c) c.style.display = '';
       }
     } catch (e) {
       window.__supabaseAuthenticated = false;
-      console.error('[authCheck] Erreur au démarrage:', e?.message || e, e);
+      if (typeof Logger !== 'undefined' && Logger.error) Logger.error('[authCheck] Erreur:', e?.message || e, e);
+      else console.error('[authCheck] Erreur:', e?.message || e, e);
       if (typeof AuthManager !== 'undefined' && AuthManager.logout) await AuthManager.logout();
-      window.location.href = 'auth.html';
+      goToAuth();
     }
+  }
+
+  function applyConsoleOverride() {
+    try {
+      var badge = typeof getCurrentBadge === 'function' ? getCurrentBadge() : '';
+      if (badge === 'SUPERADMIN') return;
+      var noop = function () {};
+      console.log = noop;
+      console.info = noop;
+      console.debug = noop;
+    } catch (e) {}
+  }
+  window.applyConsoleOverride = applyConsoleOverride;
+
+  document.addEventListener('DOMContentLoaded', function() {
+    if (Loader) Loader.onRetry(function() {
+      Loader.reset();
+      runAuthCheck();
+    });
+    runAuthCheck();
   });
 })();
 </script>
@@ -118,18 +360,9 @@
       <img src="img/events/honnor_day.png" alt="50% Honneur" class="booster-free-promo-img">
       <div class="booster-free-promo-title" data-i18n="booster_alert">Alerte booster 50%</div>
       <div class="booster-free-promo-version" data-i18n="pro_version">Version Pro</div>
-      <div class="booster-free-promo-price">1,99€</div>
-      <button type="button" class="booster-free-promo-btn" id="boosterFreePromoBuyBtn" data-i18n="buy">Acheter</button>
+      <div class="booster-free-promo-price" data-i18n="price_pro_month">7.99€/mois</div>
+      <div id="paypalSubscribeContainerBooster" class="paypal-subscribe-wrap paypal-subscribe-wrap--booster"></div>
     </div>
-    <button class="booster-widget" id="boosterWidget" type="button" aria-label="Voir les boosters" data-i18n-title="see_boosters">
-      <div class="booster-widget-icon" id="boosterWidgetIcon">⏳</div>
-      <div class="booster-widget-info">
-        <div class="booster-widget-title" id="boosterWidgetTitle" data-i18n="next_booster">Prochain booster</div>
-        <div class="booster-widget-countdown" id="boosterWidgetCountdown">00j 00h 00m 00s</div>
-        <div class="booster-widget-date" id="boosterWidgetDate">-</div>
-      </div>
-    </button>
-
     <div class="booster-sidebar-content" id="boosterAlert" style="display: none;">
       <div class="booster-sidebar-header">
         <span class="booster-sidebar-badge" data-i18n="today_badge">AUJOURD'HUI</span>
@@ -159,8 +392,16 @@
       </svg>
       <span id="messagesBadge" class="messages-badge" style="display:none;">0</span>
     </button>
+    <button type="button" id="myAccountBtn" class="icon-btn icon-btn--header icon-btn--account" title="Mon Compte" aria-label="Mon Compte" data-i18n-title="my_account">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+        <circle cx="12" cy="7" r="4"></circle>
+      </svg>
+    </button>
     <h1>🚀 <span data-i18n="app_title">DarkOrbit Stats Tracker Pro</span> <span id="headerUserBadge"></span></h1>
-    <button class="reload-btn" id="reloadAppBtn" title="Recharger l'application" data-i18n-title="reload_app">🔄</button>
+    <p id="headerActiveAccount" class="header-active-account" style="display: none;"></p>
+    <button type="button" class="reload-btn" id="reloadAppBtn" title="Recharger l'application" data-i18n-title="reload_app" onclick="window.doReloadApp&amp;&amp;window.doReloadApp();">🔄</button>
+    <button type="button" class="always-on-top-btn" id="alwaysOnTopBtn" title="Toujours au premier plan" aria-label="Toujours au premier plan">📌</button>
     <p class="subtitle" data-i18n="app_subtitle">Suivez votre progression et comparez vos sessions</p>
     <p class="credit"><span data-i18n="created_by">Créé par</span> Dragonal59</p>
     
@@ -208,255 +449,95 @@
     <button class="tab-btn active" data-tab="stats">📊 <span data-i18n="nav_stats">Statistiques</span></button>
     <button class="tab-btn" data-tab="progression">📈 <span data-i18n="nav_progression">Progression</span></button>
     <button class="tab-btn" data-tab="history">📚 <span data-i18n="nav_history">Historique</span></button>
-    <button class="tab-btn" data-tab="events">📅 <span data-i18n="nav_events">Événements</span></button>
     <button class="tab-btn" data-tab="classement">🏆 <span data-i18n="nav_ranking">Classement</span></button>
+    <button class="tab-btn" data-tab="coupons">🎫 <span data-i18n="nav_coupons">Coupons</span></button>
     <button class="tab-btn" data-tab="settings">⚙️ <span data-i18n="nav_settings">Paramètres</span></button>
     <button class="tab-btn" data-tab="superadmin">📊 <span data-i18n="nav_dashboard">Dashboard</span></button>
   </div>
 
   <!-- TAB 1: STATISTIQUES -->
   <div class="tab-content active" id="tab-stats">
-    
-    <div class="stats-section">
-      <div class="stats-section-header">
-        <h2>📝 <span data-i18n="enter_current_stats">Saisir vos stats actuelles</span></h2>
-        <button id="fillLastSession" class="btn-secondary btn-compact">⤵️ <span data-i18n="fill_from_last">Remplir depuis la dernière session</span></button>
-      </div>
-      
-      <div class="field">
+
+    <!-- Saisie manuelle (FREE uniquement) -->
+    <div class="stats-section" id="statsManualSection" style="display: none;">
+      <h2>📝 <span data-i18n="add_session_manual">Ajouter une session (saisie manuelle)</span></h2>
+      <p class="settings-description" style="margin-bottom: 16px;">Entrez vos statistiques actuelles pour enregistrer une session.</p>
+      <div class="form-group" style="margin-bottom: 12px;">
         <label for="honor" data-i18n="points_honor">Points d'honneur</label>
-        <input type="text" id="honor" data-i18n-placeholder="points_honor" placeholder="Entrez vos points d'honneur">
+        <input type="text" id="honor" placeholder="5,000,000">
       </div>
-
-      <div class="field">
+      <div class="form-group" style="margin-bottom: 12px;">
         <label for="xp" data-i18n="points_xp">Points d'expérience</label>
-        <input type="text" id="xp" placeholder="Entrez votre expérience" data-i18n-placeholder="points_xp">
+        <input type="text" id="xp" placeholder="500,000,000">
       </div>
-
-      <div class="field">
+      <div class="form-group" style="margin-bottom: 12px;">
+        <label data-i18n="current_grade">Grade actuel</label>
+        <div class="dropdown">
+          <div id="selected" class="dropdown-selected"><span>Sélectionner votre grade actuel</span></div>
+          <div id="options" class="dropdown-options" style="display:none;"></div>
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom: 12px;">
         <label for="rankPoints" data-i18n="points_rank">Points de grade</label>
-        <input type="text" id="rankPoints" placeholder="Entrez vos points de grade" class="true-placeholder" data-i18n-placeholder="points_rank">
+        <input type="text" id="rankPoints" placeholder="Ex: 51,100">
       </div>
+      <div class="form-group" style="margin-bottom: 12px;">
+        <label for="nextRankPoints" data-i18n="points_next_grade">Points du prochain grade</label>
+        <input type="text" id="nextRankPoints" placeholder="Ex: 102,300">
+      </div>
+      <button type="button" id="saveSession" class="btn-primary btn-compact">✅ <span data-i18n="save_session">Sauvegarder la session</span></button>
+    </div>
+    
+    <div class="stats-section" id="statsCollectAutoSection" style="display: none;">
+      <h2 style="margin: 0;">🎮 Récupérer mes stats</h2>
+      <p class="settings-description" style="margin: 8px 0 12px;"><span id="statsCollectHelpText"></span></p>
+      <button type="button" id="collectStatsFromGameBtn" class="btn-primary btn-compact">Récupérer mes stats</button>
+      <span id="collectStatsCooldownText" class="settings-description" style="margin-left: 8px;"></span>
+      <div id="collectStatsProgressWrap" style="display: none; margin-top: 8px;">
+        <div class="collect-stats-progress-bar" style="height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden;">
+          <div id="collectStatsProgressFill" style="height: 100%; width: 0%; background: var(--accent); transition: width 0.3s;"></div>
+        </div>
+        <span id="collectStatsProgressLabel" class="settings-description" style="font-size: 0.85rem; margin-top: 4px; display: block;"></span>
+      </div>
+    </div>
 
-      <div class="field">
-        <label for="grade" data-i18n="current_grade">Grade actuel</label>
-        <div class="dropdown" id="dropdown">
-          <div class="dropdown-selected" id="selected">
-            <span data-i18n="select_grade">Sélectionner votre grade actuel</span>
-          </div>
-          <div class="dropdown-options" id="options">
-            <div class="option" data-name="Pilote de 1ère classe" data-img="img/basic_space_pilot.png" data-honor="0" data-xp="0" data-rank="0">
-              <div class="grade-block">
-                <div class="grade-block-name">Pilote de 1ère classe</div>
-                <div class="grade-block-icon">
-                  <img src="img/basic_space_pilot.png" alt="Pilote de 1ère classe" class="grade-block-img">
-                </div>
-              </div>
-            </div>
-            <div class="option" data-name="Caporal" data-img="img/space_pilot.png" data-honor="10000" data-xp="20000" data-rank="100">
-              <div class="grade-block">
-                <div class="grade-block-name">Caporal</div>
-                <div class="grade-block-icon">
-                  <img src="img/space_pilot.png" alt="Caporal" class="grade-block-img">
-                </div>
-              </div>
-            </div>
-            <div class="option" data-name="Caporal-chef" data-img="img/chief_space_pilot.png" data-honor="30000" data-xp="60000" data-rank="300">
-              <div class="grade-block">
-                <div class="grade-block-name">Caporal-chef</div>
-                <div class="grade-block-icon">
-                  <img src="img/chief_space_pilot.png" alt="Caporal-chef" class="grade-block-img">
-                </div>
-              </div>
-            </div>
-            <div class="option" data-name="Sergent" data-img="img/basic_sergeant.png" data-honor="70000" data-xp="140000" data-rank="700">
-              <div class="grade-block">
-                <div class="grade-block-name">Sergent</div>
-                <div class="grade-block-icon">
-                  <img src="img/basic_sergeant.png" alt="Sergent" class="grade-block-img">
-                </div>
-              </div>
-            </div>
-            <div class="option" data-name="Sergent-chef" data-img="img/sergeant.png" data-honor="150000" data-xp="300000" data-rank="1500">
-              <div class="grade-block">
-                <div class="grade-block-name">Sergent-chef</div>
-                <div class="grade-block-icon">
-                  <img src="img/sergeant.png" alt="Sergent-chef" class="grade-block-img">
-                </div>
-              </div>
-            </div>
-            <div class="option" data-name="Adjudant" data-img="img/chief_sergeant.png" data-honor="310000" data-xp="620000" data-rank="3100">
-              <div class="grade-block">
-                <div class="grade-block-name">Adjudant</div>
-                <div class="grade-block-icon">
-                  <img src="img/chief_sergeant.png" alt="Adjudant" class="grade-block-img">
-                </div>
-              </div>
-            </div>
-            <div class="option" data-name="Adjudant-chef" data-img="img/basic_lieutenant.png" data-honor="630000" data-xp="1260000" data-rank="6300">
-              <div class="grade-block">
-                <div class="grade-block-name">Adjudant-chef</div>
-                <div class="grade-block-icon">
-                  <img src="img/basic_lieutenant.png" alt="Adjudant-chef" class="grade-block-img">
-                </div>
-              </div>
-            </div>
-            <div class="option" data-name="Major" data-img="img/lieutenant.png" data-honor="1270000" data-xp="2540000" data-rank="12700">
-              <div class="grade-block">
-                <div class="grade-block-name">Major</div>
-                <div class="grade-block-icon">
-                  <img src="img/lieutenant.png" alt="Major" class="grade-block-img">
-                </div>
-              </div>
-            </div>
-            <div class="option" data-name="Sous-lieutenant" data-img="img/chief_lieutenant.png" data-honor="2550000" data-xp="5100000" data-rank="25500">
-              <div class="grade-block">
-                <div class="grade-block-name">Sous-lieutenant</div>
-                <div class="grade-block-icon">
-                  <img src="img/chief_lieutenant.png" alt="Sous-lieutenant" class="grade-block-img">
-                </div>
-              </div>
-            </div>
-            <div class="option" data-name="Lieutenant" data-img="img/basic_captain.png" data-honor="5110000" data-xp="10220000" data-rank="51100">
-              <div class="grade-block">
-                <div class="grade-block-name">Lieutenant</div>
-                <div class="grade-block-icon">
-                  <img src="img/basic_captain.png" alt="Lieutenant" class="grade-block-img">
-                </div>
-              </div>
-            </div>
-            <div class="option" data-name="Capitaine" data-img="img/captain.png" data-honor="10230000" data-xp="20460000" data-rank="102300">
-              <div class="grade-block">
-                <div class="grade-block-name">Capitaine</div>
-                <div class="grade-block-icon">
-                  <img src="img/captain.png" alt="Capitaine" class="grade-block-img">
-                </div>
-              </div>
-            </div>
-            <div class="option" data-name="Capitaine d'escadron" data-img="img/chief_captain.png" data-honor="20470000" data-xp="40940000" data-rank="204700">
-              <div class="grade-block">
-                <div class="grade-block-name">Capitaine d'escadron</div>
-                <div class="grade-block-icon">
-                  <img src="img/chief_captain.png" alt="Capitaine d'escadron" class="grade-block-img">
-                </div>
-              </div>
-            </div>
-            <div class="option" data-name="Commandant" data-img="img/basic_major.png" data-honor="40950000" data-xp="81900000" data-rank="409500">
-              <div class="grade-block">
-                <div class="grade-block-name">Commandant</div>
-                <div class="grade-block-icon">
-                  <img src="img/basic_major.png" alt="Commandant" class="grade-block-img">
-                </div>
-              </div>
-            </div>
-            <div class="option" data-name="Commandant d'escadron" data-img="img/major.png" data-honor="81910000" data-xp="163820000" data-rank="819100">
-              <div class="grade-block">
-                <div class="grade-block-name">Commandant d'escadron</div>
-                <div class="grade-block-icon">
-                  <img src="img/major.png" alt="Commandant d'escadron" class="grade-block-img">
-                </div>
-              </div>
-            </div>
-            <div class="option" data-name="Lieutenant-colonel" data-img="img/chief_major.png" data-honor="163830000" data-xp="327660000" data-rank="1638300">
-              <div class="grade-block">
-                <div class="grade-block-name">Lieutenant-colonel</div>
-                <div class="grade-block-icon">
-                  <img src="img/chief_major.png" alt="Lieutenant-colonel" class="grade-block-img">
-                </div>
-              </div>
-            </div>
-            <div class="option" data-name="Colonel" data-img="img/basic_colonel.png" data-honor="327670000" data-xp="655340000" data-rank="3276700">
-              <div class="grade-block">
-                <div class="grade-block-name">Colonel</div>
-                <div class="grade-block-icon">
-                  <img src="img/basic_colonel.png" alt="Colonel" class="grade-block-img">
-                </div>
-              </div>
-            </div>
-            <div class="option" data-name="Général de brigade" data-img="img/colonel.png" data-honor="655350000" data-xp="1310700000" data-rank="6553500">
-              <div class="grade-block">
-                <div class="grade-block-name">Général de brigade</div>
-                <div class="grade-block-icon">
-                  <img src="img/colonel.png" alt="Général de brigade" class="grade-block-img">
-                </div>
-              </div>
-            </div>
-            <div class="option" data-name="Général de division" data-img="img/chief_colonel.png" data-honor="1310710000" data-xp="2621420000" data-rank="13107100">
-              <div class="grade-block">
-                <div class="grade-block-name">Général de division</div>
-                <div class="grade-block-icon">
-                  <img src="img/chief_colonel.png" alt="Général de division" class="grade-block-img">
-                </div>
-              </div>
-            </div>
-            <div class="option" data-name="Général de corps d'armée" data-img="img/basic_general.png" data-honor="2621430000" data-xp="5242860000" data-rank="26214300">
-              <div class="grade-block">
-                <div class="grade-block-name">Général de corps d'armée</div>
-                <div class="grade-block-icon">
-                  <img src="img/basic_general.png" alt="Général de corps d'armée" class="grade-block-img">
-                </div>
-              </div>
-            </div>
-            <div class="option" data-name="Général d'armée" data-img="img/general.png" data-honor="5242870000" data-xp="10485740000" data-rank="52428700">
-              <div class="grade-block">
-                <div class="grade-block-name">Général d'armée</div>
-                <div class="grade-block-icon">
-                  <img src="img/general.png" alt="Général d'armée" class="grade-block-img">
-                </div>
-              </div>
-            </div>
-            <div class="option marechal" data-name="Maréchal" data-img="img/chief_general.png" data-honor="10485750000" data-xp="20971500000" data-rank="104857500">
-              <div class="grade-block">
-                <div class="grade-block-name">Maréchal</div>
-                <div class="grade-block-icon">
-                  <img src="img/chief_general.png" alt="Maréchal" class="grade-block-img">
-                </div>
-              </div>
-            </div>
-          </div>
+    <!-- Modal identifiants DO pour récolte (app desktop) -->
+    <div id="doCredentialsModal" class="ranking-modal-overlay" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+      <div class="stats-section" style="max-width: 400px; margin: 20px;">
+        <h2 style="margin: 0 0 16px;">Identifiants DarkOrbit</h2>
+        <p class="settings-description" style="margin-bottom: 12px;">Pour cette récolte uniquement. Non enregistrés.</p>
+        <div class="field" style="margin-bottom: 12px;">
+          <label for="doModalPseudo">Pseudo DarkOrbit</label>
+          <input type="text" id="doModalPseudo" class="auth-form input" style="width: 100%; padding: 10px; border-radius: 8px;">
+        </div>
+        <div class="field" style="margin-bottom: 12px;">
+          <label for="doModalPassword">Mot de passe DarkOrbit</label>
+          <input type="password" id="doModalPassword" class="auth-form input" style="width: 100%; padding: 10px; border-radius: 8px;">
+        </div>
+        <div class="field" style="margin-bottom: 16px;">
+          <label for="doModalServer">Serveur</label>
+          <select id="doModalServer" style="width: 100%; padding: 10px; border-radius: 8px;"></select>
+        </div>
+        <div style="display: flex; gap: 8px; justify-content: flex-end;">
+          <button type="button" id="doModalCancel" class="btn-secondary btn-compact">Annuler</button>
+          <button type="button" id="doModalSubmit" class="btn-primary btn-compact">Lancer le scan</button>
         </div>
       </div>
+    </div>
 
-      <div class="field compact-hide">
-        <label for="nextRankPoints" data-i18n="points_next_grade">Points pour le prochain grade</label>
-        <input type="text" id="nextRankPoints" placeholder="Entrez vos points de grade suivants" class="true-placeholder" data-i18n-placeholder="points_next_grade">
-      </div>
-
-      <div class="field compact-hide">
-        <label for="currentLevel" data-i18n="current_level">Niveau actuel (calculé automatiquement)</label>
-        <input type="text" id="currentLevel" placeholder="Niveau calculé depuis l'XP" readonly style="cursor: not-allowed; opacity: 0.7;">
-      </div>
-
-      <div class="field compact-hide">
-        <label for="sessionNote">📝 Note / Commentaire (optionnel)</label>
-        <div class="note-templates">
-          <button type="button" class="template-btn" onclick="addNoteTemplate('ABG')">🌌 ABG</button>
-          <button type="button" class="template-btn" onclick="addNoteTemplate('Galaxy Gate Zeta')">🌌 GG Zeta</button>
-          <button type="button" class="template-btn" onclick="addNoteTemplate('Galaxy Gate Hades')">🌌 GG Hades</button>
-          <button type="button" class="template-btn" onclick="addNoteTemplate('Galaxy Gate Kappa')">🌌 GG Kappa</button>
-          <button type="button" class="template-btn" onclick="addNoteTemplate('Strolight')">⚔️ Strolight</button>
-          <button type="button" class="template-btn" onclick="addNoteTemplate('Eternal Gate')">♾️ Eternal</button>
-          <button type="button" class="template-btn" onclick="addNoteTemplate('Event spécial')">🎉 Event</button>
-          <button type="button" class="template-btn" onclick="addNoteTemplate('Kristallons farming')">💎 Kristallons</button>
-          <button type="button" class="template-btn" onclick="addNoteTemplate('PvP / Bataille')">⚔️ PvP</button>
-          <button type="button" class="template-btn" onclick="clearNote()">🗑️ Effacer</button>
-        </div>
-        <textarea id="sessionNote" placeholder="Ex: Galaxy Gate Zeta, Farming Kristallons, Event spécial..." rows="3" style="resize: vertical; min-height: 60px;"></textarea>
-      </div>
-
-      <div class="action-buttons">
-        <button id="saveSession" class="btn-primary">💾 <span data-i18n="save_session">Sauvegarder cette session</span></button>
-        <button id="resetStats" class="btn-secondary">🔄 <span data-i18n="reset">Réinitialiser</span></button>
-      </div>
-
-      <!-- Compteur de session 24h -->
-      <div class="session-timer" id="sessionTimer" style="display:none;">
-        <div class="timer-icon">⏰</div>
-        <div class="timer-info">
-          <div class="timer-label" data-i18n="current_session">Session actuelle</div>
-          <div class="timer-value" id="timerValue">Chargement...</div>
-          <div class="timer-detail" id="timerDetail">Calcul en cours...</div>
-        </div>
+    <!-- Récap récolte (rempli après "Récupérer mes stats") -->
+    <div class="stats-section" id="statsRecapSection" style="display: none;">
+      <h2>📋 Vos statistiques</h2>
+      <div class="stats-recap" id="statsRecapContent">
+        <p><strong>Serveur</strong> : <span id="recapServer">—</span></p>
+        <p><strong>Pseudo</strong> : <span id="recapPseudo">—</span></p>
+        <p><strong>ID Joueur</strong> : <span id="recapPlayerId">—</span></p>
+        <p><strong>Firme</strong> : <span id="recapCompany">—</span></p>
+        <p><strong>Grade</strong> : <span id="recapGrade"></span></p>
+        <p><strong>Points d'expérience</strong> : <span id="recapXp">—</span></p>
+        <p><strong>Points d'honneur</strong> : <span id="recapHonor">—</span></p>
+        <p><strong>Points de grade</strong> : <span id="recapRankPoints">—</span></p>
+        <p><strong>Points avant prochain grade</strong> : <span id="recapNextRankPoints">—</span></p>
       </div>
     </div>
 
@@ -480,7 +561,7 @@
         </div>
 
         <div class="stat-card">
-          <div class="stat-icon">🏆</div>
+          <div class="stat-icon"><img src="img/icon_btn/honor_icon.png" alt="" class="stat-icon-img"></div>
           <div class="stat-info">
             <div class="stat-label" data-i18n="points_honor">Points d'honneur</div>
             <div class="stat-value" id="honorDisplay">-</div>
@@ -488,7 +569,7 @@
         </div>
 
         <div class="stat-card">
-          <div class="stat-icon">⭐</div>
+          <div class="stat-icon"><img src="img/icon_btn/xp_icon.png" alt="" class="stat-icon-img"></div>
           <div class="stat-info">
             <div class="stat-label" data-i18n="points_xp">Points d'XP</div>
             <div class="stat-value" id="xpDisplay">-</div>
@@ -496,7 +577,7 @@
         </div>
 
         <div class="stat-card">
-          <div class="stat-icon">📊</div>
+          <div class="stat-icon"><img src="img/icon_btn/rp_icon.png" alt="" class="stat-icon-img"></div>
           <div class="stat-info">
             <div class="stat-label" data-i18n="points_rank">Points de grade</div>
             <div class="stat-value" id="rankPointsDisplay">-</div>
@@ -509,6 +590,10 @@
             <div class="stat-value" id="levelDisplay">-</div>
           </div>
         </div>
+        <!-- Les statistiques Aliens/Vaisseaux/Galaxy Gates sont désormais
+             consultables via les classements et la popup profil.
+             On retire ces cartes de la section "Vos statistiques actuelles"
+             pour éviter d'afficher des valeurs vides ou incohérentes. -->
       </div>
 
       <div class="progress-section">
@@ -567,7 +652,7 @@
             <canvas id="xpChart"></canvas>
           </div>
           <div class="chart-card">
-            <h3>📊 Points de grade</h3>
+            <h3><img src="img/icon_btn/rp_icon.png" alt="" class="chart-title-icon"> Points de grade</h3>
             <canvas id="rankChart"></canvas>
           </div>
         </div>
@@ -599,7 +684,7 @@
             </div>
           </div>
           <div class="advanced-stat-card">
-            <div class="advanced-stat-icon">📊</div>
+            <div class="advanced-stat-icon"><img src="img/icon_btn/rp_icon.png" alt="" class="advanced-stat-icon-img"></div>
             <div class="advanced-stat-info">
               <div class="advanced-stat-label">Moyenne points de grade/jour</div>
               <div class="advanced-stat-value" id="avgRankPerDay">-</div>
@@ -726,18 +811,6 @@
   <div class="tab-content" id="tab-history">
     <div class="history-section">
       <h2>📚 <span data-i18n="history_sessions">Historique des sessions</span></h2>
-      
-      <div class="history-actions">
-        <button id="clearHistory" class="btn-danger">🗑️ <span data-i18n="clear_history">Effacer l'historique</span></button>
-        <span class="export-wrap">
-          <button id="exportData" class="btn-secondary">📥 <span data-i18n="export_data">Exporter les données</span></button>
-          <span id="exportLocalOnlyMessage" class="export-local-only-msg" style="display:none;" data-i18n="export_local_only">Export uniquement disponible si les données sont locales.</span>
-        </span>
-        <button id="importData" class="btn-primary">📤 <span data-i18n="import_data">Importer des données</span></button>
-      </div>
-      
-      <!-- Input caché pour l'import de fichier -->
-      <input type="file" id="importFile" accept="application/json,.json" style="display: none;">
 
       <div id="historyList">
         <div class="empty-state">
@@ -748,20 +821,6 @@
     </div>
   </div>
 
-
-  <!-- TAB 4: ÉVÉNEMENTS -->
-  <div class="tab-content" id="tab-events">
-    <div class="events-tab-header">
-      <h2>📅 <span data-i18n="events_calendar">Calendrier des événements DarkOrbit</span></h2>
-      <button class="add-event-btn-primary" id="addEventBtnTab">
-        ➕ <span data-i18n="add_event">Ajouter un événement</span>
-      </button>
-    </div>
-    
-    <div id="eventsTabContent">
-      <!-- Contenu généré dynamiquement par events.js -->
-    </div>
-  </div>
 
   <!-- TAB CLASSEMENT -->
   <div class="tab-content" id="tab-classement">
@@ -778,46 +837,88 @@
         </select>
       </div>
       <div class="ranking-filter-group">
+        <label for="ranking-filter-period" data-i18n="period">Période</label>
+        <select id="ranking-filter-period">
+          <option value="">Aujourd'hui</option>
+          <option value="24h">+24h</option>
+          <option value="7j">+7j</option>
+          <option value="30j">+30j</option>
+        </select>
+      </div>
+      <div class="ranking-filter-group">
+        <span class="ranking-filter-label" data-i18n="firme">Firme</span>
+        <div id="ranking-filter-company" class="ranking-company-filter" aria-label="Filtrer par firme">
+          <button type="button" class="ranking-company-btn" data-company="mmo" title="MMO">
+            <span class="company-badge company-mmo">MMO</span>
+          </button>
+          <button type="button" class="ranking-company-btn" data-company="eic" title="EIC">
+            <span class="company-badge company-eic">EIC</span>
+          </button>
+          <button type="button" class="ranking-company-btn" data-company="vru" title="VRU">
+            <span class="company-badge company-vru">VRU</span>
+          </button>
+        </div>
+      </div>
+      <div class="ranking-filter-group">
         <span class="ranking-filter-label" data-i18n="points_type">Type de points</span>
         <div id="ranking-filter-type" class="ranking-type-radios" role="group">
           <label class="ranking-type-option"><input type="radio" name="ranking-filter-type" value="honor"> <span data-i18n="honor">Honneur</span></label>
           <label class="ranking-type-option"><input type="radio" name="ranking-filter-type" value="xp"> <span data-i18n="xp">XP</span></label>
           <label class="ranking-type-option"><input type="radio" name="ranking-filter-type" value="rank_points"> <span data-i18n="general">Général</span></label>
+          <label class="ranking-type-option"><input type="radio" name="ranking-filter-type" value="npc_kills"> <span data-i18n="alien_destroyed">Alien Détruit</span></label>
+          <label class="ranking-type-option"><input type="radio" name="ranking-filter-type" value="ship_kills"> <span data-i18n="ship_destroyed">Vaisseau Détruits</span></label>
+          <label class="ranking-type-option"><input type="radio" name="ranking-filter-type" value="galaxy_gates"> <span data-i18n="galaxy_gate">Galaxy Gate</span></label>
         </div>
       </div>
     </div>
+    <div id="ranking-comparison-bar" class="ranking-comparison-bar" style="display:none"></div>
     <div id="ranking-table-wrap" class="ranking-table-wrap">
       <table id="ranking-table" class="ranking-table">
         <thead>
           <tr>
             <th data-col="position" data-i18n="position">Position</th>
             <th data-col="pseudo" data-i18n="pseudo">Pseudo</th>
+            <th data-col="firme" data-i18n="firme">Firme</th>
             <th data-col="grade" data-i18n="grade">Grade</th>
             <th data-col="honor" data-i18n="points">Points</th>
             <th data-col="xp" data-i18n="points">Points</th>
             <th data-col="rank_points" data-i18n="points">Points</th>
+            <th data-col="npc_kills" data-i18n="alien_destroyed">Alien Détruit</th>
+            <th data-col="ship_kills" data-i18n="ship_destroyed">Vaisseau Détruits</th>
+            <th data-col="galaxy_gates" data-i18n="galaxy_gate">Galaxy Gate</th>
           </tr>
         </thead>
         <tbody></tbody>
       </table>
     </div>
-    <!-- Popup dernière sauvegarde -->
-    <div id="ranking-detail-overlay" class="ranking-modal-overlay"></div>
-    <div id="ranking-detail-modal" class="ranking-modal">
-      <div class="ranking-modal-header">
-        <h3 data-i18n="last_save">Dernière sauvegarde</h3>
-        <button type="button" id="ranking-detail-close" class="ranking-modal-close" data-i18n="close">Fermer</button>
+  </div>
+
+  <!-- TAB: COUPONS MTC GAME (PRO / ADMIN / SUPERADMIN) -->
+  <div class="tab-content" id="tab-coupons">
+    <div class="coupons-container">
+      <div class="coupons-header">
+        <h2>🎫 <span data-i18n="coupons_title">Coupons MTC Game</span></h2>
+        <p class="coupons-subtitle" data-i18n="coupons_subtitle">Gérez vos soldes et alertes</p>
+        <span class="coupons-disclaimer-wrap">
+          <span class="coupons-disclaimer-icon" data-i18n-title="coupons_disclaimer" title="Les informations sont 100 % chiffrées et sécurisées. Le suivi de solde doit être fait manuellement ; aucun suivi automatique n'est possible." aria-label="Info">ℹ</span>
+        </span>
+        <button type="button" class="btn-primary btn-compact" id="couponsAddBtn" data-i18n="coupons_add">Ajouter un coupon</button>
       </div>
-      <div class="ranking-modal-body">
-        <p><strong>Pseudo :</strong> <span data-ranking-detail-pseudo"></span></p>
-        <p><strong>Grade :</strong> <img data-ranking-detail-grade-img class="ranking-grade-img" alt="" width="28" height="28"> <span data-ranking-detail-grade-text></span></p>
-        <p><strong>Points d'honneur :</strong> <span data-ranking-detail-honor></span></p>
-        <p><strong>Points d'expérience :</strong> <span data-ranking-detail-xp></span></p>
-        <p><strong>Points de grade :</strong> <span data-ranking-detail-rank-points></span></p>
-        <p><strong>Points pour le prochain grade :</strong> <span data-ranking-detail-next-rank></span></p>
-        <p><strong>Date et heure de la sauvegarde :</strong> <span data-ranking-detail-date></span></p>
-        <p><strong>Note de session :</strong> <span data-ranking-detail-note></span></p>
+      <div id="couponsAddFormWrap" class="coupons-add-form-wrap" hidden>
+        <form id="couponsAddForm" class="coupons-add-form" novalidate>
+          <label for="couponAddLabel" class="coupons-form-label" data-i18n="coupons_label_name">Nom du coupon</label>
+          <input type="text" id="couponAddLabel" class="coupons-form-input" data-i18n-placeholder="coupons_placeholder_name" placeholder="Code coupon" maxlength="200" />
+          <label for="couponAddBalance" class="coupons-form-label" data-i18n="coupons_balance_initial">Solde initial (TL)</label>
+          <input type="number" id="couponAddBalance" class="coupons-form-input" step="0.01" min="0" placeholder="0" />
+          <label for="couponAddThreshold" class="coupons-form-label" data-i18n="coupons_alert_threshold">Seuil d'alerte (TL)</label>
+          <input type="number" id="couponAddThreshold" class="coupons-form-input" step="0.01" min="0" placeholder="0" />
+          <div class="coupons-add-form-actions">
+            <button type="submit" class="btn-primary btn-compact" data-i18n="coupons_add_submit">Ajouter</button>
+            <button type="button" class="btn-secondary btn-compact" id="couponAddCancel" data-i18n="cancel">Annuler</button>
+          </div>
+        </form>
       </div>
+      <div id="couponsList" class="coupons-list"></div>
     </div>
   </div>
 
@@ -875,27 +976,9 @@
         </div>
         <div id="licenseAlreadyPro" class="license-already-pro" style="display:none;">
           <p data-i18n="settings_already_pro">✅ Vous avez déjà la version PRO activée !</p>
-        </div>
-      </div>
-
-      <!-- OPTIONS UX FUTURES -->
-      <div class="settings-section">
-        <h3 class="settings-section-title">🧭 Options UX futures</h3>
-        
-        <div class="settings-group">
-          <label class="settings-checkbox-label settings-disabled">
-            <input type="checkbox" disabled>
-            <span>🧩 Mode focus (réduction visuelle)</span>
-          </label>
-          <p class="settings-description">À venir : simplifier l’interface pendant les sessions actives</p>
-        </div>
-        
-        <div class="settings-group">
-          <label class="settings-checkbox-label settings-disabled">
-            <input type="checkbox" disabled>
-            <span>⌨️ Raccourcis avancés</span>
-          </label>
-          <p class="settings-description">À venir : navigation rapide entre les onglets</p>
+          <button type="button" class="settings-btn-secondary" id="manageSubscriptionBtn" style="margin-top: 12px;">
+            🔗 <span data-i18n="manage_subscription">Gérer mon abonnement</span>
+          </button>
         </div>
       </div>
 
@@ -953,34 +1036,44 @@
         </div>
       </div>
 
-      <!-- DONNÉES -->
-      <div class="settings-section">
-        <h3 class="settings-section-title">💾 <span data-i18n="data_management">Gestion des données</span></h3>
-        
-        <div class="settings-data-actions">
-          <span class="export-wrap">
-            <button class="settings-btn-primary" id="settingsExportBtn">
-              📥 <span data-i18n="export_all">Exporter toutes les données</span>
-            </button>
-            <span id="settingsExportLocalOnlyMessage" class="export-local-only-msg" style="display:none;" data-i18n="export_local_only">Export uniquement disponible si les données sont locales.</span>
-          </span>
-          <button class="settings-btn-secondary" id="settingsImportBtn">
-            📤 <span data-i18n="import_data">Importer des données</span>
-          </button>
-          <button class="settings-btn-secondary" id="resetBaselineBtn">
-            🎯 <span data-i18n="reset_baseline">Réinitialiser le seuil de départ</span>
-          </button>
-          <button class="settings-btn-danger" id="hardReset">
-            ⚠️ <span data-i18n="hard_reset">Hard Reset</span>
-          </button>
-          <button class="settings-btn-danger" id="settingsClearCacheBtn">
-            🗑️ <span data-i18n="clear_cache">Vider le cache</span>
-          </button>
+      <!-- BUG REPORT -->
+      <div class="settings-section" id="bugReportSection">
+        <h3 class="settings-section-title">🐛 <span data-i18n="bug_report_title">Signaler un bug</span></h3>
+        <p class="settings-description" data-i18n="bug_report_desc">Décrivez le problème ou votre suggestion. Les administrateurs seront notifiés.</p>
+        <div class="settings-group">
+          <label class="settings-label" for="bugReportCategory" data-i18n="bug_report_category_label">Catégorie</label>
+          <select id="bugReportCategory" class="bug-report-select">
+            <option value="app" data-i18n="bug_report_cat_app">🐛 Problème lié à l'application</option>
+            <option value="license" data-i18n="bug_report_cat_license">🔑 Problème de licence</option>
+            <option value="performance" data-i18n="bug_report_cat_performance">⚡ Problème de performance</option>
+            <option value="connection" data-i18n="bug_report_cat_connection">🌐 Problème de connexion</option>
+            <option value="suggestion" data-i18n="bug_report_cat_suggestion">💡 Suggestion / Nouveauté</option>
+            <option value="ui" data-i18n="bug_report_cat_ui">🎨 Amélioration UI/UX</option>
+            <option value="other" data-i18n="bug_report_cat_other">❓ Autre</option>
+          </select>
         </div>
-        
-        <div class="settings-data-info" id="settingsDataInfo">
-          <!-- Infos générées dynamiquement -->
+        <div class="settings-group">
+          <label class="settings-label" for="bugReportDescription"><span data-i18n="bug_report_description_label">Description</span> <span id="bugReportCharCount" class="bug-report-charcount">0 / 2000</span></label>
+          <textarea id="bugReportDescription" class="bug-report-textarea" maxlength="2000" rows="5" data-i18n-placeholder="bug_report_description_placeholder" placeholder="Décrivez le problème ou votre suggestion..."></textarea>
         </div>
+        <div class="settings-group">
+          <label class="settings-label" data-i18n="bug_report_photo_label">Photo (optionnel, 1 max, 2 Mo)</label>
+          <input type="file" id="bugReportPhoto" class="bug-report-file" accept="image/*" data-max-size="2097152">
+          <span id="bugReportPhotoError" class="bug-report-error" style="display:none;"></span>
+        </div>
+        <button type="button" id="bugReportSubmitBtn" class="settings-btn-primary">
+          📤 <span data-i18n="bug_report_send">Envoyer</span>
+        </button>
+        <div id="bugReportMessage" class="bug-report-message" style="display:none;" role="status"></div>
+      </div>
+
+      <!-- Section Gestion des données supprimée (export/import/reset/clear cache gérés ailleurs) -->
+
+      <!-- CHANGELOG -->
+      <div class="settings-section" id="settingsChangelogSection">
+        <h3 class="settings-section-title">📋 <span data-i18n="changelog">Changelog</span></h3>
+        <p class="settings-description" data-i18n="changelog_desc">Historique des versions et des modifications.</p>
+        <div id="settingsChangelogList" class="settings-changelog-list"></div>
       </div>
 
       <!-- À PROPOS -->
@@ -988,8 +1081,8 @@
         <h3 class="settings-section-title">ℹ️ <span data-i18n="about">À propos</span></h3>
         
         <div class="settings-about">
-          <p><strong data-i18n="app_title">DarkOrbit Stats Tracker Pro</strong></p>
-          <p><span data-i18n="version">Version</span> 2.1.0 - Architecture Modulaire</p>
+          <p><strong>DO Stats Tracker</strong></p>
+          <p><span data-i18n="version">Version</span> <span class="app-version">—</span> - Architecture Modulaire</p>
           <p><span data-i18n="created_by">Créé par</span> <strong>Dragonal59</strong></p>
           <p class="settings-about-description" data-i18n="about_description">
             Application de suivi de progression pour DarkOrbit. Toutes les données sont stockées localement sur votre appareil.
@@ -1000,167 +1093,222 @@
     </div>
   </div>
 
-  <!-- TAB 6: SUPER ADMIN -->
+  <!-- TAB 6: SUPER ADMIN / DASHBOARD -->
   <div class="tab-content" id="tab-superadmin">
     <div class="sa-dashboard" id="superAdminContainer">
       <div class="sa-header">
-        <h2>🛡️ <span data-i18n="sa_dashboard">Dashboard Super Admin</span></h2>
-        <p data-i18n="sa_subtitle">Gestion complète des comptes utilisateurs — Vision centralisée et actions rapides</p>
+        <h2>🛡️ <span data-i18n="sa_dashboard">Dashboard</span></h2>
+        <p data-i18n="sa_subtitle">Gestion centralisée — Droits stricts par rôle</p>
       </div>
 
-      <!-- Section collecte classements 23 serveurs -->
-      <div class="sa-collect-section" id="superAdminCollectSection">
-        <div class="sa-collect-header">
-          <h3 class="sa-collect-title" data-i18n="collect_rankings">Collecte automatique des classements</h3>
-        </div>
-        <div class="sa-collect-body">
-          <div class="sa-collect-actions">
-            <button type="button" class="sa-collect-btn sa-collect-btn--start" id="superAdminCollectStartBtn">
-              <span class="sa-collect-btn-icon">▶</span> <span data-i18n="start_collect">Démarrer la collecte</span>
-            </button>
-            <button type="button" class="sa-collect-btn sa-collect-btn--stop" id="superAdminCollectStopBtn" style="display:none;">
-              <span class="sa-collect-btn-icon">⏹</span> <span data-i18n="stop">Arrêter</span>
-            </button>
-            <button type="button" class="sa-collect-btn sa-collect-btn--alt" id="superAdminCollectDebugBtn" data-i18n-title="sa_debug_title" title="Afficher la fenêtre de scraping + DevTools pour debug">
-              <span class="sa-collect-btn-icon">👁</span> <span data-i18n="debug">Debug</span>
-            </button>
-            <button type="button" class="sa-collect-btn sa-collect-btn--danger" id="superAdminCollectClearBtn" data-i18n-title="sa_clear_rankings_title" title="Supprimer tous les classements importés">
-              <span class="sa-collect-btn-icon">🗑</span> <span data-i18n="clear_rankings">Nettoyer les classements</span>
-            </button>
-          </div>
-          <div class="sa-collect-info" id="superAdminCollectInfo">
-            <div class="sa-collect-info-row">
-              <span class="sa-collect-info-label" data-i18n="sa_server_label">Serveur :</span>
-              <span class="sa-collect-info-value" id="superAdminCollectProgress">—</span>
-            </div>
-            <div class="sa-collect-info-detail" id="superAdminCollectDetail" data-i18n="waiting">En attente</div>
-          </div>
-          <div class="sa-collect-warn" id="superAdminCollectRateLimit" style="display:none;" data-i18n="sa_rate_limit">⚠ Pause 10 min (trop de clics détecté)</div>
-        </div>
-      </div>
+      <nav class="sa-subtabs" id="saSubtabs" aria-label="Sous-onglets du dashboard">
+        <button type="button" class="sa-subtab-btn sa-tile sa-tile--blue" data-sa-panel="vue-generale">
+          <span class="sa-tile-icon">📊</span>
+          <span class="sa-tile-label">Vue générale</span>
+        </button>
+        <button type="button" class="sa-subtab-btn sa-tile sa-tile--violet" data-sa-panel="utilisateurs">
+          <span class="sa-tile-icon">👥</span>
+          <span class="sa-tile-label">Utilisateurs</span>
+        </button>
+        <button type="button" class="sa-subtab-btn sa-tile sa-tile--rose" data-sa-panel="messages">
+          <span class="sa-tile-icon">📢</span>
+          <span class="sa-tile-label">Messages</span>
+        </button>
+        <button type="button" class="sa-subtab-btn sa-tile sa-tile--orange" data-sa-panel="logs-securite">
+          <span class="sa-tile-icon">🔒</span>
+          <span class="sa-tile-label">Logs sécurité</span>
+        </button>
+        <button type="button" class="sa-subtab-btn sa-tile sa-tile--yellow" data-sa-panel="cles-licence">
+          <span class="sa-tile-icon">🔑</span>
+          <span class="sa-tile-label">Clés licence</span>
+        </button>
+        <button type="button" class="sa-subtab-btn sa-tile sa-tile--teal" data-sa-panel="planificateur">
+          <span class="sa-tile-icon">⏰</span>
+          <span class="sa-tile-label">Planificateur</span>
+        </button>
+        <button type="button" class="sa-subtab-btn sa-tile sa-tile--slate" data-sa-panel="permissions-admin">
+          <span class="sa-tile-icon">⚙️</span>
+          <span class="sa-tile-label">Permissions Admin</span>
+        </button>
+        <button type="button" class="sa-subtab-btn sa-tile sa-tile--red" data-sa-panel="logs">
+          <span class="sa-tile-icon">📋</span>
+          <span class="sa-tile-label">Logs</span>
+        </button>
+      </nav>
 
-      <!-- Section génération de clés (SUPERADMIN uniquement) -->
-      <div class="sa-keys-section" id="superAdminKeysSection" style="display:none;">
-        <div class="sa-keys-header">
-          <h3 class="sa-keys-title" data-i18n="sa_generate_keys">Générer des clés d'activation</h3>
-        </div>
-        <div class="sa-keys-body">
-          <div class="sa-keys-form">
-            <div class="sa-keys-row">
-              <label class="sa-keys-label" data-i18n="sa_keys_badge">Badge</label>
-              <select id="superAdminKeysBadge" class="sa-keys-select">
-                <option value="PRO" data-i18n="pro_version">PRO</option>
-                <option value="ADMIN">ADMIN</option>
-              </select>
-            </div>
-            <div class="sa-keys-row">
-              <label class="sa-keys-label" data-i18n="sa_keys_quantity">Quantité (1-100)</label>
-              <input type="number" id="superAdminKeysQuantity" class="sa-keys-input" min="1" max="100" value="5">
-            </div>
-            <button type="button" class="sa-collect-btn sa-collect-btn--start" id="superAdminKeysGenerateBtn">
-              🔑 <span data-i18n="sa_keys_generate">Générer</span>
-            </button>
+      <!-- Panel Vue générale (SUPERADMIN uniquement) -->
+      <section class="sa-panel" id="sa-panel-vue-generale" data-sa-panel="vue-generale" hidden>
+        <div class="sa-panel-header"><h3>Vue générale</h3></div>
+        <div class="sa-stats-grid" id="saVueGeneraleStats">
+          <div class="sa-stat-card sa-stat-card--users">
+            <div class="sa-stat-icon">👥</div>
+            <span class="sa-stat-label">Utilisateurs total</span>
+            <span class="sa-stat-value" id="saStatTotalUsers">—</span>
           </div>
-          <div id="superAdminKeysResult" class="sa-keys-result" style="display:none;">
-            <h4 data-i18n="sa_keys_generated">Clés générées :</h4>
-            <textarea id="superAdminKeysOutput" class="sa-keys-output" readonly rows="6"></textarea>
-            <button type="button" class="sa-collect-btn sa-collect-btn--alt" id="superAdminKeysCopyBtn">
-              📋 <span data-i18n="copy">Copier</span>
-            </button>
+          <div class="sa-stat-card sa-stat-card--connected">
+            <div class="sa-stat-icon">🟢</div>
+            <span class="sa-stat-label">Utilisateurs connectés</span>
+            <span class="sa-stat-value" id="saStatConnectedUsers">—</span>
+          </div>
+          <div class="sa-stat-card sa-stat-card--sessions">
+            <div class="sa-stat-icon">📈</div>
+            <span class="sa-stat-label">Sessions aujourd'hui</span>
+            <span class="sa-stat-value" id="saStatSessionsToday">—</span>
+          </div>
+          <div class="sa-stat-card sa-stat-card--db">
+            <div class="sa-stat-icon">💾</div>
+            <span class="sa-stat-label">Supabase</span>
+            <span class="sa-stat-value sa-status-dot" id="saStatSupabase">—</span>
+          </div>
+          <div class="sa-stat-card sa-stat-card--badge sa-stat-card--free">
+            <div class="sa-stat-icon">🆓</div>
+            <span class="sa-stat-label">FREE</span>
+            <span class="sa-stat-value" id="saStatFree">—</span>
+          </div>
+          <div class="sa-stat-card sa-stat-card--badge sa-stat-card--pro">
+            <div class="sa-stat-icon">⭐</div>
+            <span class="sa-stat-label">PRO</span>
+            <span class="sa-stat-value" id="saStatPro">—</span>
+          </div>
+          <div class="sa-stat-card sa-stat-card--badge sa-stat-card--admin">
+            <div class="sa-stat-icon">🛡️</div>
+            <span class="sa-stat-label">ADMIN</span>
+            <span class="sa-stat-value" id="saStatAdmin">—</span>
           </div>
         </div>
-      </div>
+      </section>
 
-      <!-- Section comptes DarkOrbit (Electron uniquement) -->
-      <div class="sa-do-accounts-section" id="superAdminDarkOrbitAccountsSection" style="display:none;">
-        <div class="sa-do-accounts-header">
-          <h3 class="sa-do-accounts-title" data-i18n="darkorbit_accounts">Comptes DarkOrbit</h3>
-        </div>
-        <div class="sa-do-accounts-body">
-          <div class="sa-do-accounts-actions">
-            <button type="button" class="sa-collect-btn sa-collect-btn--start" id="darkorbitAccountsAddBtn">
-              <span class="sa-collect-btn-icon">+</span> <span data-i18n="new_account">Nouveau compte</span>
-            </button>
-            <button type="button" class="sa-collect-btn sa-collect-btn--alt" id="darkorbitAccountsAssignmentsBtn">
-              <span class="sa-collect-btn-icon">⚙️</span> <span data-i18n="assign_servers">Attribuer les serveurs</span>
-            </button>
-            <button type="button" class="sa-collect-btn sa-collect-btn--sm" id="darkorbitAccountsSelectAllBtn" data-i18n-title="select_all" title="Tout sélectionner"><span data-i18n="select_all">Tout sélectionner</span></button>
-            <button type="button" class="sa-collect-btn sa-collect-btn--sm" id="darkorbitAccountsDeselectAllBtn" data-i18n-title="deselect_all" title="Tout désélectionner"><span data-i18n="deselect_all">Tout désélectionner</span></button>
-            <span class="sa-do-accounts-status" id="darkorbitAccountsEncryptStatus"></span>
+      <!-- Panel Utilisateurs (SUPERADMIN + ADMIN si autorisé) -->
+      <section class="sa-panel" id="sa-panel-utilisateurs" data-sa-panel="utilisateurs" hidden>
+        <div class="sa-toolbar">
+          <input type="text" id="superAdminSearch" class="sa-search" data-i18n-placeholder="search_placeholder" placeholder="Rechercher par email ou identifiant...">
+          <div class="sa-toolbar-actions">
+            <button type="button" class="sa-btn sa-btn--sm sa-btn--alt" id="superAdminGlobalMessageBtn" data-i18n-title="sa_global_msg_title" title="Message à tous les utilisateurs">📢 <span data-i18n="global_message">Message global</span></button>
+            <button type="button" class="sa-btn sa-btn--sm sa-btn--alt" id="superAdminLogsBtn" style="display:none;">📋 <span data-i18n="admin_logs">Logs admin</span></button>
+            <button type="button" class="sa-btn sa-btn--sm sa-btn--alt" id="superAdminSecurityEventsBtn" style="display:none;">🔒 <span data-i18n="security_surveillance">Surveillance sécurité</span></button>
           </div>
-          <div class="sa-do-accounts-accordion">
-            <button type="button" class="sa-do-accounts-accordion-header" id="darkorbitAccountsAccordionBtn" aria-expanded="false" aria-controls="darkorbitAccountsAccordionBody">
-              <span class="sa-do-accounts-accordion-title" data-i18n="account_list">Liste des comptes</span>
-              <span class="sa-do-accounts-accordion-count" id="darkorbitAccountsAccordionCount">(0)</span>
-              <span class="sa-do-accounts-accordion-icon" aria-hidden="true">▼</span>
-            </button>
-            <div class="sa-do-accounts-accordion-body" id="darkorbitAccountsAccordionBody" hidden>
-              <div class="sa-do-accounts-table-wrap">
-                <table class="sa-table sa-table--compact sa-do-accounts-table">
-                  <thead>
-                    <tr>
-                      <th data-i18n="sa_label">Label</th>
-                      <th data-i18n="email">Email</th>
-                      <th data-i18n="sa_nb_servers">Nb serveurs</th>
-                      <th data-i18n="status">Statut</th>
-                      <th data-i18n="active">Actif</th>
-                      <th data-i18n="sa_last_use">Dernière utilisation</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody id="darkorbitAccountsTableBody"></tbody>
-                </table>
+          <div class="sa-filter-group">
+            <select id="superAdminFilterStatus" class="sa-filter-select">
+              <option value="all" data-i18n="all_statuses">Tous les statuts</option>
+              <option value="active" data-i18n="active">Actif</option>
+              <option value="banned" data-i18n="banned">Banni</option>
+              <option value="suspended" data-i18n="suspended">Suspendu</option>
+            </select>
+            <label class="sa-filter-checkbox">
+              <input type="checkbox" id="superAdminFilterSuspect">
+              <span data-i18n="suspect_only">Comptes suspects uniquement</span>
+            </label>
+            <select id="superAdminSort" class="sa-filter-select">
+              <option value="createdAt_desc" data-i18n="sa_sort_created_desc">Date création (récent)</option>
+              <option value="createdAt_asc" data-i18n="sa_sort_created_asc">Date création (ancien)</option>
+              <option value="lastActivity_desc" data-i18n="sa_sort_activity_desc">Dernière activité (récent)</option>
+              <option value="status_asc" data-i18n="sa_sort_status_az">Statut A-Z</option>
+            </select>
+          </div>
+        </div>
+        <div class="sa-table-wrap">
+          <table class="sa-table">
+            <thead>
+              <tr>
+                <th data-i18n="id">Identifiant</th>
+                <th data-i18n="email">Email</th>
+                <th data-i18n="badge">Badge</th>
+                <th data-i18n="creation">Création</th>
+                <th data-i18n="status">Statut</th>
+                <th data-i18n="suspect">Suspect</th>
+                <th data-i18n="last_activity">Dernière activité</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="superAdminTableBody"></tbody>
+          </table>
+        </div>
+        <div id="superAdminPagination" class="sa-pagination" style="display:none;"></div>
+      </section>
+
+      <!-- Panel Messages (SUPERADMIN uniquement) -->
+      <section class="sa-panel" id="sa-panel-messages" data-sa-panel="messages" hidden>
+        <div class="sa-panel-header"><h3>Message global</h3></div>
+        <p class="sa-panel-desc">Envoyer un message à tous les utilisateurs.</p>
+        <button type="button" class="sa-btn sa-btn--alt" id="superAdminGlobalMessageBtnMessages">📢 Ouvrir l’envoi de message global</button>
+      </section>
+
+      <!-- Panel Logs sécurité (SUPERADMIN uniquement) -->
+      <section class="sa-panel" id="sa-panel-logs-securite" data-sa-panel="logs-securite" hidden>
+        <div class="sa-panel-header"><h3>Logs de sécurité</h3></div>
+        <button type="button" class="sa-btn sa-btn--alt" id="superAdminSecurityEventsBtnPanel">🔒 Afficher les événements de sécurité</button>
+      </section>
+
+      <!-- Panel Clés licence (SUPERADMIN uniquement) -->
+      <section class="sa-panel" id="sa-panel-cles-licence" data-sa-panel="cles-licence" hidden>
+        <div class="sa-keys-section" id="superAdminKeysSection">
+          <div class="sa-keys-header">
+            <h3 class="sa-keys-title" data-i18n="sa_generate_keys">Générer des clés d'activation</h3>
+          </div>
+          <div class="sa-keys-body">
+            <div class="sa-keys-form">
+              <div class="sa-keys-row">
+                <label class="sa-keys-label" data-i18n="sa_keys_badge">Badge</label>
+                <select id="superAdminKeysBadge" class="sa-keys-select">
+                  <option value="PRO" data-i18n="pro_version">PRO</option>
+                  <option value="ADMIN">ADMIN</option>
+                </select>
               </div>
+              <div class="sa-keys-row">
+                <label class="sa-keys-label" data-i18n="sa_keys_quantity">Quantité (1-100)</label>
+                <input type="number" id="superAdminKeysQuantity" class="sa-keys-input" min="1" max="100" value="1">
+              </div>
+              <button type="button" class="sa-collect-btn sa-collect-btn--start" id="superAdminKeysGenerateBtn">
+                🔑 <span data-i18n="sa_keys_generate">Générer</span>
+              </button>
+            </div>
+            <div id="superAdminKeysResult" class="sa-keys-result" style="display:none;">
+              <h4 data-i18n="sa_keys_generated">Clés générées :</h4>
+              <textarea id="superAdminKeysOutput" class="sa-keys-output" readonly rows="6"></textarea>
+              <button type="button" class="sa-collect-btn sa-collect-btn--alt" id="superAdminKeysCopyBtn">
+                📋 <span data-i18n="copy">Copier</span>
+              </button>
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div class="sa-toolbar">
-        <input type="text" id="superAdminSearch" class="sa-search" data-i18n-placeholder="search_placeholder" placeholder="Rechercher par email ou identifiant...">
-        <div class="sa-toolbar-actions">
-          <button type="button" class="sa-btn sa-btn--sm" id="superAdminRefreshBtn" data-i18n-title="sa_refresh_title" title="Rafraîchir la liste">🔄 <span data-i18n="refresh">Rafraîchir</span></button>
-          <button type="button" class="sa-btn sa-btn--sm sa-btn--alt" id="superAdminGlobalMessageBtn" data-i18n-title="sa_global_msg_title" title="Envoyer un message à tous les utilisateurs">📢 <span data-i18n="global_message">Message global</span></button>
-          <button type="button" class="sa-btn sa-btn--sm sa-btn--alt" id="superAdminLogsBtn" title="Voir les logs admin (SUPERADMIN)" style="display:none;">📋 <span data-i18n="admin_logs">Logs admin</span></button>
-          <button type="button" class="sa-btn sa-btn--sm sa-btn--alt" id="superAdminSecurityEventsBtn" title="Surveillance des événements de sécurité (SUPERADMIN)" style="display:none;">🔒 <span data-i18n="security_surveillance">Surveillance sécurité</span></button>
+      <!-- Panel Planificateur (SUPERADMIN uniquement) -->
+      <section class="sa-panel" id="sa-panel-planificateur" data-sa-panel="planificateur" hidden>
+        <div class="sa-panel-header"><h3>Planificateur</h3></div>
+        <div class="sa-collect-section sa-collect-section--in-planificateur" style="padding: 1rem 1.5rem;">
+          <button type="button" class="sa-collect-btn sa-collect-btn--alt" id="superAdminScraperWindowBtn" title="Ouvrir la fenêtre Scraper (sélection serveurs, monitoring)">
+            <span class="sa-collect-btn-icon">🖥</span> <span data-i18n="sa_scraper_window_open">Interface Scraper</span>
+          </button>
         </div>
-        <div class="sa-filter-group">
-          <select id="superAdminFilterStatus" class="sa-filter-select">
-            <option value="all" data-i18n="all_statuses">Tous les statuts</option>
-            <option value="active" data-i18n="active">Actif</option>
-            <option value="banned" data-i18n="banned">Banni</option>
-            <option value="suspended" data-i18n="suspended">Suspendu</option>
-          </select>
-          <label class="sa-filter-checkbox">
-            <input type="checkbox" id="superAdminFilterSuspect">
-            <span data-i18n="suspect_only">Comptes suspects uniquement</span>
-          </label>
-          <select id="superAdminSort" class="sa-filter-select">
-            <option value="createdAt_desc" data-i18n="sa_sort_created_desc">Date création (récent)</option>
-            <option value="createdAt_asc" data-i18n="sa_sort_created_asc">Date création (ancien)</option>
-            <option value="lastActivity_desc" data-i18n="sa_sort_activity_desc">Dernière activité (récent)</option>
-            <option value="status_asc" data-i18n="sa_sort_status_az">Statut A-Z</option>
-          </select>
-        </div>
-      </div>
+      </section>
 
-      <div class="sa-table-wrap">
-        <table class="sa-table">
-          <thead>
-            <tr>
-              <th data-i18n="id">Identifiant</th>
-              <th data-i18n="email">Email</th>
-              <th data-i18n="badge">Badge</th>
-              <th data-i18n="creation">Création</th>
-              <th data-i18n="status">Statut</th>
-              <th data-i18n="suspect">Suspect</th>
-              <th data-i18n="last_activity">Dernière activité</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="superAdminTableBody"></tbody>
-        </table>
-      </div>
+      <!-- Panel Permissions Admin (SUPERADMIN uniquement) -->
+      <section class="sa-panel" id="sa-panel-permissions-admin" data-sa-panel="permissions-admin" hidden>
+        <div class="sa-panel-header"><h3>Permissions des administrateurs</h3></div>
+        <p class="sa-panel-desc">Toggle ON/OFF pour chaque fonctionnalité du dashboard pour le badge ADMIN. Les changements sont appliqués en temps réel.</p>
+        <div class="sa-permissions-grid" id="saPermissionsAdminGrid"></div>
+        <button type="button" class="sa-btn sa-btn--primary" id="saPermissionsAdminSaveBtn">Enregistrer les permissions</button>
+      </section>
+
+      <!-- Panel Logs (SUPERADMIN uniquement) -->
+      <section class="sa-panel" id="sa-panel-logs" data-sa-panel="logs" hidden>
+        <div class="sa-panel-header"><h3>Logs application</h3></div>
+        <p class="sa-panel-desc">Derniers 100 messages error/warn (temps réel).</p>
+        <div class="sa-logs-level-wrap">
+          <label for="saLogsLevelSelect" class="sa-logs-level-label">Niveau console :</label>
+          <select id="saLogsLevelSelect" class="sa-logs-level-select" aria-label="Niveau de log">
+            <option value="debug">Debug</option>
+            <option value="info">Info</option>
+            <option value="warn" selected>Warn</option>
+            <option value="error">Error</option>
+          </select>
+        </div>
+        <div class="sa-logs-container">
+          <pre id="saLogsOutput" class="sa-logs-output" aria-live="polite"></pre>
+        </div>
+      </section>
+
     </div>
   </div>
 
@@ -1265,6 +1413,24 @@
     </div>
   </div>
 
+  <!-- Modal confirmation action critique -->
+  <div id="saConfirmModal" class="sa-modal">
+    <div class="sa-modal-overlay"></div>
+    <div class="sa-modal-content" style="max-width: 400px;">
+      <div class="sa-modal-header">
+        <h3 id="saConfirmTitle">Confirmer</h3>
+        <button type="button" class="sa-modal-close" id="saConfirmCancel">&times;</button>
+      </div>
+      <div class="sa-modal-body">
+        <p id="saConfirmMessage" style="margin:0;"></p>
+      </div>
+      <div class="sa-modal-footer">
+        <button type="button" class="sa-btn" id="saConfirmCancelBtn">Annuler</button>
+        <button type="button" class="sa-btn sa-btn--primary" id="saConfirmOk">Confirmer</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal édition utilisateur -->
   <div id="superAdminEditModal" class="sa-modal">
     <div class="sa-modal-overlay"></div>
@@ -1276,11 +1442,15 @@
       <div class="sa-modal-body">
         <div class="sa-form-group">
           <label data-i18n="email">Email</label>
-          <input type="email" id="superAdminEditEmail" placeholder="email@exemple.com">
+          <input type="email" id="superAdminEditEmail" placeholder="email@exemple.com" readonly>
         </div>
         <div class="sa-form-group">
           <label data-i18n="badge">Badge</label>
-          <span id="superAdminEditBadge" class="sa-edit-badge"></span>
+          <select id="superAdminEditBadge" class="sa-edit-badge-select">
+            <option value="FREE">FREE</option>
+            <option value="PRO">PRO</option>
+            <option value="ADMIN">ADMIN</option>
+          </select>
         </div>
         <div class="sa-form-group">
           <label data-i18n="status">Statut</label>
@@ -1289,6 +1459,35 @@
             <option value="banned" data-i18n="banned">Banni</option>
             <option value="suspended" data-i18n="suspended">Suspendu</option>
           </select>
+        </div>
+        <div class="sa-form-group">
+          <label>Pseudo jeu</label>
+          <input type="text" id="superAdminEditGamePseudo" placeholder="Pseudo DarkOrbit">
+        </div>
+        <div class="sa-form-group">
+          <label>Serveur</label>
+          <input type="text" id="superAdminEditServer" placeholder="Serveur">
+        </div>
+        <div class="sa-form-group">
+          <label>Firme</label>
+          <input type="text" id="superAdminEditCompany" placeholder="Firme">
+        </div>
+        <div class="sa-form-group">
+          <label>XP initial</label>
+          <input type="number" id="superAdminEditInitialXp" min="0" placeholder="0">
+        </div>
+        <div class="sa-form-group">
+          <label>Honneur initial</label>
+          <input type="number" id="superAdminEditInitialHonor" min="0" placeholder="0">
+        </div>
+        <div class="sa-form-group">
+          <label>Grade initial</label>
+          <input type="text" id="superAdminEditInitialRank" placeholder="Grade">
+        </div>
+        <div class="sa-form-group">
+          <label>Points grade / Prochain grade</label>
+          <input type="number" id="superAdminEditInitialRankPoints" min="0" placeholder="Points"> /
+          <input type="number" id="superAdminEditNextRankPoints" min="0" placeholder="Prochain">
         </div>
       </div>
       <div class="sa-modal-footer">
@@ -1332,58 +1531,257 @@
     </div>
   </div>
 
-  <!-- Modal seuil de départ (premier lancement) -->
-  <div id="baselineSetupModal" class="modal" style="display: none;">
-    <div class="modal-content" style="max-width: 480px;">
-      <div class="modal-header">
-        <h2>🎯 <span data-i18n="welcome_baseline">Bienvenue dans DarkOrbit Stats Tracker !</span></h2>
-      </div>
-      <div class="modal-body">
-        <p style="margin-bottom: 20px; color: var(--text-secondary);" data-i18n="baseline_instruction">
-          Pour calculer votre progression, entrez vos stats actuelles dans DarkOrbit.
-        </p>
-        <div class="form-group">
-          <label for="baselineHonor" data-i18n="points_honor">Points d'honneur actuels</label>
-          <input type="text" id="baselineHonor" placeholder="5,000,000">
-        </div>
-        <div class="form-group">
-          <label for="baselineXp">Points d'expérience actuels</label>
-          <input type="text" id="baselineXp" placeholder="500,000,000">
-        </div>
-        <div class="form-group">
-          <label for="baselineGrade" data-i18n="current_grade">Grade actuel</label>
-          <div class="baseline-grade-wrap" style="display:flex;align-items:center;gap:10px;">
-            <img id="baselineGradeImg" src="" alt="" class="grade-block-img" style="width:32px;height:32px;object-fit:contain;display:none;">
-            <select id="baselineGrade" class="baseline-grade-select" style="flex:1;">
-              <option value="" data-i18n="select_grade_baseline">Sélectionner votre grade</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-group">
-          <label for="baselineRankPoints">Points de grade actuels</label>
-          <input type="text" id="baselineRankPoints" placeholder="Ex: 51,100">
-        </div>
-        <div class="form-group">
-          <label for="baselineNextRankPoints">Points du prochain grade</label>
-          <input type="text" id="baselineNextRankPoints" placeholder="Ex: 102,300">
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="modal-btn submit" id="baselineSaveBtn" data-i18n="save_and_start">Enregistrer et commencer</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Modal boîte de réception messages (FREE/PRO) -->
+  <!-- Modal boîte de réception messages -->
   <div id="messagesInboxModal" class="messages-modal">
     <div class="messages-modal-overlay"></div>
     <div class="messages-modal-content">
       <div class="messages-modal-header">
-        <h3>✉️ Messages</h3>
-        <button type="button" class="messages-modal-close" id="messagesInboxClose">&times;</button>
+        <h3 id="messagesInboxTitle">✉️ <span data-i18n="messages">Messages</span></h3>
+        <div class="messages-modal-actions">
+          <button type="button" class="messages-btn-refresh" id="messagesInboxRefresh" data-i18n-title="messages_refresh" title="Rafraîchir">🔄</button>
+          <button type="button" class="messages-modal-close" id="messagesInboxClose" data-i18n-aria-label="messages_close" aria-label="Fermer">&times;</button>
+        </div>
       </div>
       <div class="messages-modal-body">
         <div id="messagesInboxList" class="messages-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Mon Compte (tous les utilisateurs) -->
+  <div id="accountPanelModal" class="sa-modal account-panel-modal" style="display: none;">
+    <div class="sa-modal-overlay account-panel-overlay"></div>
+    <div class="sa-modal-content account-panel-content">
+      <div class="sa-modal-header">
+        <button type="button" id="accountDoBackBtn" class="account-back-btn" style="display: none;">← Retour</button>
+        <h3>👤 <span data-i18n="my_account">Mon Compte</span></h3>
+        <button type="button" class="sa-modal-close" id="accountPanelClose">&times;</button>
+      </div>
+      <div class="account-panel-tabs">
+        <button type="button" class="account-panel-tab active" data-tab="info"><span data-i18n="account_info">Informations du compte</span></button>
+        <button type="button" class="account-panel-tab" data-tab="do">Compte DarkOrbit</button>
+        <button type="button" class="account-panel-tab" data-tab="security"><span data-i18n="security">Sécurité</span></button>
+        <button type="button" class="account-panel-tab" data-tab="about"><span data-i18n="about_tab">À propos</span></button>
+      </div>
+      <div class="sa-modal-body account-panel-body">
+        <div id="accountTabInfo" class="account-tab-content">
+        <!-- 1. Informations du compte -->
+        <section class="account-section">
+          <h4 class="account-section-title" data-i18n="account_info">Informations du compte</h4>
+          <div class="account-profile-row">
+            <div class="account-avatar-wrap">
+              <img id="accountAvatarImg" src="" alt="" class="account-avatar" style="display:none;">
+              <div class="account-avatar-placeholder" aria-hidden="true">?</div>
+              <button type="button" id="accountAvatarChangeBtn" class="account-avatar-change" data-i18n="change_avatar">Changer</button>
+              <div id="accountAvatarError" class="account-avatar-error" style="display:none;" role="alert"></div>
+            </div>
+            <div class="account-profile-fields">
+              <div class="account-field">
+                <label data-i18n="username">Nom d'utilisateur</label>
+                <span id="accountUsername" class="account-value">—</span>
+              </div>
+              <div class="account-field">
+                <label data-i18n="email">Email</label>
+                <input type="email" id="accountEmailInput" class="account-input" placeholder="email@exemple.com">
+              </div>
+              <div class="account-field">
+                <label data-i18n="badge">Badge</label>
+                <span id="accountBadge" class="account-badge account-badge--free">FREE</span>
+              </div>
+              <div class="account-field">
+                <label data-i18n="account_joined">Date d'inscription</label>
+                <span id="accountJoinedAt" class="account-value">—</span>
+              </div>
+            </div>
+          </div>
+          <div class="account-form-actions">
+            <button type="button" id="accountSaveProfileBtn" class="sa-btn sa-btn--primary">✅ <span data-i18n="save">Sauvegarder</span></button>
+          </div>
+        </section>
+
+        <!-- 3. Statistiques actuelles (lecture seule) -->
+        <section class="account-section">
+          <h4 class="account-section-title" data-i18n="your_stats">Vos statistiques actuelles</h4>
+          <div class="account-stats-grid">
+            <div class="account-stat-item">
+              <span class="account-stat-label" data-i18n="points_xp">Points d'expérience</span>
+              <span id="accountStatXp" class="account-stat-value">0</span>
+            </div>
+            <div class="account-stat-item">
+              <span class="account-stat-label" data-i18n="points_honor">Points d'honneur</span>
+              <span id="accountStatHonor" class="account-stat-value">0</span>
+            </div>
+            <div class="account-stat-item">
+              <span class="account-stat-label" data-i18n="points_rank">Points de grade</span>
+              <span id="accountStatRankPoints" class="account-stat-value">0</span>
+            </div>
+          </div>
+          <div class="account-grade-row">
+            <span class="account-stat-label" data-i18n="current_grade">Grade actuel</span>
+            <div class="account-grade-block">
+              <img id="accountGradeImg" src="" alt="" class="account-grade-img">
+              <span id="accountGradeName" class="account-grade-name">—</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- 4. Sessions actives -->
+        <section class="account-section">
+          <h4 class="account-section-title" data-i18n="active_sessions">Sessions actives</h4>
+          <div id="accountSessionsList" class="account-sessions-list"></div>
+        </section>
+
+        <!-- 5. Historique des connexions -->
+        <section class="account-section">
+          <h4 class="account-section-title" data-i18n="login_history">Historique des connexions</h4>
+          <div id="accountLoginHistoryList" class="account-login-list"></div>
+        </section>
+
+        <!-- 6. Danger Zone -->
+        <section class="account-section account-section--danger">
+          <h4 class="account-section-title account-section-title--danger" data-i18n="danger_zone">Zone de danger</h4>
+          <p class="account-danger-desc" data-i18n="delete_account_desc">La suppression de votre compte est définitive. Toutes vos données seront perdues.</p>
+          <button type="button" id="accountDeleteAccountBtn" class="sa-btn sa-btn--danger">🗑️ <span data-i18n="delete_my_account">Supprimer mon compte</span></button>
+        </section>
+        </div>
+        <div id="accountTabSecurity" class="account-tab-content" style="display: none;">
+        <!-- 2. Sécurité -->
+        <section class="account-section">
+          <h4 class="account-section-title" data-i18n="security">Sécurité</h4>
+          <div class="account-security-block">
+            <h5 data-i18n="change_password">Changer le mot de passe</h5>
+            <div class="account-form-group">
+              <label data-i18n="current_password">Mot de passe actuel</label>
+              <input type="password" id="accountCurrentPassword" class="account-input" autocomplete="current-password">
+            </div>
+            <div class="account-form-group">
+              <label data-i18n="new_password">Nouveau mot de passe</label>
+              <input type="password" id="accountNewPassword" class="account-input" autocomplete="new-password">
+            </div>
+            <div class="account-form-group">
+              <label data-i18n="confirm_password">Confirmer le mot de passe</label>
+              <input type="password" id="accountConfirmPassword" class="account-input" autocomplete="new-password">
+            </div>
+            <button type="button" id="accountChangePasswordBtn" class="sa-btn">🔒 <span data-i18n="change_password">Changer le mot de passe</span></button>
+          </div>
+          <div class="account-security-block">
+            <h5 data-i18n="change_email">Changer l'adresse email</h5>
+            <p class="account-hint" data-i18n="change_email_hint">Un email de confirmation sera envoyé à la nouvelle adresse.</p>
+            <div class="account-form-group">
+              <label data-i18n="new_email">Nouvelle adresse email</label>
+              <input type="email" id="accountNewEmail" class="account-input" placeholder="nouveau@email.com">
+            </div>
+            <button type="button" id="accountChangeEmailBtn" class="sa-btn">✉️ <span data-i18n="change_email">Changer l'adresse email</span></button>
+          </div>
+        </section>
+        </div>
+        <div id="accountTabAbout" class="account-tab-content" style="display: none;">
+        <!-- 3. À propos -->
+        <section class="account-section">
+          <h4 class="account-section-title" data-i18n="about_application">Application</h4>
+          <div class="account-about-app-header">
+            <div class="account-about-app-name">DO Stats Tracker</div>
+            <div class="account-about-version-row">
+              <span class="account-stat-label" data-i18n="app_version">Version</span>
+              <span id="accountAppVersion" class="account-stat-value">—</span>
+            </div>
+          </div>
+          <div class="account-about-row">
+            <button type="button" id="accountCheckUpdatesBtn" class="sa-btn sa-btn--primary">🔄 <span data-i18n="check_updates">Vérifier les mises à jour</span></button>
+            <span id="accountUpdateStatus" class="account-about-status"></span>
+          </div>
+          <div class="account-about-row account-about-row--compact">
+            <button type="button" id="accountDownloadUpdateBtn" class="sa-btn sa-btn--alt" style="display:none;">⬇️ <span data-i18n="download_update">Télécharger</span></button>
+            <button type="button" id="accountChangelogLink" class="sa-btn sa-btn--alt">📋 <span data-i18n="open_changelog">Voir le changelog</span></button>
+          </div>
+        </section>
+
+        <section class="account-section">
+          <h4 class="account-section-title" data-i18n="about_status">Statut</h4>
+          <div class="account-field">
+            <label data-i18n="supabase_status">Connexion Supabase</label>
+            <span id="accountSupabaseStatus" class="account-status-chip account-status-chip--unknown">—</span>
+          </div>
+          <div class="account-field">
+            <label data-i18n="subscription_status_label">Abonnement</label>
+            <span id="accountSubscriptionStatus" class="account-value">—</span>
+          </div>
+          <div class="account-field">
+            <label data-i18n="subscription_expires_at">Expiration</label>
+            <span id="accountSubscriptionExpiry" class="account-value">—</span>
+          </div>
+        </section>
+
+        <section class="account-section">
+          <h4 class="account-section-title" data-i18n="about_links">Liens</h4>
+          <div class="account-about-links">
+            <button type="button" id="accountWebsiteLink" class="sa-btn sa-btn--alt">🌐 <span data-i18n="about_website">Site vitrine</span></button>
+            <button type="button" id="accountSupportLink" class="sa-btn sa-btn--alt">💬 <span data-i18n="about_support">Support</span></button>
+          </div>
+        </section>
+
+        <section class="account-section">
+          <h4 class="account-section-title" data-i18n="about_legal">Légal</h4>
+          <p class="account-about-legal" data-i18n="legal_disclaimer">DO Stats Tracker n'est pas affilié à DarkOrbit ni à Bigpoint. DarkOrbit est une marque de Bigpoint GmbH.</p>
+          <p class="account-about-legal" data-i18n="legal_created_by">Créé par Dragonal59</p>
+        </section>
+        </div>
+        <div id="accountTabDo" class="account-tab-content" style="display: none;">
+          <section class="account-section" id="accountDoListSection">
+            <h4 class="account-section-title">Mes comptes DarkOrbit</h4>
+            <p class="account-hint">Utilisés pour « Récupérer mes stats ». Stockés localement (chiffré).</p>
+            <div id="accountDoCardsList" class="account-do-cards"></div>
+            <div id="accountDoAddWrap">
+              <button type="button" id="accountDoAddBtn" class="sa-btn sa-btn--primary">➕ Ajouter un compte</button>
+              <p id="accountDoAddLimitMsg" class="account-hint" style="display: none; color: var(--warning, #f59e0b);">Passez en PRO pour ajouter plusieurs comptes</p>
+            </div>
+          </section>
+          <section class="account-section" id="accountDoAddSection" style="display: none;">
+            <h4 class="account-section-title">Ajouter un compte</h4>
+            <div class="account-form-group">
+              <label for="accountDoAddPseudo">Pseudo</label>
+              <input type="text" id="accountDoAddPseudo" class="account-input" placeholder="Pseudo">
+            </div>
+            <div class="account-form-group account-do-pwd-wrap">
+              <label for="accountDoAddPassword">Mot de passe</label>
+              <div class="account-input-password-wrap">
+                <input type="password" id="accountDoAddPassword" class="account-input" placeholder="Mot de passe">
+                <button type="button" id="accountDoAddPasswordToggle" class="account-password-toggle" title="Afficher / masquer" aria-label="Afficher le mot de passe">👁</button>
+              </div>
+            </div>
+            <div class="account-form-group">
+              <label for="accountDoAddServer">Serveur</label>
+              <select id="accountDoAddServer" class="account-input"></select>
+            </div>
+            <div class="account-form-group auth-toggle-wrap">
+              <div id="accountDoAddManualToggle" class="auth-toggle" role="switch" aria-checked="false" tabindex="0"></div>
+              <span class="auth-toggle-label">Connexion manuelle</span>
+            </div>
+            <div class="account-form-actions">
+              <button type="button" id="accountDoAddCancel" class="sa-btn sa-btn--alt">Annuler</button>
+              <button type="button" id="accountDoAddSubmit" class="sa-btn sa-btn--primary">Scanner et ajouter</button>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal confirmation suppression compte -->
+  <div id="accountDeleteConfirmModal" class="sa-modal" style="display: none;">
+    <div class="sa-modal-overlay"></div>
+    <div class="sa-modal-content" style="max-width: 440px;">
+      <div class="sa-modal-header">
+        <h3 data-i18n="delete_account_confirm_title">Supprimer mon compte</h3>
+        <button type="button" class="sa-modal-close" id="accountDeleteConfirmCancel">&times;</button>
+      </div>
+      <div class="sa-modal-body">
+        <p data-i18n="delete_account_confirm_text">Pour confirmer, tapez <strong>SUPPRIMER</strong> ci-dessous.</p>
+        <input type="text" id="accountDeleteConfirmInput" class="account-input" placeholder="SUPPRIMER" autocomplete="off">
+      </div>
+      <div class="sa-modal-footer">
+        <button type="button" class="sa-btn" id="accountDeleteConfirmCancelBtn" data-i18n="cancel">Annuler</button>
+        <button type="button" class="sa-btn sa-btn--danger" id="accountDeleteConfirmOk" data-i18n="delete_my_account">Supprimer mon compte</button>
       </div>
     </div>
   </div>
@@ -1417,7 +1815,7 @@
         </div>
         <div class="sa-form-group">
           <label data-i18n="sa_darkorbit_email">Email DarkOrbit</label>
-          <input type="email" id="darkorbitAccountEmail" placeholder="email@exemple.com">
+          <input type="email" id="darkorbitAccountEmail" placeholder="Pseudo">
         </div>
         <div class="sa-form-group">
           <label data-i18n="sa_darkorbit_password">Mot de passe DarkOrbit</label>
@@ -1492,31 +1890,15 @@
     <div class="events-sidebar-content">
       <div class="events-sidebar-section">
         <h3 class="sidebar-section-title">⭐ <span data-i18n="events_today">Événements du jour</span></h3>
-        <div id="sidebarScrapedEvents">
+        <div id="sidebarScrapedEvents" class="events-carousel">
           <div class="no-event" data-i18n="no_event_in_progress">Aucun événement en cours</div>
         </div>
       </div>
       <div class="events-sidebar-section">
-        <h3 class="sidebar-section-title">🔴 <span data-i18n="events_current">En cours</span></h3>
-        <div id="sidebarEventsCarouselCurrent" class="events-carousel">
-          <div class="no-event" data-i18n="no_event_current">Aucun événement en cours</div>
+        <h3 class="sidebar-section-title">👥 <span data-i18n="sidebar_followed_players">Suivi joueurs</span></h3>
+        <div id="sidebarFollowedPlayers" class="sidebar-followed-players">
+          <div class="no-event" data-i18n="no_followed_players">Aucun joueur suivi</div>
         </div>
-        <button class="sidebar-btn view-all" id="viewAllEventsBtn">
-          <span data-i18n="view_all">Voir tous (0)</span>
-        </button>
-      </div>
-
-      <div class="events-sidebar-section">
-        <h3 class="sidebar-section-title">📆 <span data-i18n="events_upcoming">À venir</span></h3>
-        <div id="sidebarEventsCarouselUpcoming" class="events-carousel">
-          <div class="no-event" data-i18n="no_event_upcoming">Aucun événement à venir</div>
-        </div>
-      </div>
-
-      <div class="events-sidebar-actions">
-        <button class="sidebar-btn add-event" id="addEventBtn">
-          ➕ <span data-i18n="add_short">Ajouter</span>
-        </button>
       </div>
     </div>
   </aside>
@@ -1529,78 +1911,37 @@
 
 <!-- MODAL AJOUT ÉVÉNEMENT -->
 <div class="modal" id="addEventModal">
-  <div class="modal-content">
+  <div class="modal-content modal-event-form">
     <div class="modal-header">
-      <h2>➕ Ajouter un événement</h2>
-      <button class="modal-close" id="closeModalBtn">&times;</button>
+      <h2 id="addEventModalTitle">➕ Ajouter un événement</h2>
+      <button class="modal-close" id="closeModalBtn" aria-label="Fermer">&times;</button>
     </div>
 
     <div class="modal-body">
       <div class="form-group">
-        <label for="eventNameInput">
-          <span class="required">*</span> Nom de l'événement
-        </label>
-        <input 
-          type="text" 
-          id="eventNameInput" 
-          placeholder="Ex: Brèche d'Agatus"
-          maxlength="100"
-        >
+        <label for="eventNameInput"><span class="required">*</span> Nom de l'événement</label>
+        <input type="text" id="eventNameInput" placeholder="Ex: Brèche d'Agatus" maxlength="100" autocomplete="off">
       </div>
 
-      <div class="form-group">
-        <label for="eventDescriptionInput">Description (optionnelle)</label>
-        <textarea 
-          id="eventDescriptionInput" 
-          placeholder="Ajoutez des détails sur l'événement..."
-          rows="3"
-          maxlength="500"
-        ></textarea>
-      </div>
-
-      <div class="form-group">
-        <label for="eventMissionInput">
-          🎯 Mission - Quoi faire ? (optionnel)
-        </label>
-        <textarea 
-          id="eventMissionInput" 
-          placeholder="Ex: Farmer 10M d'honneur en zone 4-5, focus Sibelons pour maximiser les points..."
-          rows="4"
-          maxlength="500"
-        ></textarea>
-      </div>
-
-      <div class="form-group">
-        <label>
-          ⭐ Priorité / Intérêt
-        </label>
-        <div class="priority-selector">
-          <label class="priority-option">
-            <input type="radio" name="eventPriority" value="1">
-            <div class="priority-stars-display">⭐☆☆☆☆</div>
-            <span class="priority-label-text">Peut attendre</span>
-          </label>
-          <label class="priority-option">
-            <input type="radio" name="eventPriority" value="2">
-            <div class="priority-stars-display">⭐⭐☆☆☆</div>
-            <span class="priority-label-text">Optionnel</span>
-          </label>
-          <label class="priority-option">
-            <input type="radio" name="eventPriority" value="3" checked>
-            <div class="priority-stars-display">⭐⭐⭐☆☆</div>
-            <span class="priority-label-text">Recommandé</span>
-          </label>
-          <label class="priority-option">
-            <input type="radio" name="eventPriority" value="4">
-            <div class="priority-stars-display">⭐⭐⭐⭐☆</div>
-            <span class="priority-label-text">Très recommandé</span>
-          </label>
-          <label class="priority-option">
-            <input type="radio" name="eventPriority" value="5">
-            <div class="priority-stars-display">⭐⭐⭐⭐⭐</div>
-            <span class="priority-label-text">À faire !</span>
-          </label>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="eventStartDateInput"><span class="required">*</span> Date de début</label>
+          <input type="datetime-local" id="eventStartDateInput">
         </div>
+        <div class="form-group">
+          <label for="eventEndDateInput"><span class="required">*</span> Date de fin</label>
+          <input type="datetime-local" id="eventEndDateInput">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="eventDescriptionInput">Description <span class="form-optional">(optionnelle)</span></label>
+        <textarea id="eventDescriptionInput" placeholder="Ajoutez des détails sur l'événement..." rows="3" maxlength="500"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="eventMissionInput">🎯 Mission <span class="form-optional">(optionnelle)</span></label>
+        <textarea id="eventMissionInput" placeholder="Ex: Farmer 10M d'honneur en zone 4-5..." rows="3" maxlength="500"></textarea>
       </div>
 
       <div class="form-group">
@@ -1639,50 +1980,15 @@
       </div>
 
       <div class="form-group">
-        <label for="eventImageInput">
-          Image de l'événement (optionnelle)
-        </label>
-        <input 
-          type="file" 
-          id="eventImageInput" 
-          accept="image/*"
-          class="file-input"
-        >
-        <div class="file-input-hint">
-          📸 Formats acceptés: JPG, PNG, GIF (max 2MB)
-        </div>
+        <label for="eventImageInput">Image <span class="form-optional">(optionnelle)</span></label>
+        <input type="file" id="eventImageInput" accept="image/*" class="file-input">
+        <div class="file-input-hint">📸 JPG, PNG, GIF — max 2 Mo</div>
         <div id="imagePreview" class="image-preview"></div>
-      </div>
-
-      <div class="form-row">
-        <div class="form-group">
-          <label for="eventStartDateInput">
-            <span class="required">*</span> Date de début
-          </label>
-          <input 
-            type="datetime-local" 
-            id="eventStartDateInput"
-          >
-        </div>
-
-        <div class="form-group">
-          <label for="eventEndDateInput">
-            <span class="required">*</span> Date de fin
-          </label>
-          <input 
-            type="datetime-local" 
-            id="eventEndDateInput"
-          >
-        </div>
       </div>
 
       <div class="form-group">
         <label class="checkbox-label">
-          <input 
-            type="checkbox" 
-            id="eventCompletedInput"
-            class="completed-checkbox"
-          >
+          <input type="checkbox" id="eventCompletedInput" class="completed-checkbox">
           <span class="checkbox-text">✅ Événement complété</span>
         </label>
       </div>
@@ -1690,12 +1996,8 @@
     </div>
 
     <div class="modal-footer">
-      <button class="modal-btn cancel" id="cancelEventBtn">
-        Annuler
-      </button>
-      <button class="modal-btn submit" id="submitEventBtn">
-        ✅ Ajouter l'événement
-      </button>
+      <button class="modal-btn cancel" id="cancelEventBtn">Annuler</button>
+      <button class="modal-btn submit" id="submitEventBtn">✅ Ajouter l'événement</button>
     </div>
   </div>
 </div>
@@ -1811,6 +2113,110 @@
   </div>
 </div>
 
+<!-- MODAL DOCUMENTS LÉGAUX -->
+<div id="modalLegal" class="modal-legal hidden">
+  <div class="modal-legal-overlay"></div>
+  <div class="modal-legal-container">
+    <div class="modal-legal-header">
+      <h2>ℹ️ <span data-i18n="legal_modal_title">Informations légales</span></h2>
+      <button id="closeLegal" type="button" class="modal-legal-close" aria-label="Fermer">✕</button>
+    </div>
+    <div class="modal-legal-tabs">
+      <button type="button" class="legal-tab active" data-tab="cgu" data-i18n="legal_tab_cgu">CGU</button>
+      <button type="button" class="legal-tab" data-tab="rgpd" data-i18n="legal_tab_rgpd">Politique de confidentialité (RGPD)</button>
+      <button type="button" class="legal-tab" data-tab="mentions" data-i18n="legal_tab_mentions">Mentions légales</button>
+      <button type="button" class="legal-tab" data-tab="remboursement" data-i18n="legal_tab_refund">Politique de remboursement</button>
+    </div>
+    <div class="modal-legal-content">
+      <div class="legal-panel active" id="tab-cgu">
+        <h1>Conditions générales d'utilisation (CGU)</h1>
+        <p><strong>Dernière mise à jour : 2025</strong></p>
+        <h2>Article 1 — Présentation de l'application</h2>
+        <p>DarkOrbit Stats Tracker Pro (ci-après "l'Application") est une application desktop développée et commercialisée par [Ton Nom / Ton Auto-entreprise] (ci-après "le Développeur").</p>
+        <p>L'Application est un outil tiers indépendant destiné aux joueurs du jeu en ligne DarkOrbit. Elle permet le suivi de statistiques de progression, la comparaison de sessions, l'affichage d'événements en cours, et les classements serveur.</p>
+        <p><strong>L'Application n'est en aucun cas affiliée, approuvée, sponsorisée ou endorsée par Bigpoint GmbH, l'éditeur de DarkOrbit.</strong> DarkOrbit est une marque déposée de Bigpoint GmbH.</p>
+        <h2>Article 2 — Acceptation des CGU</h2>
+        <p>L'installation et l'utilisation de l'Application impliquent l'acceptation pleine et entière des présentes CGU. Si vous n'acceptez pas ces conditions, vous devez désinstaller l'Application et ne pas l'utiliser.</p>
+        <h2>Article 3 — Accès et compte utilisateur</h2>
+        <p><strong>3.1 Création de compte</strong> — L'utilisation nécessite la création d'un compte via une adresse email valide. L'utilisateur est seul responsable de la confidentialité de ses identifiants.</p>
+        <p><strong>3.2 Niveaux d'accès</strong> — FREE : accès limité (stats, progression, historique limité à 1 session, classement). PRO : accès complet (événements, notifications, boosters, liens personnalisés, historique illimité, synchronisation multi-appareils).</p>
+        <p><strong>3.3 Suspension</strong> — Le Développeur se réserve le droit de suspendre ou supprimer tout compte en cas d'abus, fraude ou violation des CGU, sans préavis ni remboursement.</p>
+        <h2>Article 4 — Abonnement et paiement</h2>
+        <p><strong>4.1 Prix</strong> — <span data-i18n="price_pro_month">7.99€/mois</span> (TVA incluse selon pays de résidence).</p>
+        <p><strong>4.2 Facturation</strong> — Mensuelle, à date anniversaire. Paiement via PayPal.</p>
+        <p><strong>4.3 Résiliation</strong> — À tout moment. Prise d'effet en fin de période en cours. Aucun remboursement partiel.</p>
+        <p><strong>4.4 Politique de remboursement</strong> — Aucun remboursement sauf défaillance technique majeure imputable au Développeur et non résolue sous 7 jours ouvrés.</p>
+        <p><strong>4.5 Modification des tarifs</strong> — Communiquée au moins 30 jours avant entrée en vigueur.</p>
+        <h2>Article 5 — Licence d'utilisation</h2>
+        <p>Licence personnelle, non exclusive, non transférable et révocable. Interdit : copier, modifier, décompiler, revendre, distribuer, partager identifiants, contourner les mesures de protection.</p>
+        <h2>Article 6 — Données et scraping</h2>
+        <p>L'Application collecte des données publiques via scraping. L'utilisateur reconnaît que cela peut être contraire aux CGU de DarkOrbit. Le Développeur ne stocke pas les mots de passe DarkOrbit.</p>
+        <h2>Article 7 — Disponibilité et maintenance</h2>
+        <p>Le Développeur s'efforce d'assurer la disponibilité mais ne peut garantir une disponibilité ininterrompue.</p>
+        <h2>Article 8 — Limitation de responsabilité</h2>
+        <p>L'Application est fournie "en l'état". Pas de garantie d'absence d'erreurs. Le Développeur ne pourra être tenu responsable des pertes de données, dommages indirects ou modifications par Bigpoint GmbH.</p>
+        <h2>Article 9 — Propriété intellectuelle</h2>
+        <p>L'Application, son code, interface et documentation sont la propriété exclusive du Développeur. © 2025 [Ton Nom]. Tous droits réservés.</p>
+        <h2>Article 10 — Droit applicable</h2>
+        <p>Droit français. Tribunaux français compétents en cas de litige.</p>
+      </div>
+      <div class="legal-panel hidden" id="tab-rgpd">
+        <h1>Politique de confidentialité (RGPD)</h1>
+        <p><strong>Dernière mise à jour : 2025</strong></p>
+        <h2>Article 1 — Responsable du traitement</h2>
+        <p>[Ton Nom / Ton Auto-entreprise]<br>Email : [ton-email@domaine.com]</p>
+        <h2>Article 2 — Données collectées</h2>
+        <table>
+          <thead><tr><th>Donnée</th><th>Finalité</th><th>Base légale</th></tr></thead>
+          <tbody>
+            <tr><td>Adresse email</td><td>Création de compte, authentification</td><td>Exécution du contrat</td></tr>
+            <tr><td>Pseudo DarkOrbit</td><td>Identification in-game</td><td>Consentement</td></tr>
+            <tr><td>Serveur de jeu</td><td>Classements et stats</td><td>Consentement</td></tr>
+            <tr><td>Statistiques de jeu</td><td>Fonctionnalités principales</td><td>Exécution du contrat</td></tr>
+            <tr><td>Sessions de jeu</td><td>Historique et progression</td><td>Exécution du contrat</td></tr>
+            <tr><td>Données de paiement</td><td>Traitement abonnement</td><td>Exécution du contrat</td></tr>
+            <tr><td>Logs de connexion</td><td>Sécurité</td><td>Intérêt légitime</td></tr>
+          </tbody>
+        </table>
+        <h2>Article 3 — Hébergement</h2>
+        <p>Données hébergées par <strong>Supabase Inc.</strong> (PostgreSQL), conforme RGPD. <a href="https://supabase.com/privacy" target="_blank" rel="noopener">supabase.com/privacy</a></p>
+        <h2>Article 4 — Durée de conservation</h2>
+        <p>Compte : durée abonnement + 12 mois après résiliation. Sessions : selon plan (FREE : 1, PRO : illimité). Logs : 90 jours.</p>
+        <h2>Article 5 — Partage des données</h2>
+        <p>Jamais vendues. Partagées uniquement avec : Supabase (hébergement), PayPal (paiements), autorités si requis par la loi.</p>
+        <h2>Article 6 — Vos droits (RGPD)</h2>
+        <p>Droit d'accès, rectification, effacement, portabilité, opposition. Contact : [ton-email@domaine.com]. Réclamation possible auprès de la CNIL (www.cnil.fr).</p>
+        <h2>Article 7 — Cookies et stockage local</h2>
+        <p>localStorage pour préférences (langue, thème). Données restent sur l'appareil.</p>
+        <h2>Article 8 — Sécurité</h2>
+        <p>Chiffrement identifiants (Electron safeStorage), auth Supabase, obfuscation, RLS Supabase.</p>
+      </div>
+      <div class="legal-panel hidden" id="tab-mentions">
+        <h1>Mentions légales</h1>
+        <p><strong>Application</strong> : DarkOrbit Stats Tracker Pro</p>
+        <p><strong>Développeur</strong> : [Ton Nom]</p>
+        <p><strong>Adresse</strong> : [Ta ville, Ton pays]</p>
+        <p><strong>Email</strong> : [ton-email@domaine.com]</p>
+        <p><strong>Hébergement des données</strong> : Supabase Inc., 970 Toa Payoh North, Singapour</p>
+        <p><strong>Avertissement</strong> : DarkOrbit Stats Tracker Pro est une application indépendante non affiliée à Bigpoint GmbH. DarkOrbit® est une marque déposée de Bigpoint GmbH.</p>
+        <p>© 2025 [Ton Nom]. Tous droits réservés.</p>
+      </div>
+      <div class="legal-panel hidden" id="tab-remboursement">
+        <h1>Politique de remboursement</h1>
+        <p>En raison de la nature numérique de l'Application et de l'accès immédiat aux fonctionnalités PRO :</p>
+        <ul>
+          <li><strong>Aucun remboursement</strong> pour une période déjà facturée</li>
+          <li><strong>Exception</strong> : dysfonctionnement majeur non résolu sous 7 jours ouvrés → remboursement du mois en cours</li>
+          <li><strong>Résiliation</strong> : effective en fin de période en cours, pas de prorata</li>
+        </ul>
+        <p>Pour toute demande : [ton-email@domaine.com]</p>
+      </div>
+    </div>
+    <div class="modal-legal-footer">
+      © 2025 DarkOrbit Stats Tracker Pro. Tous droits réservés.
+    </div>
+  </div>
+</div>
 
 <!-- MODAL GESTION ITEMS BATTLE PASS -->
 <!-- ==========================================
@@ -1819,6 +2225,7 @@
      ========================================== -->
 
 <!-- NIVEAU 1 : Backend — Configuration (keys.js déjà chargé en tête) -->
+<script src="data/grades-mapping-inline.js"></script>
 <script src="backend/server-mappings.js"></script>
 <script src="backend/config.js"></script>
 <script src="backend/utils.js"></script>
@@ -1830,7 +2237,6 @@
 <script src="backend/sessions.js"></script>
 <script src="backend/reference-manager.js"></script>
 <script src="backend/reference-session.js"></script>
-<script src="backend/baseline-setup.js"></script>
 <script src="backend/history.js"></script>
 <script src="backend/comparaison.js"></script>
 <script src="backend/progression.js"></script>
@@ -1841,13 +2247,18 @@
 <script src="backend/ranking.js"></script>
 <script src="backend/links.js"></script>
 <script src="backend/settings.js"></script>
+<script src="backend/update-ui.js"></script>
+<script src="backend/stats-collect-auto.js"></script>
+<script src="backend/bug-report.js"></script>
 <script src="backend/license-activation.js"></script>
 <script src="backend/paypal-buttons.js"></script>
+<script src="backend/coupons.js"></script>
+<script src="backend/account-panel.js"></script>
 <script src="backend/boosters.js"></script>
 <script src="backend/reset.js"></script>
 <script src="backend/super-admin.js"></script>
-<script src="backend/darkorbit-accounts-ui.js"></script>
 <script src="backend/messages-api.js"></script>
+<script src="backend/user-preferences-api.js"></script>
 <script src="backend/guards.js"></script>
 
 <!-- NIVEAU 3 : Frontend — UI, navigation, affichage -->
@@ -1863,9 +2274,11 @@
 <script src="frontend/ranking-ui.js"></script>
 <script src="frontend/auto-theme.js"></script>
 <script src="frontend/messages.js"></script>
+<script src="frontend/legal.js"></script>
 
 <!-- NIVEAU 4 : Frontend — Point d'entrée principal -->
 <script src="frontend/script.js"></script>
 
+</div><!-- #app-content -->
 </body>
 </html>

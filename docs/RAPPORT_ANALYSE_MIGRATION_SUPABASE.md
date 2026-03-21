@@ -1,5 +1,9 @@
 # 📊 Rapport d'analyse — Migration Supabase Auth
 
+> ℹ **Statut : rapport d’analyse historique.**  
+> Ce document décrit l’état de la migration Supabase Auth en février 2025. Certaines recommandations (par ex. sur `admin_logs`, doublon `unified-storage.js`) ont depuis été appliquées ou remplacées par des rapports plus récents (`RAPPORT_ETAT_MIGRATION_SUPABASE.md`, `RAPPORT_PHASE3_CORRECTIONS.md`).  
+> Utiliser ce fichier comme photo de l’état de la migration à cette date, pas comme source de vérité actuelle.
+
 **Application :** DarkOrbit Stats Tracker Pro  
 **Date :** Février 2025  
 **Type :** Analyse exhaustive — Aucune modification de code effectuée

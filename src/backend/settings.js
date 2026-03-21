@@ -4,7 +4,6 @@
 
 var _sk = (typeof window !== 'undefined' && window.APP_KEYS && window.APP_KEYS.STORAGE_KEYS) ? window.APP_KEYS.STORAGE_KEYS : {};
 const SETTINGS_STORAGE_KEY = _sk.SETTINGS || 'darkOrbitSettings';
-const CUSTOM_ICONS_STORAGE_KEY = _sk.CUSTOM_ICONS || 'darkOrbitCustomIcons';
 
 // Paramètres par défaut
 const DEFAULT_SETTINGS = {
@@ -41,7 +40,7 @@ function saveSetting(key, value) {
   }
   // Sync immédiate vers Supabase (utilisateur connecté)
   if (typeof DataSync !== 'undefined' && DataSync.syncSettingsOnly && DataSync.isReady && DataSync.isReady()) {
-    DataSync.syncSettingsOnly().catch(function(e) { console.warn('[Settings] Sync reportée:', e?.message || e); });
+    DataSync.syncSettingsOnly().catch(function(e) { Logger.warn('[Settings] Sync reportée:', e?.message || e); });
   }
   return result;
 }
@@ -59,16 +58,6 @@ function clearSettingsDirtyFlag() {
 function getSetting(key) {
   const settings = getSettings();
   return settings[key] !== undefined ? settings[key] : DEFAULT_SETTINGS[key];
-}
-
-function clearCustomIconsData() {
-  if (typeof StorageCache !== 'undefined' && typeof StorageCache.remove === 'function') {
-    StorageCache.remove(CUSTOM_ICONS_STORAGE_KEY);
-    return;
-  }
-  if (typeof SafeStorage !== 'undefined' && typeof SafeStorage.remove === 'function') {
-    SafeStorage.remove(CUSTOM_ICONS_STORAGE_KEY);
-  }
 }
 
 // ==========================================
@@ -105,24 +94,6 @@ function initSettingsTab() {
       checkbox.checked = settings[key] !== undefined ? settings[key] : DEFAULT_SETTINGS[key];
     }
   });
-  
-  // Mettre à jour les infos de données
-  updateDataInfo();
-}
-
-function updateDataInfo() {
-  const dataInfo = document.getElementById('settingsDataInfo');
-  if (!dataInfo) return;
-  
-  const sessions = typeof getSessions === 'function' ? getSessions() : [];
-  
-  const dataSize = JSON.stringify(localStorage).length;
-  const dataSizeKB = (dataSize / 1024).toFixed(1);
-  
-  dataInfo.innerHTML = `
-    <p>📊 <strong>${sessions.length}</strong> sessions sauvegardées</p>
-    <p>💾 Espace utilisé : <strong>${dataSizeKB} KB</strong></p>
-  `;
 }
 
 // ==========================================
@@ -149,7 +120,7 @@ function requestNotificationPermission() {
       showToast('🔔 Notifications Windows activées', 'success');
       new Notification('DarkOrbit Stats Tracker', {
         body: 'Les notifications sont maintenant activées !',
-        icon: 'img/basic_space_pilot.png'
+        icon: 'img/ranks/basic_space_pilot.png'
       });
     } else {
       saveSetting('notificationsEnabled', false);
@@ -164,10 +135,10 @@ function sendNotification(title, body) {
   if (!getSetting('notificationsEnabled')) return;
   if (!('Notification' in window)) return;
   if (Notification.permission !== 'granted') return;
-  
+
   new Notification(title, {
     body: body,
-    icon: 'img/basic_space_pilot.png'
+    icon: 'img/ranks/basic_space_pilot.png'
   });
 }
 
@@ -176,9 +147,6 @@ function sendNotification(title, body) {
 // ==========================================
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Nettoyage données des icônes personnalisées (feature retirée)
-  clearCustomIconsData();
-  
   // Boutons de thème
   document.querySelectorAll('.settings-theme-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -254,84 +222,62 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   
-  // Bouton export
-  const exportBtn = document.getElementById('settingsExportBtn');
-  if (exportBtn) {
-    exportBtn.addEventListener('click', () => {
-      if (typeof exportData === 'function') {
-        exportData();
-      }
-    });
-  }
-  
-  // Bouton import
-  const importBtn = document.getElementById('settingsImportBtn');
-  if (importBtn) {
-    importBtn.addEventListener('click', () => {
-      if (typeof importData === 'function') {
-        importData();
-      }
-    });
-  }
+  // Boutons export / import / reset baseline / vider cache : gérés ailleurs (header, raccourcis, modules dédiés)
 
-  // Bouton réinitialiser seuil de départ
-  const resetBaselineBtn = document.getElementById('resetBaselineBtn');
-  if (resetBaselineBtn) {
-    resetBaselineBtn.addEventListener('click', () => {
-      if (typeof resetBaseline === 'function') resetBaseline();
-    });
-  }
-
-  // Bouton vider cache : suppression complète des données locales + sync Supabase, puis popup stats obligatoire
-  const clearCacheBtn = document.getElementById('settingsClearCacheBtn');
-  if (clearCacheBtn) {
-    clearCacheBtn.addEventListener('click', async () => {
-      var ok = false;
-      if (typeof ModernConfirm !== 'undefined' && ModernConfirm.show) {
-        ok = await ModernConfirm.show({ title: 'Vider le cache', message: 'Cela supprimera TOUTES les données locales (sessions, stats, paramètres). Si vous êtes connecté, les sessions Supabase seront aussi supprimées. Un formulaire vous demandera de ressaisir vos stats.', confirmText: 'Vider le cache', cancelText: 'Annuler', type: 'warning' });
-      } else {
-        ok = confirm('⚠️ Vider le cache ?\n\nCela supprimera TOUTES les données locales (sessions, stats, paramètres). Si vous êtes connecté, les sessions Supabase seront aussi supprimées. Un formulaire vous demandera de ressaisir vos stats.');
-      }
-      if (!ok) return;
-      try {
-        if (typeof AuthManager !== 'undefined' && typeof AuthManager.getCurrentUser === 'function' && typeof getSupabaseClient === 'function') {
-          const user = await AuthManager.getCurrentUser();
-          if (user && user.id) {
-            const supabase = getSupabaseClient();
-            await supabase.from('user_sessions').delete().eq('user_id', user.id);
-          }
-        }
-        if (typeof UnifiedStorage !== 'undefined' && typeof UnifiedStorage.clearAllAppDataExceptAuth === 'function') {
-          UnifiedStorage.clearAllAppDataExceptAuth();
-        } else {
-          if (typeof UnifiedStorage !== 'undefined' && typeof UnifiedStorage.clearCacheExceptRegisteredKeys === 'function') {
-            UnifiedStorage.clearCacheExceptRegisteredKeys();
-          }
-          var sk = (typeof window !== 'undefined' && window.APP_KEYS && window.APP_KEYS.STORAGE_KEYS) ? window.APP_KEYS.STORAGE_KEYS : {};
-          if (sk.SESSIONS) SafeStorage.remove(sk.SESSIONS);
-          if (sk.CURRENT_STATS) SafeStorage.remove(sk.CURRENT_STATS);
-          if (sk.THEME) SafeStorage.remove(sk.THEME);
-          if (sk.VIEW_MODE) SafeStorage.remove(sk.VIEW_MODE);
-        }
-        updateDataInfo();
-        if (typeof setAppAccessFromSessions === 'function') setAppAccessFromSessions(0);
-        if (typeof initBaselineSetup === 'function') initBaselineSetup(true);
-        showToast('🗑️ Cache vidé. Saisissez vos stats pour continuer.', 'warning');
-      } catch (e) {
-        console.error('Vider le cache:', e);
-        showToast('❌ Erreur lors du vidage du cache', 'error');
-      }
-    });
-  }
-  
   // Initialiser l'onglet paramètres quand on clique dessus
   const settingsTab = document.querySelector('[data-tab="settings"]');
   if (settingsTab) {
     settingsTab.addEventListener('click', () => {
       setTimeout(initSettingsTab, 50);
+      setTimeout(initChangelogSection, 100);
     });
   }
+  setTimeout(initChangelogSection, 500);
+
 });
+
+// ==========================================
+// CHANGELOG (Paramètres)
+// ==========================================
+
+var CHANGELOG_FETCH_URL = 'https://raw.githubusercontent.com/dragonal59/DarkOrbit-Stats-Tracker-Download/master/changelog.json';
+
+function initChangelogSection() {
+  var container = document.getElementById('settingsChangelogList');
+  if (!container) return;
+  container.innerHTML = '<p class="settings-description">Chargement…</p>';
+  fetch(CHANGELOG_FETCH_URL)
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var versions = (data && data.versions) ? data.versions : [];
+      if (versions.length === 0) {
+        container.innerHTML = '<p class="settings-description">Aucune version.</p>';
+        return;
+      }
+      container.innerHTML = '';
+      versions.forEach(function (entry) {
+        var v = entry.version || '';
+        var date = entry.date || '';
+        var type = (entry.type === 'critical') ? 'CRITIQUE' : 'STANDARD';
+        var row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'settings-changelog-item';
+        row.innerHTML =
+          '<span class="settings-changelog-version">v' + (v) + '</span>' +
+          '<span class="settings-changelog-date">' + (date) + '</span>' +
+          '<span class="settings-changelog-badge settings-changelog-badge--' + (entry.type === 'critical' ? 'critical' : 'standard') + '">' + type + '</span>';
+        row.addEventListener('click', function () {
+          if (typeof window.showChangelogPopup === 'function') {
+            window.showChangelogPopup('Version ' + v, entry, function () {});
+          }
+        });
+        container.appendChild(row);
+      });
+    })
+    .catch(function () {
+      container.innerHTML = '<p class="settings-description">Impossible de charger le changelog.</p>';
+    });
+}
 
 // ==========================================
 // OVERRIDE DES FONCTIONS SONS/CONFETTIS
@@ -361,4 +307,3 @@ window.sendNotification = sendNotification;
 window.isSettingsDirty = isSettingsDirty;
 window.clearSettingsDirtyFlag = clearSettingsDirtyFlag;
 
-console.log('⚙️ Système de paramètres chargé');

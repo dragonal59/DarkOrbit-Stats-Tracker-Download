@@ -1,5 +1,10 @@
 # Stratégie de sync (pull/merge) et limites par badge
 
+> ⚠ **Mise à jour — limites de sessions.**  
+> La section 3 ci‑dessous décrit l’ancienne stratégie « FREE=1 session, PRO=10 sessions » côté Supabase.  
+> Depuis la migration `remove-session-limits-unlimited.sql` documentée dans `CORRECTIONS_VERSION_FREE.md`, les RPC `insert_user_session_secure` / `upsert_user_session_secure` n’appliquent plus ces quotas et `get_user_permissions` renvoie `maxSessions: -1` pour tous les badges.  
+> La partie **sync / merge** reste valable, mais les informations de quota doivent être lues comme **historiques**.
+
 **Document Phase 3 — DarkOrbit Stats Tracker Pro**
 
 ---

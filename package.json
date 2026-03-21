@@ -1,39 +1,108 @@
 {
-  "name": "darkorbit-stats-tracker",
-  "version": "1.0.0",
-  "description": "DarkOrbit Stats Tracker Pro",
+  "name": "do-stats-tracker",
+  "version": "2.5.4",
+  "description": "DO Stats Tracker",
   "main": "main.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dragonal59/DarkOrbit-Stats-Tracker-Download.git"
+  },
   "scripts": {
     "start": "electron .",
-    "prebuild": "node scripts/obfuscate-build.js && node scripts/inject-supabase-config.js",
+    "dev": "npm run build:scraper && electron .",
+    "build:scraper": "vite build --config vite.scraper.config.js",
+    "prebuild": "node scripts/generate-grades-inline.js && npm run build:scraper && node scripts/obfuscate-build.js && node scripts/inject-supabase-config.js",
     "build": "electron-builder"
   },
-  "author": "Ton Nom",
+  "author": {
+    "name": "dragonal59",
+    "email": "bnoisiez@gmail.com"
+  },
   "license": "MIT",
   "devDependencies": {
-    "electron": "^28.1.0",
-    "electron-builder": "^24.9.1",
-    "javascript-obfuscator": "^4.1.1"
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "electron": "^40.6.1",
+    "electron-builder": "^26.8.1",
+    "javascript-obfuscator": "^4.1.1",
+    "postcss": "^8.4.49",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^3.4.15",
+    "vite": "^6.0.3"
   },
   "build": {
-    "appId": "com.darkorbit.statstracker",
-    "productName": "DarkOrbit Stats Tracker Pro",
+    "appId": "com.dostats.tracker",
+    "productName": "DO Stats Tracker",
+    "artifactName": "DOStatsTracker-Setup-v${version}.exe",
+    "publish": {
+      "provider": "github",
+      "owner": "dragonal59",
+      "repo": "DarkOrbit-Stats-Tracker-Download",
+      "releaseType": "release",
+      "vPrefixedTagName": true
+    },
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "src/img/icon_app/icon_app.ico"
+    },
+    "linux": {
+      "icon": "src/img/icon_app/icon_app.png"
+    },
+    "mac": {
+      "icon": "src/img/icon_app/icon_app.png"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true
+      "installerLanguages": [
+        "fr"
+      ],
+      "language": "1036",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "DO Stats Tracker",
+      "installerIcon": "src/img/icon_app/icon_app.ico",
+      "uninstallerIcon": "src/img/icon_app/icon_app.ico"
     },
     "files": [
       "main.js",
-      { "from": "electron", "to": "electron" },
-      { "from": "build/src", "to": "src" }
+      "changelog.json",
+      {
+        "from": "electron",
+        "to": "electron"
+      },
+      {
+        "from": "build/src",
+        "to": "src"
+      },
+      {
+        "from": "pythscrap",
+        "to": "pythscrap"
+      },
+      "!**/*.map",
+      "!src/**",
+      "!scripts/**",
+      "!supabase/**",
+      "!*.md",
+      "!.env",
+      "!.gitignore"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "src/img/**",
+      "changelog.json",
+      "pythscrap/**"
     ]
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.95.3",
-    "dotenv": "^17.2.4"
+    "@supabase/supabase-js": "^2.97.0",
+    "chrome-remote-interface": "^0.33.3",
+    "date-fns": "^4.1.0",
+    "dotenv": "^17.2.4",
+    "electron-updater": "^6.8.3",
+    "framer-motion": "^12.36.0",
+    "lucide-react": "^0.577.0",
+    "recharts": "^3.8.0"
   }
 }

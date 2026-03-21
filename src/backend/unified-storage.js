@@ -39,17 +39,18 @@ window.UnifiedStorage = window.UnifiedStorage || {
         jsonData = raw;
       }
       
-      const data = JSON.parse(jsonData);
-      
-      // 4. Mettre en cache
-      if (this._config.cacheEnabled) {
-        this._cache.set(key, data);
+      try {
+        const data = JSON.parse(jsonData);
+        if (this._config.cacheEnabled) this._cache.set(key, data);
+        return data;
+      } catch (e) {
+        if (typeof jsonData === 'string' && jsonData.length < 100) return jsonData;
+        Logger.error('❌ Storage read error (' + key + '):', e);
+        return defaultValue;
       }
       
-      return data;
-      
     } catch (e) {
-      console.error(`❌ Storage read error (${key}):`, e);
+      Logger.error(`❌ Storage read error (${key}):`, e);
       return defaultValue;
     }
   },
@@ -65,7 +66,7 @@ window.UnifiedStorage = window.UnifiedStorage || {
       // 1. Vérifier taille AVANT compression
       if (originalSize > this._config.warningSize) {
         const sizeMB = (originalSize / 1024 / 1024).toFixed(2);
-        console.warn(`⚠️ Large data (${sizeMB}MB): ${key}`);
+        Logger.warn(`⚠️ Large data (${sizeMB}MB): ${key}`);
         
         if (typeof showToast === 'function') {
           showToast(`⚠️ Données volumineuses (${sizeMB}MB). Compression activée.`, 'warning');
@@ -90,14 +91,14 @@ window.UnifiedStorage = window.UnifiedStorage || {
         this._cache.set(key, value);
       }
       // Phase 5 : sync Supabase si clé concernée (liste centralisée dans config/keys.js).
-      var syncKeys = (typeof window !== 'undefined' && window.APP_KEYS && window.APP_KEYS.SYNC_KEYS) ? window.APP_KEYS.SYNC_KEYS : ['darkOrbitSessions', 'darkOrbitEvents', 'darkOrbitSettings', 'darkOrbitCustomLinks', 'darkOrbitBoosters', 'darkOrbitCurrentStats'];
+      var syncKeys = (typeof window !== 'undefined' && window.APP_KEYS && window.APP_KEYS.SYNC_KEYS) ? window.APP_KEYS.SYNC_KEYS : ['darkOrbitSessions', 'darkOrbitEvents', 'darkOrbitSettings', 'darkOrbitCustomLinks', 'darkOrbitBoosters', 'darkOrbitCurrentStats', 'darkOrbitCurrentEvents'];
       if (syncKeys.indexOf(key) !== -1 && typeof DataSync !== 'undefined' && DataSync.queueSync) {
         DataSync.queueSync();
       }
       return { success: true, size: originalSize, compressed };
       
     } catch (e) {
-      console.error(`❌ Storage write error (${key}):`, e);
+      Logger.error(`❌ Storage write error (${key}):`, e);
       
       if (e.name === 'QuotaExceededError') {
         const currentSize = this._getTotalSize();
@@ -124,7 +125,7 @@ window.UnifiedStorage = window.UnifiedStorage || {
       this._cache.delete(key);
       return { success: true };
     } catch (e) {
-      console.error(`❌ Remove error (${key}):`, e);
+      Logger.error(`❌ Remove error (${key}):`, e);
       return { success: false, error: e.message };
     }
   },
@@ -138,7 +139,7 @@ window.UnifiedStorage = window.UnifiedStorage || {
       this._cache.clear();
       return { success: true };
     } catch (e) {
-      console.error('❌ Clear error:', e);
+      Logger.error('❌ Clear error:', e);
       return { success: false, error: e.message };
     }
   },
@@ -212,7 +213,7 @@ window.UnifiedStorage = window.UnifiedStorage || {
     try {
       return btoa(unescape(encodeURIComponent(str)));
     } catch (e) {
-      console.error('Compression failed:', e);
+      Logger.error('Compression failed:', e);
       return str;
     }
   },
@@ -225,7 +226,7 @@ window.UnifiedStorage = window.UnifiedStorage || {
     try {
       return decodeURIComponent(escape(atob(str)));
     } catch (e) {
-      console.error('Decompression failed:', e);
+      Logger.error('Decompression failed:', e);
       return str;
     }
   },
@@ -295,39 +296,6 @@ const StorageCache = {
   isCached: (key) => UnifiedStorage._cache.has(key)
 };
 
-// ==========================================
-// FONCTIONS HELPER (compatibilité)
-// ==========================================
-
-function getCachedSessions() {
-  var k = (typeof window !== 'undefined' && window.APP_KEYS && window.APP_KEYS.STORAGE_KEYS) ? window.APP_KEYS.STORAGE_KEYS.SESSIONS : 'darkOrbitSessions';
-  return UnifiedStorage.get(k, []);
-}
-
-function saveCachedSessions(sessions) {
-  var k = (typeof window !== 'undefined' && window.APP_KEYS && window.APP_KEYS.STORAGE_KEYS) ? window.APP_KEYS.STORAGE_KEYS.SESSIONS : 'darkOrbitSessions';
-  return UnifiedStorage.set(k, sessions);
-}
-
-function getCachedSettings() {
-  var k = (typeof window !== 'undefined' && window.APP_KEYS && window.APP_KEYS.STORAGE_KEYS) ? window.APP_KEYS.STORAGE_KEYS.SETTINGS : 'darkOrbitSettings';
-  return UnifiedStorage.get(k, {});
-}
-
-function saveCachedSettings(settings) {
-  var k = (typeof window !== 'undefined' && window.APP_KEYS && window.APP_KEYS.STORAGE_KEYS) ? window.APP_KEYS.STORAGE_KEYS.SETTINGS : 'darkOrbitSettings';
-  return UnifiedStorage.set(k, settings);
-}
-
-function getCachedLinks() {
-  var k = (typeof window !== 'undefined' && window.APP_KEYS && window.APP_KEYS.STORAGE_KEYS) ? window.APP_KEYS.STORAGE_KEYS.CUSTOM_LINKS : 'darkOrbitCustomLinks';
-  return UnifiedStorage.get(k, null);
-}
-
-function saveCachedLinks(links) {
-  var k = (typeof window !== 'undefined' && window.APP_KEYS && window.APP_KEYS.STORAGE_KEYS) ? window.APP_KEYS.STORAGE_KEYS.CUSTOM_LINKS : 'darkOrbitCustomLinks';
-  return UnifiedStorage.set(k, links);
-}
 
 // ==========================================
 // DEBUG CONSOLE
@@ -336,16 +304,17 @@ function saveCachedLinks(links) {
 window.SafeStorage = SafeStorage;
 window.StorageCache = StorageCache;
 
-window.storageStats = () => {
-  const stats = UnifiedStorage.getStats();
-  console.table({
-    'Taille totale': stats.totalSizeMB + ' MB',
-    'Utilisation': stats.percentUsed + '%',
-    'Nombre de clés': stats.keysCount,
-    'Cache mémoire': stats.cacheEntries + ' entrées',
-    'Compression': stats.compressionEnabled ? 'ON' : 'OFF'
-  });
-  return stats;
-};
+if (window.DEBUG) {
+  window.storageStats = () => {
+    const stats = UnifiedStorage.getStats();
+    console.table({
+      'Taille totale': stats.totalSizeMB + ' MB',
+      'Utilisation': stats.percentUsed + '%',
+      'Nombre de clés': stats.keysCount,
+      'Cache mémoire': stats.cacheEntries + ' entrées',
+      'Compression': stats.compressionEnabled ? 'ON' : 'OFF'
+    });
+    return stats;
+  };
+}
 
-console.log('💾 UnifiedStorage v2.0 loaded');

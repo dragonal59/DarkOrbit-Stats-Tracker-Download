@@ -30,12 +30,12 @@ DROP POLICY IF EXISTS "Enable read access for all users" ON profiles;
 DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON profiles;
 
 -- 4. Créer les policies STRICTES de lecture
--- SELECT : uniquement son propre profil (tous les champs)
+DROP POLICY IF EXISTS "profiles_select_own" ON profiles;
+DROP POLICY IF EXISTS "profiles_select_admin" ON profiles;
 CREATE POLICY "profiles_select_own"
   ON profiles FOR SELECT
   USING (auth.uid() = id);
 
--- SELECT : admins et superadmins voient tous les profils (pour le dashboard)
 CREATE POLICY "profiles_select_admin"
   ON profiles FOR SELECT
   USING (
@@ -43,7 +43,10 @@ CREATE POLICY "profiles_select_admin"
     OR get_my_profile_badge() IN ('ADMIN', 'SUPERADMIN')
   );
 
--- 5. S'assurer que les policies UPDATE et INSERT existent (ne pas écraser si déjà présentes)
+-- 5. S'assurer que les policies UPDATE et INSERT existent
+DROP POLICY IF EXISTS "profiles_update_own" ON profiles;
+DROP POLICY IF EXISTS "profiles_update_admin" ON profiles;
+DROP POLICY IF EXISTS "profiles_insert_own" ON profiles;
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'profiles' AND policyname = 'profiles_update_own') THEN

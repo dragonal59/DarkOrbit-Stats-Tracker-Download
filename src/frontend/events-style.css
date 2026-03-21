@@ -36,6 +36,12 @@
   height: 100vh;
   transition: transform 0.3s ease, opacity 0.3s ease;
   margin-left: 40px;
+  /* Masquer la scrollbar verticale tout en conservant le scroll */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE / Edge */
+}
+.events-sidebar::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Electron */
 }
 
 .events-sidebar.hidden {
@@ -64,13 +70,22 @@
   padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 25px;
+  gap: 0;
 }
 
 .events-sidebar-section {
   display: flex;
   flex-direction: column;
-  gap: 15px;
+  gap: 12px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--border);
+}
+.events-sidebar-section:first-child {
+  padding-top: 0;
+}
+.events-sidebar-section:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
 }
 
 .sidebar-section-title {
@@ -79,7 +94,7 @@
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  margin: 0;
+  margin: 0 0 12px 0;
 }
 
 .no-event {
@@ -90,6 +105,116 @@
   background: var(--bg-primary);
   border-radius: 8px;
   border: 1px dashed var(--border);
+}
+
+/* Suivi joueurs (sidebar) */
+.sidebar-followed-players {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sidebar-followed-player-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+}
+.sidebar-followed-player-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sidebar-followed-player-pseudo {
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebar-followed-player-server {
+  color: var(--text-muted);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.sidebar-followed-player-unfollow {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sidebar-followed-player-unfollow:hover {
+  background: var(--danger, #c53030);
+  color: #fff;
+}
+.sidebar-followed-player-stats {
+  padding-top: 2px;
+  border-top: 1px solid var(--border);
+}
+.followed-stats-deltas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 12px;
+}
+.followed-stat-label {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.followed-stat-delta {
+  font-weight: 600;
+  font-size: 12px;
+}
+.followed-delta-positive {
+  color: var(--success, #48bb78);
+}
+.followed-delta-negative {
+  color: var(--danger, #fc8181);
+}
+.followed-delta-neutral {
+  color: var(--text-muted);
+}
+
+/* Comparaison avec vous : + vert (tu es devant), - rouge (tu es derrière), même mise en forme que les stats joueur */
+.watched-player-stats-grid .watched-player-stat-group {
+  min-width: 0;
+}
+.comparison-diff-item {
+  font-weight: 600;
+  font-size: 12px;
+}
+.comparison-diff-positive {
+  color: var(--success, #48bb78);
+}
+.comparison-diff-negative {
+  color: var(--danger, #fc8181);
+}
+.comparison-diff-neutral {
+  color: var(--text-muted);
+}
+.comparison-diff-missing {
+  color: var(--text-muted);
+  font-weight: normal;
+}
+.followed-stats-unavailable {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 /* ==========================================
@@ -727,24 +852,50 @@
   border-top: 1px solid var(--border);
 }
 
+.event-card-wrapper {
+  display: flex;
+  flex-direction: column;
+}
+
+.event-card-actions {
+  display: flex;
+  gap: 6px;
+  padding: 6px 8px 8px;
+  background: var(--bg-secondary);
+  border-radius: 0 0 8px 8px;
+  border: 1px solid var(--border);
+  border-top: none;
+  margin-top: -4px;
+}
+
 .event-action-btn {
   flex: 1;
-  padding: 10px 16px;
-  border: none;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.18s ease;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
 }
 
-.event-action-btn.delete {
+.event-action-btn:hover {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.event-action-btn.delete,
+.event-action-btn.event-action-delete {
   background: var(--bg-tertiary);
   color: var(--danger);
-  border: 1px solid var(--border);
+  border-color: var(--border);
 }
 
-.event-action-btn.delete:hover {
+.event-action-btn.delete:hover,
+.event-action-btn.event-action-delete:hover {
   background: var(--danger);
   color: white;
   border-color: var(--danger);
@@ -1108,60 +1259,15 @@
   line-height: 1.5;
 }
 
-/* Priority Stars Selector */
-.priority-selector {
-  display: flex;
-  gap: 6px;
-  padding: 10px;
-  background: var(--bg-primary);
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  overflow-x: auto;
+.form-optional {
+  font-size: 0.82em;
+  color: var(--text-muted);
+  font-weight: 400;
 }
 
-.priority-option {
-  flex: 1;
-  min-width: 80px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 8px 4px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  border: 2px solid transparent;
-}
-
-.priority-option:hover {
-  background: var(--bg-tertiary);
-}
-
-.priority-option input[type="radio"] {
-  display: none;
-}
-
-.priority-option input[type="radio"]:checked + .priority-stars-display {
-  filter: brightness(1.2);
-}
-
-.priority-option input[type="radio"]:checked ~ .priority-option {
-  border-color: var(--accent);
-  background: rgba(56, 189, 248, 0.1);
-}
-
-.priority-option:has(input[type="radio"]:checked) {
-  border-color: var(--accent);
-  background: rgba(56, 189, 248, 0.1);
-}
-
-.priority-stars-display {
-  font-size: 14px;
-  display: flex;
-  gap: 2px;
-  flex-wrap: wrap;
-  justify-content: center;
-  line-height: 1;
+.modal-event-form {
+  max-width: 560px;
+  width: 100%;
 }
 
 .priority-label-text {
@@ -1360,25 +1466,16 @@
 }
 
 .event-completed-badge {
-  padding: 6px 14px;
-  background: rgba(34, 197, 94, 0.9);
-  color: white;
-  border-radius: 16px;
-  font-size: 13px;
-  font-weight: 700;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  display: inline-block;
+  padding: 4px 12px;
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-top: 4px;
   align-self: flex-start;
-  box-shadow: 0 0 20px rgba(34, 197, 94, 0.5);
-  animation: completedPulse 2s ease-in-out infinite;
-}
-
-@keyframes completedPulse {
-  0%, 100% {
-    box-shadow: 0 0 20px rgba(34, 197, 94, 0.5);
-  }
-  50% {
-    box-shadow: 0 0 30px rgba(34, 197, 94, 0.8);
-  }
 }
 
 .checkbox-label {
@@ -1529,14 +1626,6 @@
   padding: 2px 6px !important;
 }
 
-/* Badge "Complété ✅" (utilisateur a terminé l'event, l'event reste affiché En cours / À venir) */
-.event-completed-badge {
-  font-size: 0.75rem;
-  color: #22c55e;
-  margin-top: 4px;
-  font-weight: 600;
-}
-
 /* Carte / carrousel / modal : pas de fond vert ni barre verte sur le badge "Événement complété !" */
 .manual-event-card .event-completed-badge,
 .event-card-compact .event-completed-badge,
@@ -1668,6 +1757,19 @@
 
 #sidebarScrapedEvents .event-card {
   margin-bottom: 10px;
+  overflow: hidden;
+}
+
+#sidebarScrapedEvents .events-carousel-slide .event-card {
+  min-height: unset;
+  aspect-ratio: 3/2; /* 1536×1024 */
+}
+#sidebarScrapedEvents .manual-event-card .scraped-event-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  display: block;
 }
 
 #sidebarScrapedEvents .event-card:last-child {
@@ -1744,14 +1846,66 @@
   transform: scale(1.1);
 }
 
+/* Bouton œil — masquer/afficher un événement de la sidebar */
+.event-card-eye-btn {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  z-index: 3;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.18s, transform 0.15s;
+  line-height: 1;
+}
+
+.event-card-eye-btn:hover {
+  background: rgba(0, 0, 0, 0.75);
+  transform: scale(1.1);
+}
+
+.event-card-eye-btn--hidden {
+  background: rgba(100, 100, 100, 0.5);
+  opacity: 0.7;
+}
+
+/* Bouton "Tout afficher" quand des événements sont masqués */
+.sidebar-events-reset-hidden {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 5px 10px;
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px dashed var(--accent);
+  border-radius: 8px;
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.18s;
+}
+
+.sidebar-events-reset-hidden:hover {
+  background: rgba(56, 189, 248, 0.18);
+}
+
 /* ==========================================
    CARROUSEL ÉVÉNEMENTS SIDEBAR
    ========================================== */
 
 .events-carousel {
   position: relative;
-  overflow: hidden;
   min-height: 80px;
+  overflow: hidden;
 }
 
 .events-carousel .no-event {
@@ -1764,6 +1918,13 @@
 .events-carousel-viewport {
   overflow: hidden;
   width: 100%;
+  max-width: 100%;
+  isolation: isolate;
+}
+#sidebarScrapedEvents .events-carousel-viewport {
+  width: calc(100% + 2px);
+  margin-left: -2px;
+  clip-path: inset(0 0 0 2px);
 }
 
 .events-carousel-track {
@@ -1780,69 +1941,63 @@
   flex: 0 0 100%;
   width: 100%;
   min-width: 0;
+  overflow: hidden;
 }
 
 .events-carousel-slide .event-card {
   margin-bottom: 0;
-  min-height: 220px;
+  min-height: 200px;
+}
+
+/* Barre de navigation en bas du carousel */
+.events-carousel-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.events-carousel:not(.events-carousel--multi) .events-carousel-nav {
+  display: none;
 }
 
 .events-carousel-prev,
 .events-carousel-next {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 32px;
-  height: 32px;
-  border: none;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
   border-radius: 50%;
   background: var(--bg-tertiary);
-  color: var(--text-primary);
-  font-size: 1.25rem;
+  color: var(--text-secondary);
+  font-size: 1.1rem;
   line-height: 1;
   cursor: pointer;
-  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.2s, color 0.2s;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  transition: background 0.18s, color 0.18s, border-color 0.18s;
 }
 
 .events-carousel-prev:hover,
 .events-carousel-next:hover {
   background: var(--accent);
   color: #fff;
-}
-
-.events-carousel-prev {
-  left: 6px;
-}
-
-.events-carousel-next {
-  right: 6px;
-}
-
-.events-carousel:not(.events-carousel--multi) .events-carousel-prev,
-.events-carousel:not(.events-carousel--multi) .events-carousel-next {
-  display: none;
+  border-color: var(--accent);
 }
 
 .events-carousel-dots {
   display: flex;
   justify-content: center;
-  gap: 6px;
-  margin-top: 10px;
+  align-items: center;
+  gap: 5px;
   flex-wrap: wrap;
 }
 
-.events-carousel:not(.events-carousel--multi) .events-carousel-dots {
-  display: none;
-}
-
 .events-carousel-dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   border: none;
   background: var(--bg-tertiary);
@@ -1857,7 +2012,7 @@
 
 .events-carousel-dot.active {
   background: var(--accent);
-  transform: scale(1.2);
+  transform: scale(1.25);
 }
 
 .events-carousel-countdown {

@@ -10,6 +10,7 @@ const ROUTE_PERMISSIONS = Object.freeze({
   history: null,
   settings: null,
   classement: null,
+  coupons: 'couponsTab',
   events: 'eventsTab',
   superadmin: 'dashboardTab'
 });
@@ -63,4 +64,4 @@ function canAccessAdminDashboard() {
 window.canAccessRoute = canAccessRoute;
 window.guardRoute = guardRoute;
 window.canAccessAdminDashboard = canAccessAdminDashboard;
-console.log('🛡️ Module Guards chargé');
+

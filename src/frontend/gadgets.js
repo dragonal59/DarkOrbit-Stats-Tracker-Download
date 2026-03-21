@@ -29,24 +29,22 @@ function playSound(type = 'success') {
     audio.volume = 0.3;
     
     audio.onerror = () => {
-      console.log(`Son externe non trouvé (${soundPath}), utilisation du fallback`);
       const fallbackAudio = new Audio(SOUNDS_FALLBACK[type] || SOUNDS_FALLBACK.success);
       fallbackAudio.volume = 0.3;
-      fallbackAudio.play().catch(e => console.log('Audio play prevented:', e));
+      fallbackAudio.play().catch(() => {});
     };
     
     audio.oncanplaythrough = () => {
-      audio.play().catch(e => {
-        console.log('Audio play prevented:', e);
+      audio.play().catch(() => {
         const fallbackAudio = new Audio(SOUNDS_FALLBACK[type] || SOUNDS_FALLBACK.success);
         fallbackAudio.volume = 0.3;
-        fallbackAudio.play().catch(err => console.log('Fallback prevented:', err));
+        fallbackAudio.play().catch(() => {});
       });
     };
     
     audio.load();
-  } catch (e) {
-    console.log('Audio not supported:', e);
+  } catch (_e) {
+    /* audio non supporté */
   }
 }
 
@@ -57,7 +55,6 @@ function playSound(type = 'success') {
 function celebrateSuccess(type = 'normal') {
   // AMÉLIORATION BUG #4 : Fallback silencieux plus robuste
   if (typeof confetti === 'undefined') {
-    console.log('Confetti library not loaded - feature disabled');
     return;
   }
 
@@ -132,8 +129,8 @@ function celebrateSuccess(type = 'normal') {
         });
         playSound('success');
     }
-  } catch (e) {
-    console.log('Confetti error:', e);
+  } catch (_e) {
+    /* confetti non disponible */
   }
 }
 
@@ -142,6 +139,7 @@ function celebrateSuccess(type = 'normal') {
 // ==========================================
 
 function calculateStreak() {
+  if (typeof getSessions !== 'function') return 0;
   const sessions = getSessions();
   if (sessions.length === 0) return 0;
   
@@ -217,110 +215,14 @@ function updateStreakDisplay() {
     if (streak === 7 || streak === 30 || streak === 100 || streak % 50 === 0) {
       celebrateSuccess('rankup');
       setTimeout(() => {
-        alert(`🔥 INCROYABLE ! ${streak} jours consécutifs !\n\nContinue comme ça, tu es une légende ! 🏆`);
+        if (typeof showToast === 'function') {
+          showToast(`🔥 ${streak} jours consécutifs ! Continue comme ça, tu es une légende ! 🏆`, 'success');
+        }
       }, 1000);
     }
   } else {
     streakCounter.style.display = 'none';
   }
-}
-
-// ==========================================
-// 4. RACCOURCIS CLAVIER
-// ==========================================
-
-const SHORTCUTS = {
-  'ctrl+s': () => {
-    const saveBtn = document.getElementById('saveSession');
-    if (saveBtn) {
-      saveBtn.click();
-      showToast('💾 Session sauvegardée (Ctrl+S)', 'success');
-    }
-  },
-  'ctrl+e': () => {
-    exportData();
-    showToast('📥 Export lancé (Ctrl+E)', 'success');
-  },
-  'ctrl+h': () => {
-    // Basculer vers l'onglet Historique
-    const historyTab = document.querySelector('[data-tab="history"]');
-    if (historyTab) {
-      historyTab.click();
-      showToast('📚 Historique (Ctrl+H)', 'success');
-    }
-  },
-  'ctrl+p': () => {
-    // Basculer vers l'onglet Progression
-    const progressTab = document.querySelector('[data-tab="progression"]');
-    if (progressTab) {
-      progressTab.click();
-      showToast('📈 Progression (Ctrl+P)', 'success');
-    }
-  },
-  'ctrl+1': () => {
-    // Basculer vers l'onglet Stats
-    const statsTab = document.querySelector('[data-tab="stats"]');
-    if (statsTab) {
-      statsTab.click();
-      showToast('📊 Statistiques (Ctrl+1)', 'success');
-    }
-  },
-  'ctrl+shift+c': () => {
-    // Basculer mode compact/détaillé
-    const currentMode = document.documentElement.getAttribute('data-view-mode');
-    const newMode = currentMode === 'compact' ? 'detailed' : 'compact';
-    setViewMode(newMode);
-    showToast(`${newMode === 'compact' ? '📊 Mode Compact' : '📋 Mode Détaillé'} (Ctrl+Shift+C)`, 'success');
-  },
-  'ctrl+shift+t': () => {
-    // Changer de thème
-    const currentTheme = document.documentElement.getAttribute('data-theme');
-    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-    setTheme(newTheme);
-    showToast(`${newTheme === 'dark' ? '🌙 Thème Sombre' : '☀️ Thème Clair'} (Ctrl+Shift+T)`, 'success');
-  },
-  '?': () => {
-    // Afficher l'aide des raccourcis
-    showShortcutsHelp();
-  }
-};
-
-function handleKeyboardShortcut(e) {
-  const key = [];
-  
-  if (e.ctrlKey) key.push('ctrl');
-  if (e.shiftKey) key.push('shift');
-  if (e.altKey) key.push('alt');
-  
-  // Ajouter la touche principale (en minuscule)
-  const mainKey = e.key.toLowerCase();
-  if (mainKey !== 'control' && mainKey !== 'shift' && mainKey !== 'alt') {
-    key.push(mainKey);
-  }
-  
-  const shortcut = key.join('+');
-  
-  if (SHORTCUTS[shortcut]) {
-    e.preventDefault();
-    SHORTCUTS[shortcut]();
-  }
-}
-
-function showShortcutsHelp() {
-  const helpText = `
-🎮 RACCOURCIS CLAVIER
-
-💾 Ctrl + S : Sauvegarder la session
-📥 Ctrl + E : Exporter les données
-📚 Ctrl + H : Onglet Historique
-📈 Ctrl + P : Onglet Progression
-📊 Ctrl + 1 : Onglet Statistiques
-🔄 Ctrl + Shift + C : Mode Compact/Détaillé
-🎨 Ctrl + Shift + T : Changer le thème
-❓ ? : Afficher cette aide
-  `.trim();
-  
-  alert(helpText);
 }
 
 // ==========================================
@@ -331,6 +233,3 @@ function showShortcutsHelp() {
 window.addEventListener('DOMContentLoaded', () => {
   updateStreakDisplay();
 });
-
-console.log('✨ Gadgets chargés : Confettis, Sons, Streak Counter, Raccourcis clavier');
-console.log('💡 Appuyez sur ? pour voir tous les raccourcis clavier !');

@@ -1,0 +1,37 @@
+{
+  "id": "uridium_bank",
+  "visible": true,
+  "image": "img/events/uridium_bank.jpg",
+  "names": {
+    "fr": "Banque d'Uridium",
+    "en": "Uridium Bank",
+    "de": "Uridium-Bank",
+    "es": "Banco de Uridium",
+    "ru": "Банк Уридиума",
+    "tr": "Uridium Bankası"
+  },
+  "descriptions": {
+    "fr": "Remplissez la Banque d'Uridium avant que le temps ne soit écoulé ! Complétez des quêtes quotidiennes pour accumuler de l'Uridium dans la Banque. Lorsqu'elle est pleine, vous pouvez ouvrir la Banque d'Uridium à un prix avantageux !",
+    "en": "Fill up the Uridium Bank before time runs out! Complete Daily Quests to accumulate Uridium in the Bank. When it is full, you can open the Uridium Bank at a great deal!",
+    "de": "Fülle die Uridium-Bank, bevor die Zeit abläuft! Schließe tägliche Quests ab, um Uridium in der Bank anzusammeln. Wenn sie voll ist, kannst du die Uridium-Bank zu einem tollen Preis öffnen!",
+    "es": "¡Llena el Banco de Uridium antes de que se acabe el tiempo! Completa Misiones Diarias para acumular Uridium en el Banco. ¡Cuando esté lleno, puedes abrir el Banco de Uridium a un precio increíble!",
+    "ru": "Наполните Банк Уридиума до того, как время истечёт! Выполняйте ежедневные задания, чтобы накапливать Уридиум в Банке. Когда он заполнится, вы сможете открыть Банк Уридиума по отличной цене!",
+    "tr": "Süre dolmadan Uridium Bankasını doldur! Bankada Uridium biriktirmek için Günlük Görevleri tamamla. Banka dolduğunda, Uridium Bankasını harika bir fiyatla açabilirsin!"
+  },
+  "keywords": [
+    "uridium bank",
+    "banque d'uridium",
+    "uridium-bank",
+    "banco de uridium",
+    "банк уридиума",
+    "uridium bankası"
+  ],
+  "exclude_keywords": [
+    "helix blitz",
+    "monthly deluxe calendar",
+    "calendrier deluxe",
+    "new dawn",
+    "super subscription",
+    "super abonnement"
+  ]
+}

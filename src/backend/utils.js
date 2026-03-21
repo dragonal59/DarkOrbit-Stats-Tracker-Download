@@ -161,7 +161,7 @@ function deepClone(obj) {
   try {
     return JSON.parse(JSON.stringify(obj));
   } catch (e) {
-    console.error('Deep clone error:', e);
+    Logger.error('Deep clone error:', e);
     return obj;
   }
 }
@@ -207,7 +207,7 @@ const cancelAnimFrame = (function() {
 /**
  * Show toast notification
  */
-function showToast(message, type = 'success') {
+function showToast(message, type = 'success', duration) {
   const existingToast = document.querySelector('.toast');
   if (existingToast) existingToast.remove();
   
@@ -216,13 +216,100 @@ function showToast(message, type = 'success') {
   toast.textContent = message;
   document.body.appendChild(toast);
   
+  const ms = duration != null ? duration : (CONFIG.UI.TOAST_DURATION || 3000);
   setTimeout(() => {
     toast.classList.add('closing');
     setTimeout(() => toast.remove(), 250);
-  }, CONFIG.UI.TOAST_DURATION || 3000);
+  }, ms);
 }
 
-console.log('🔧 Utils loaded');
+// ==========================================
+// WEEK START (lundi) — partagé par progression.js et history.js
+// ==========================================
+
+/**
+ * Retourne le début de la semaine (lundi 00:00:00) pour une date donnée.
+ * @param {Date|number} date
+ * @returns {Date}
+ */
+function getWeekStart(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  d.setDate(diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+// ==========================================
+// NUMBER FORMATTING (centralisé — remplace les doublons dans stats/history/progression)
+// ==========================================
+
+/**
+ * Formate un nombre entier avec séparateurs (en-US).
+ * Retourne '-' pour les valeurs non-finies. Accepte les négatifs.
+ */
+function formatNumberDisplay(num) {
+  var value = Number(num);
+  if (!Number.isFinite(value)) return '-';
+  return Math.round(value).toLocaleString('en-US');
+}
+
+/**
+ * Formate un nombre de façon compacte : 1.5M, 250K, etc.
+ * Retourne '-' pour les valeurs non-finies. Gère les négatifs.
+ */
+function formatNumberCompact(num) {
+  var value = Number(num);
+  if (!Number.isFinite(value)) return '-';
+  var abs = Math.abs(value);
+  if (abs >= 1e9) return (value / 1e9).toFixed(1) + 'B';
+  if (abs >= 1e6) return (value / 1e6).toFixed(1) + 'M';
+  if (abs >= 1e3) return (value / 1e3).toFixed(1) + 'K';
+  return Math.round(value).toLocaleString('en-US');
+}
+
+/**
+ * Formate un gain avec son signe (+/-).
+ * @param {number|null} num  - La valeur à formater
+ * @param {boolean} compact  - Si true, utilise le format compact (1.2M). Défaut : false (nombre complet).
+ * @returns {string}
+ */
+function formatSignedGain(num, compact) {
+  if (num === null || typeof num === 'undefined') return '-';
+  var fmt = compact ? formatNumberCompact : formatNumberDisplay;
+  if (num < 0) return '-' + fmt(Math.abs(num));
+  return '+' + fmt(num);
+}
+
+/**
+ * Retourne la classe CSS correspondant au signe d'un gain.
+ * @param {number|null} num   - La valeur
+ * @param {string} variant    - 'pn' → 'positive'/'negative' ; défaut → 'gain'/'loss'
+ * @returns {'gain'|'loss'|'positive'|'negative'|'neutral'}
+ */
+function getGainClass(num, variant) {
+  if (num === null || typeof num === 'undefined') return 'neutral';
+  if (variant === 'pn') {
+    if (num > 0) return 'positive';
+    if (num < 0) return 'negative';
+    return 'neutral';
+  }
+  if (num > 0) return 'gain';
+  if (num < 0) return 'loss';
+  return 'neutral';
+}
+
+/**
+ * Échappe une chaîne pour une insertion HTML sûre (anti-XSS).
+ * Remplace escapeHtml dans messages.js et ranking-ui.js.
+ */
+function escapeHtml(s) {
+  if (s == null) return '';
+  var div = document.createElement('div');
+  div.textContent = String(s);
+  return div.innerHTML;
+}
 
 // ==========================================
 // COMPRESSION D'IMAGES BASE64
@@ -258,8 +345,6 @@ function compressImage(base64, maxWidth = 800, quality = 0.7) {
       
       // Convertir en JPEG compressé
       const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
-      
-      console.log(`📦 Image compressée: ${Math.round(base64.length / 1024)}KB → ${Math.round(compressedBase64.length / 1024)}KB`);
       
       resolve(compressedBase64);
     };

@@ -1,20 +1,188 @@
 // ==========================================
-// MODULE: SESSIONS MANAGEMENT
+// MODULE: SESSIONS MANAGEMENT (Supabase uniquement)
 // ==========================================
 
+var _sessionsCache = [];
+
+function setSessionsCache(sessions) {
+  _sessionsCache = Array.isArray(sessions) ? sessions : [];
+}
+window.setSessionsCache = setSessionsCache;
+
+async function refreshSessionsFromSupabase() {
+  var supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+  if (!supabase) return;
+  try {
+    var user = typeof AuthManager !== 'undefined' && typeof AuthManager.getCurrentUser === 'function' ? await AuthManager.getCurrentUser() : null;
+    if (!user || !user.id) return;
+    var res = await supabase.from('user_sessions').select('*').eq('user_id', user.id).order('session_timestamp', { ascending: false });
+    if (res.error) return;
+    var rows = res.data || [];
+    var app = (rows || []).map(function (r) {
+      var num = function (v) { return Number.isFinite(Number(v)) ? Number(v) : 0; };
+      return {
+        id: r.local_id || r.id,
+        date: r.session_date,
+        honor: num(r.honor),
+        xp: num(r.xp),
+        rankPoints: num(r.rank_points),
+        nextRankPoints: num(r.next_rank_points),
+        currentRank: r.current_rank,
+        note: r.note,
+        timestamp: r.session_timestamp,
+        is_baseline: !!r.is_baseline,
+        player_id: r.player_id || null,
+        player_server: r.player_server || null,
+        player_pseudo: r.player_pseudo || null
+      };
+    });
+    setSessionsCache(app);
+  } catch (e) {
+    Logger.error('[Sessions] refreshSessionsFromSupabase error:', e?.message || e);
+  }
+}
+window.refreshSessionsFromSupabase = refreshSessionsFromSupabase;
+
+async function restoreSessionToSupabase(session) {
+  if (!session || !session.id) return false;
+  var supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+  if (!supabase) return false;
+  try {
+    var user = typeof AuthManager !== 'undefined' && typeof AuthManager.getCurrentUser === 'function' ? await AuthManager.getCurrentUser() : null;
+    if (!user || !user.id) return false;
+    var row = _sessionToRow(session, String(session.id));
+    var rpc = await supabase.rpc('upsert_user_session_secure', { p_row: row });
+    if (rpc.error || (rpc.data && rpc.data.success === false)) return false;
+    await refreshSessionsFromSupabase();
+    return true;
+  } catch (e) {
+    Logger.error('[Sessions] restoreSessionToSupabase error:', e?.message || e);
+    return false;
+  }
+}
+window.restoreSessionToSupabase = restoreSessionToSupabase;
+
+function _sessionToRow(s, localId) {
+  var num = function (v) { return Number.isFinite(Number(v)) ? Number(v) : 0; };
+  // honor, xp, rank_points, next_rank_points envoyés en String pour éviter
+  // toute perte de précision JS au-delà de Number.MAX_SAFE_INTEGER (~9×10^15).
+  // Les RPCs Supabase lisent ces champs via ->> (extraction TEXT) puis ::BIGINT.
+  return {
+    local_id: localId || String(s.id || s.timestamp || Date.now()),
+    honor: String(num(s.honor)),
+    xp: String(num(s.xp)),
+    rank_points: String(num(s.rankPoints)),
+    next_rank_points: String(num(s.nextRankPoints)),
+    current_rank: s.currentRank || null,
+    note: s.note || null,
+    session_date: s.date || null,
+    session_timestamp: num(s.timestamp) || Date.now(),
+    is_baseline: !!s.is_baseline,
+    player_id: s.player_id || getActivePlayerId() || null,
+    player_server: s.player_server || null,
+    player_pseudo: s.player_pseudo || null
+  };
+}
+
+function getActivePlayerId() {
+  if (typeof UserPreferencesAPI !== 'undefined' && UserPreferencesAPI.getActivePlayerIdSync) {
+    const id = UserPreferencesAPI.getActivePlayerIdSync();
+    if (id) return id;
+  }
+  return null;
+}
+window.getActivePlayerId = getActivePlayerId;
+
+/** rank_1..rank_21 + slugs (basic_space_pilot, etc.) → libellé FR (pour session depuis récolte auto) */
+var RANK_ID_TO_FR = {
+  'rank_1': 'Pilote de 1ère classe', 'rank_2': 'Caporal', 'rank_3': 'Caporal-chef', 'rank_4': 'Sergent',
+  'rank_5': 'Sergent-chef', 'rank_6': 'Adjudant', 'rank_7': 'Adjudant-chef', 'rank_8': 'Major',
+  'rank_9': 'Sous-lieutenant', 'rank_10': 'Lieutenant', 'rank_11': 'Capitaine', 'rank_12': 'Capitaine d\'escadron',
+  'rank_13': 'Commandant', 'rank_14': 'Commandant d\'escadron', 'rank_15': 'Lieutenant-colonel', 'rank_16': 'Colonel',
+  'rank_17': 'Général de brigade', 'rank_18': 'Général de division', 'rank_19': 'Général de corps d\'armée',
+  'rank_20': 'Général d\'armée', 'rank_21': 'Maréchal',
+  'basic_space_pilot': 'Pilote de 1ère classe', 'space_pilot': 'Caporal', 'chief_space_pilot': 'Caporal-chef',
+  'basic_sergeant': 'Sergent', 'sergeant': 'Sergent-chef', 'chief_sergeant': 'Adjudant',
+  'basic_lieutenant': 'Adjudant-chef', 'lieutenant': 'Major', 'chief_lieutenant': 'Sous-lieutenant',
+  'basic_captain': 'Lieutenant', 'captain': 'Capitaine', 'chief_captain': 'Capitaine d\'escadron',
+  'basic_major': 'Commandant', 'major': 'Commandant d\'escadron', 'chief_major': 'Lieutenant-colonel',
+  'basic_colonel': 'Colonel', 'colonel': 'Général de brigade', 'chief_colonel': 'Général de division',
+  'basic_general': 'Général de corps d\'armée', 'general': 'Général d\'armée', 'chief_general': 'Maréchal'
+};
+
 /**
- * Enregistre le seuil de départ (baseline) - modal premier lancement.
- * Ne crée pas de baseline si une existe déjà (ex. depuis l'inscription).
+ * Crée une session depuis les données de la récolte auto (historique). Supabase uniquement.
+ * @param {object} data - { server, game_pseudo, player_id, company, initial_rank, initial_xp, initial_honor, initial_rank_points, next_rank_points }
+ * @returns {Promise<boolean>} true si session créée
  */
-function saveBaselineSession(stats) {
-  const sessions = getSessions();
-  const hasBaseline = sessions.some(function(s) { return s.is_baseline === true; });
-  if (hasBaseline) {
+async function addSessionFromScan(data) {
+  if (!data || typeof data !== 'object') return false;
+  var honor = Number(data.initial_honor);
+  var xp = Number(data.initial_xp);
+  var rankPoints = Number(data.initial_rank_points);
+  var nextRankPoints = data.next_rank_points != null ? Number(data.next_rank_points) : rankPoints;
+  var currentRank = (RANK_ID_TO_FR[data.initial_rank] || data.initial_rank || '').trim() || 'Grade inconnu';
+  var now = Date.now();
+  var session = {
+    id: now,
+    date: new Date().toLocaleString('fr-FR'),
+    honor: Math.max(0, honor),
+    xp: Math.max(0, xp),
+    rankPoints: Math.max(0, rankPoints),
+    nextRankPoints: Math.max(0, nextRankPoints),
+    currentRank: currentRank,
+    note: 'Récolte auto',
+    timestamp: now,
+    is_baseline: false,
+    player_id: data.player_id || getActivePlayerId() || null,
+    player_server: data.player_server || data.server || null,
+    player_pseudo: data.game_pseudo || data.player_pseudo || null
+  };
+  var validation = validateSession(session);
+  if (!validation.valid) return false;
+  var supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+  if (!supabase) return false;
+  try {
+    var user = typeof AuthManager !== 'undefined' && typeof AuthManager.getCurrentUser === 'function' ? await AuthManager.getCurrentUser() : null;
+    if (!user || !user.id) return false;
+    var row = _sessionToRow(validation.session, String(now));
+    var rpc = await supabase.rpc('upsert_user_session_secure', { p_row: row });
+    if (rpc.error || (rpc.data && rpc.data.success === false)) {
+      if (typeof showToast === 'function') showToast(rpc.data && rpc.data.error ? rpc.data.error : (rpc.error && rpc.error.message) || 'Erreur sauvegarde', 'error');
+      return false;
+    }
+    SafeStorage.set(CONFIG.STORAGE_KEYS.CURRENT_STATS, {
+      honor: session.honor,
+      xp: session.xp,
+      rankPoints: session.rankPoints,
+      nextRankPoints: session.nextRankPoints,
+      currentRank: session.currentRank,
+      note: '',
+      timestamp: now
+    });
+    await refreshSessionsFromSupabase();
+    if (typeof renderHistory === 'function') renderHistory();
+    if (typeof updateProgressionTab === 'function') updateProgressionTab();
+    if (typeof updateStatsDisplay === 'function') updateStatsDisplay();
+    return true;
+  } catch (e) {
+    Logger.error('[Sessions] addSessionFromScan error:', e?.message || e);
+    if (typeof showToast === 'function') showToast('Erreur lors de l\'enregistrement de la session.', 'error');
+    return false;
+  }
+}
+
+/**
+ * Enregistre le seuil de départ (baseline) - modal premier lancement. Supabase uniquement.
+ */
+async function saveBaselineSession(stats) {
+  var sessions = getSessions();
+  if (sessions.some(function (s) { return s.is_baseline === true; })) {
     if (typeof showToast === 'function') showToast('Un seuil de référence existe déjà.', 'info');
     return;
   }
-  const now = Date.now();
-  const session = {
+  var now = Date.now();
+  var session = {
     id: 'baseline-' + now,
     date: new Date().toLocaleString('fr-FR'),
     honor: stats.honor,
@@ -24,24 +192,28 @@ function saveBaselineSession(stats) {
     currentRank: stats.currentRank,
     note: 'Seuil de départ',
     timestamp: now,
-    is_baseline: true
+    is_baseline: true,
+    player_id: getActivePlayerId() || null,
+    player_server: null,
+    player_pseudo: null
   };
-
-  const validation = validateSession(session);
+  var validation = validateSession(session);
   if (!validation.valid) {
-    showToast(`❌ Erreur : ${validation.error}`, "error");
+    if (typeof showToast === 'function') showToast('❌ Erreur : ' + validation.error, 'error');
     return;
   }
-
-  sessions.push(validation.session);
-  const result = SafeStorage.set(CONFIG.STORAGE_KEYS.SESSIONS, sessions);
-  if (!result.success) {
-    sessions.pop();
-    showToast("❌ Échec de la sauvegarde", "error");
+  var supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+  var user = typeof AuthManager !== 'undefined' && typeof AuthManager.getCurrentUser === 'function' ? await AuthManager.getCurrentUser() : null;
+  if (!supabase || !user || !user.id) {
+    if (typeof showToast === 'function') showToast('Connexion requise pour sauvegarder.', 'error');
     return;
   }
-
-  // Enregistrer aussi les stats actuelles pour que le formulaire principal soit prérempli (évite de retaper)
+  var row = _sessionToRow(validation.session, 'baseline-' + now);
+  var rpc = await supabase.rpc('upsert_user_session_secure', { p_row: row });
+  if (rpc.error || (rpc.data && rpc.data.success === false)) {
+    if (typeof showToast === 'function') showToast(rpc.data && rpc.data.error ? rpc.data.error : 'Échec de la sauvegarde', 'error');
+    return;
+  }
   SafeStorage.set(CONFIG.STORAGE_KEYS.CURRENT_STATS, {
     honor: stats.honor,
     xp: stats.xp,
@@ -51,21 +223,26 @@ function saveBaselineSession(stats) {
     note: '',
     timestamp: Date.now()
   });
-
-  if (typeof DataSync !== 'undefined' && DataSync.queueSync) DataSync.queueSync();
+  await refreshSessionsFromSupabase();
+  if (typeof renderHistory === 'function') renderHistory();
+  if (typeof updateProgressionTab === 'function') updateProgressionTab();
 }
 
-function saveSession() {
-  const stats = getCurrentStats();
-  
+async function saveSession() {
+  var stats = getCurrentStats();
   if (!stats.currentRank || stats.honor === 0) {
-    showToast("Veuillez remplir au moins le grade et les points d'honneur", "warning");
+    if (typeof showToast === 'function') showToast("Veuillez remplir au moins le grade et les points d'honneur", "warning");
     return;
   }
-  
-  const sessions = getSessions();
-  const now = Date.now();
-  const session = {
+  var currentSessions = getSessions();
+  var badge = (typeof getCurrentBadge === 'function' ? getCurrentBadge() : (typeof BackendAPI !== 'undefined' && BackendAPI.getUserBadge ? BackendAPI.getUserBadge() : 'FREE') || '').toString().toUpperCase();
+  if (badge === 'FREE' && currentSessions.some(function (s) { return s.is_baseline; })) {
+    if (typeof showToast === 'function') showToast('Les utilisateurs FREE ne peuvent pas ajouter de nouvelles sessions. Passez en PRO !', 'info');
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('sessionSaveBlocked', { detail: { reason: 'FREE_LIMIT' } }));
+    return;
+  }
+  var now = Date.now();
+  var session = {
     id: now,
     date: new Date().toLocaleString('fr-FR'),
     honor: stats.honor,
@@ -75,28 +252,33 @@ function saveSession() {
     currentRank: stats.currentRank,
     note: stats.note,
     timestamp: now,
-    is_baseline: false
+    is_baseline: false,
+    player_id: getActivePlayerId() || null,
+    player_server: null,
+    player_pseudo: null
   };
-  
-  const validation = validateSession(session);
+  var validation = validateSession(session);
   if (!validation.valid) {
-    showToast(`❌ Erreur de validation : ${validation.error}`, "error");
+    if (typeof showToast === 'function') showToast('❌ Erreur de validation : ' + validation.error, "error");
     return;
   }
-  
-  sessions.push(validation.session);
-  const result = SafeStorage.set(CONFIG.STORAGE_KEYS.SESSIONS, sessions);
-  
-  if (result.success) {
-    showToast("✅ Session sauvegardée !", "success");
-    if (typeof playSound === 'function') playSound('success');
-    if (typeof celebrateSuccess === 'function') celebrateSuccess('session');
-  } else {
-    sessions.pop();
-    showToast("❌ Échec de la sauvegarde", "error");
+  var supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+  var user = typeof AuthManager !== 'undefined' && typeof AuthManager.getCurrentUser === 'function' ? await AuthManager.getCurrentUser() : null;
+  if (!supabase || !user || !user.id) {
+    if (typeof showToast === 'function') showToast('Connexion requise pour sauvegarder.', 'error');
     return;
   }
-  
+  var row = _sessionToRow(validation.session, String(now));
+  var rpc = await supabase.rpc('upsert_user_session_secure', { p_row: row });
+  if (rpc.error || (rpc.data && rpc.data.success === false)) {
+    if (typeof showToast === 'function') showToast(rpc.data && rpc.data.error ? rpc.data.error : 'Échec de la sauvegarde', 'error');
+    return;
+  }
+
+  showToast("✅ Session sauvegardée !", "success");
+  if (typeof playSound === 'function') playSound('success');
+  if (typeof celebrateSuccess === 'function') celebrateSuccess('session');
+  await refreshSessionsFromSupabase();
   saveCurrentStats();
   renderHistory();
   updateProgressionTab();
@@ -107,65 +289,116 @@ function saveSession() {
   if (typeof DataSync !== 'undefined' && DataSync.queueSync) DataSync.queueSync();
 }
 
-function getSessions() {
-  const raw = SafeStorage.get(CONFIG.STORAGE_KEYS.SESSIONS, []);
-  return Array.isArray(raw) ? raw : [];
+function getSessionsAll() {
+  return _sessionsCache;
 }
 
-function deleteSession(id) {
-  const sessions = getSessions();
-  const sessionToDelete = sessions.find(s => String(s.id) === String(id));
-  
-  if (!sessionToDelete) {
-    showToast("❌ Session introuvable", "error");
-    return;
-  }
-  
-  // Sauvegarder pour undo
-  if (typeof ActionHistory !== 'undefined') {
-    ActionHistory.push({
-      type: 'session_delete',
-      data: { session: JSON.parse(JSON.stringify(sessionToDelete)) }
-    });
-  }
-  
-  const filtered = sessions.filter(s => String(s.id) !== String(id));
-  
-  const result = SafeStorage.set(CONFIG.STORAGE_KEYS.SESSIONS, filtered);
-  if (result.success && filtered.length === 0) {
-    if (typeof localStorage !== 'undefined') localStorage.setItem('darkOrbitSessionsCleared', '1');
-    if (typeof UnifiedStorage !== 'undefined' && typeof UnifiedStorage.invalidateCache === 'function') {
-      UnifiedStorage.invalidateCache(CONFIG.STORAGE_KEYS.SESSIONS);
+function getSessions() {
+  var all = getSessionsAll();
+  var activeId = getActivePlayerId();
+  if (!activeId) return all;
+  return all.filter(function (s) { return (s.player_id || '') === activeId; });
+}
+
+/** Même règle que l'import bulk : local_id = id || timestamp || imp-index */
+function _effectiveImportLocalId(session, index) {
+  return String(session.id || session.timestamp || 'imp-' + index);
+}
+
+function _i18nFmtImport(key, params) {
+  var raw = (typeof i18nT === 'function') ? i18nT(key) : key;
+  if (!params) return raw;
+  var s = raw;
+  for (var pk in params) {
+    if (Object.prototype.hasOwnProperty.call(params, pk)) {
+      s = s.split('{{' + pk + '}}').join(String(params[pk]));
     }
   }
-  if (result.success) {
-    showToast("Session supprimée (Ctrl+Z pour annuler)", "success");
-  } else {
-    showToast("❌ Erreur lors de la suppression", "error");
+  return s;
+}
+
+/**
+ * Doublons d'identifiants dans le fichier + collisions avec les sessions déjà chargées (même local_id).
+ */
+function _analyzeSessionImportRisks(validatedSessions) {
+  var idToCount = {};
+  var i;
+  for (i = 0; i < validatedSessions.length; i++) {
+    var lid = _effectiveImportLocalId(validatedSessions[i], i);
+    idToCount[lid] = (idToCount[lid] || 0) + 1;
+  }
+  var duplicateIdKeys = 0;
+  var duplicateExtraRows = 0;
+  for (var k in idToCount) {
+    if (Object.prototype.hasOwnProperty.call(idToCount, k) && idToCount[k] > 1) {
+      duplicateIdKeys++;
+      duplicateExtraRows += idToCount[k] - 1;
+    }
+  }
+  var existingSet = {};
+  var all = getSessionsAll();
+  for (i = 0; i < all.length; i++) {
+    existingSet[String(all[i].id)] = true;
+  }
+  var collisionUnique = 0;
+  var seenImp = {};
+  for (i = 0; i < validatedSessions.length; i++) {
+    var id = _effectiveImportLocalId(validatedSessions[i], i);
+    if (existingSet[id] && !seenImp[id]) {
+      seenImp[id] = true;
+      collisionUnique++;
+    }
+  }
+  return { duplicateIdKeys: duplicateIdKeys, duplicateExtraRows: duplicateExtraRows, collisionUnique: collisionUnique };
+}
+
+async function deleteSession(id) {
+  var all = getSessionsAll();
+  var sessionToDelete = all.find(function (s) { return String(s.id) === String(id); });
+  if (!sessionToDelete) {
+    if (typeof showToast === 'function') showToast("❌ Session introuvable", "error");
     return;
   }
-  
-  renderHistory();
-  updateProgressionTab();
+  if (typeof ActionHistory !== 'undefined') {
+    ActionHistory.push({ type: 'session_delete', data: { session: JSON.parse(JSON.stringify(sessionToDelete)) } });
+  }
+  var supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+  var user = typeof AuthManager !== 'undefined' && typeof AuthManager.getCurrentUser === 'function' ? await AuthManager.getCurrentUser() : null;
+  if (!supabase || !user || !user.id) {
+    if (typeof showToast === 'function') showToast("Connexion requise.", "error");
+    return;
+  }
+  var idStr = String(id);
+  var isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idStr);
+  var err = isUuid
+    ? (await supabase.from('user_sessions').delete().eq('user_id', user.id).eq('id', idStr)).error
+    : (await supabase.from('user_sessions').delete().eq('user_id', user.id).eq('local_id', idStr)).error;
+  if (err) {
+    if (typeof showToast === 'function') showToast("❌ Erreur suppression: " + (err.message || err), "error");
+    return;
+  }
+  await refreshSessionsFromSupabase();
+  if (typeof showToast === 'function') showToast("Session supprimée (Ctrl+Z pour annuler)", "success");
+  if (typeof renderHistory === 'function') renderHistory();
+  if (typeof updateProgressionTab === 'function') updateProgressionTab();
   if (typeof updateStatsDisplay === 'function') updateStatsDisplay();
-  startSessionTimer();
+  if (typeof startSessionTimer === 'function') startSessionTimer();
 }
 
 function loadSession(id) {
   const sessions = getSessions();
   const session = sessions.find(s => String(s.id) === String(id));
   const selected = document.getElementById("selected");
-  
-  if (!session) return;
-  
+  const honorEl = document.getElementById("honor");
+  if (!session || !honorEl) return;
+
   const fmt = (typeof window !== 'undefined' && typeof window.numFormat === 'function') ? window.numFormat : function(n) { return Number(n).toLocaleString("en-US"); };
-  document.getElementById("honor").value = session.honor != null && session.honor !== '' ? fmt(session.honor) : '';
-  document.getElementById("xp").value = session.xp != null && session.xp !== '' ? fmt(session.xp) : '';
-  document.getElementById("rankPoints").value = session.rankPoints != null && session.rankPoints !== '' ? fmt(session.rankPoints) : '';
-  document.getElementById("nextRankPoints").value = session.nextRankPoints != null && session.nextRankPoints !== '' ? fmt(session.nextRankPoints) : '';
-  document.getElementById("sessionNote").value = session.note || '';
-  
-  if (session.currentRank) {
+  honorEl.value = session.honor != null && session.honor !== '' ? fmt(session.honor) : '';
+  var xpEl = document.getElementById("xp"); if (xpEl) xpEl.value = session.xp != null && session.xp !== '' ? fmt(session.xp) : '';
+  var rpEl = document.getElementById("rankPoints"); if (rpEl) rpEl.value = session.rankPoints != null && session.rankPoints !== '' ? fmt(session.rankPoints) : '';
+  var nrpEl = document.getElementById("nextRankPoints"); if (nrpEl) nrpEl.value = session.nextRankPoints != null && session.nextRankPoints !== '' ? fmt(session.nextRankPoints) : '';
+
+  if (session.currentRank && selected) {
     const rankData = RANKS_DATA.find(r => r.name === session.currentRank);
     if (rankData) {
       selected.innerHTML = `<div class="selected-rank">
@@ -200,52 +433,6 @@ function loadLastSessionIntoForm() {
   }, sessions[0]);
   
   loadSession(lastSession.id);
-}
-
-async function clearHistory() {
-  var ok = false;
-  if (typeof ModernConfirm !== 'undefined' && ModernConfirm.show) {
-    ok = await ModernConfirm.show({ title: 'Effacer l\'historique', message: "Êtes-vous sûr de vouloir supprimer tout l'historique ?", confirmText: 'Supprimer', cancelText: 'Annuler', type: 'warning' });
-  } else {
-    ok = confirm("Êtes-vous sûr de vouloir supprimer tout l'historique ?");
-  }
-  if (!ok) return;
-
-  try {
-    if (typeof AuthManager !== 'undefined' && typeof AuthManager.getCurrentUser === 'function' && typeof getSupabaseClient === 'function') {
-      try {
-        const user = await AuthManager.getCurrentUser();
-        if (user && user.id) {
-          const supabase = getSupabaseClient();
-          await supabase.from('user_sessions').delete().eq('user_id', user.id);
-        }
-      } catch (authErr) {
-        console.warn('clearHistory: Supabase delete skipped', authErr);
-      }
-    }
-
-    SafeStorage.remove(CONFIG.STORAGE_KEYS.SESSIONS);
-    if (typeof localStorage !== 'undefined') localStorage.setItem('darkOrbitSessionsCleared', '1');
-    if (typeof UnifiedStorage !== 'undefined' && typeof UnifiedStorage.invalidateCache === 'function') {
-      UnifiedStorage.invalidateCache(CONFIG.STORAGE_KEYS.SESSIONS);
-    }
-    var sessionCount = typeof getSessions === 'function' ? getSessions().length : 0;
-    if (typeof setAppAccessFromSessions === 'function') setAppAccessFromSessions(sessionCount > 0 ? sessionCount : 1);
-
-    if (typeof renderHistory === 'function') renderHistory();
-    if (typeof updateStatsDisplay === 'function') updateStatsDisplay();
-    if (typeof updateProgressionTab === 'function') updateProgressionTab();
-    if (typeof startSessionTimer === 'function') startSessionTimer();
-    if (typeof showToast === 'function') showToast("Historique effacé", "success");
-    if (typeof setAppAccessFromSessions === 'function') setAppAccessFromSessions(1);
-    if (typeof initBaselineSetup === 'function') {
-      requestAnimationFrame(function () { initBaselineSetup(true); });
-    }
-    if (typeof DataSync !== 'undefined' && DataSync.queueSync) DataSync.queueSync();
-  } catch (e) {
-    console.error('clearHistory error:', e);
-    if (typeof showToast === 'function') showToast("❌ Erreur lors de l'effacement de l'historique", "error");
-  }
 }
 
 // ==========================================
@@ -323,7 +510,7 @@ function handleImportFile(e) {
   
   const reader = new FileReader();
   
-  reader.onload = function(event) {
+  reader.onload = async function(event) {
     try {
       const data = JSON.parse(event.target.result);
       
@@ -344,7 +531,7 @@ function handleImportFile(e) {
         if (!validationResults.valid) {
           showToast(`❌ Validation échouée : ${validationResults.error}`, "error");
           if (validationResults.errors && validationResults.errors.length > 0) {
-            console.error('Import errors:', validationResults.errors);
+            Logger.error('Import errors:', validationResults.errors);
           }
           e.target.value = '';
           return;
@@ -359,43 +546,115 @@ function handleImportFile(e) {
       // Demander confirmation avant d'écraser les données
       const sessionsCount = validationResults.sessions ? validationResults.sessions.length : 0;
       const skippedCount = validationResults.skipped || 0;
-      
-      let confirmMessage = 'Voulez-vous importer ces données ?\n\n⚠️ Cela écrasera vos données actuelles !\n\n';
-      
+      const IMPORT_MAX_GUARD = 500;
+      var risks = { duplicateIdKeys: 0, duplicateExtraRows: 0, collisionUnique: 0 };
+      if (sessionsCount > 0 && validationResults.sessions) {
+        risks = _analyzeSessionImportRisks(validationResults.sessions);
+      }
+
+      var confirmMessage = _i18nFmtImport('import_confirm_intro') + '\n\n' + _i18nFmtImport('import_confirm_overwrite') + '\n\n';
+
       if (sessionsCount > 0) {
-        confirmMessage += `📊 Sessions valides : ${sessionsCount}\n`;
+        confirmMessage += _i18nFmtImport('import_confirm_valid_sessions', { n: sessionsCount }) + '\n';
         if (skippedCount > 0) {
-          confirmMessage += `⚠️ Sessions ignorées (invalides) : ${skippedCount}\n`;
+          confirmMessage += _i18nFmtImport('import_confirm_skipped_sessions', { n: skippedCount }) + '\n';
+        }
+        if (sessionsCount > IMPORT_MAX_GUARD) {
+          confirmMessage += _i18nFmtImport('import_confirm_truncated', { max: IMPORT_MAX_GUARD }) + '\n';
+        }
+        if (risks.duplicateIdKeys > 0) {
+          confirmMessage += _i18nFmtImport('import_confirm_duplicate_ids', {
+            ids: risks.duplicateIdKeys,
+            rows: risks.duplicateExtraRows
+          }) + '\n';
+        }
+        if (risks.collisionUnique > 0) {
+          confirmMessage += _i18nFmtImport('import_confirm_collisions', { n: risks.collisionUnique }) + '\n';
         }
       }
-      
+
       if (eventsCount > 0) {
-        confirmMessage += `📅 Événements : ${eventsCount}\n`;
+        confirmMessage += _i18nFmtImport('import_confirm_events_count', { n: eventsCount }) + '\n';
       }
-      
+
       if (data.currentStats) {
-        confirmMessage += '✅ Stats actuelles : Oui\n';
+        confirmMessage += _i18nFmtImport('import_confirm_has_stats') + '\n';
       }
-      
+
       if (data.exportDate) {
-        confirmMessage += `\n📅 Exporté le : ${data.exportDate}`;
+        confirmMessage += '\n' + _i18nFmtImport('import_confirm_export_date', { date: data.exportDate });
       }
-      
+
       if (!confirm(confirmMessage)) {
-        showToast("Import annulé", "warning");
+        showToast(_i18nFmtImport('import_cancelled'), 'warning');
         e.target.value = '';
         return;
       }
-      
-      // Importer les sessions si elles existent
-      if (validationResults.sessions && validationResults.sessions.length > 0) {
-        const result = SafeStorage.set(CONFIG.STORAGE_KEYS.SESSIONS, validationResults.sessions);
-        
-        if (!result.success) {
-          showToast("❌ Échec de l'import des sessions", "error");
+
+      var LARGE_IMPORT_THRESHOLD = 50;
+      if (sessionsCount >= LARGE_IMPORT_THRESHOLD) {
+        var secondMsg = _i18nFmtImport('import_confirm_large_second', { n: sessionsCount });
+        if (!confirm(secondMsg)) {
+          showToast(_i18nFmtImport('import_cancelled'), 'warning');
           e.target.value = '';
           return;
         }
+      }
+
+      if (validationResults.sessions && validationResults.sessions.length > 0) {
+        var supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+        var user = typeof AuthManager !== 'undefined' && typeof AuthManager.getCurrentUser === 'function' ? await AuthManager.getCurrentUser() : null;
+        if (!supabase || !user || !user.id) {
+          showToast("Connexion requise pour importer des sessions.", "error");
+          e.target.value = '';
+          return;
+        }
+
+        var IMPORT_MAX = 500;
+        // Un RPC bulk par chunk (moins d’allers-retours HTTP qu’un upsert par session)
+        var CHUNK_SIZE = 100;
+        var CHUNK_DELAY_MS = 150;
+
+        var sessionsToImport = validationResults.sessions;
+        if (sessionsToImport.length > IMPORT_MAX) {
+          Logger.warn('[import] ' + sessionsToImport.length + ' sessions dans le fichier — tronqué à ' + IMPORT_MAX);
+          showToast('⚠️ Fichier trop volumineux : seules les ' + IMPORT_MAX + ' premières sessions seront importées.', 'warning');
+          sessionsToImport = sessionsToImport.slice(0, IMPORT_MAX);
+        }
+
+        var totalChunks = Math.ceil(sessionsToImport.length / CHUNK_SIZE);
+        var importError = null;
+
+        for (var ci = 0; ci < totalChunks; ci++) {
+          var chunk = sessionsToImport.slice(ci * CHUNK_SIZE, (ci + 1) * CHUNK_SIZE);
+          var rows = chunk.map(function (s, j) {
+            var globalIdx = ci * CHUNK_SIZE + j;
+            return _sessionToRow(s, String(s.id || s.timestamp || 'imp-' + globalIdx));
+          });
+          var bulkRpc = await supabase.rpc('upsert_user_sessions_bulk', { p_rows: rows });
+          Logger.info('[import] chunk ' + (ci + 1) + '/' + totalChunks + ' traité (bulk ' + rows.length + ')');
+
+          if (bulkRpc.error) {
+            importError = (bulkRpc.error && bulkRpc.error.message) || 'Erreur inconnue';
+            break;
+          }
+          if (bulkRpc.data && bulkRpc.data.success === false) {
+            importError = (bulkRpc.data.error) || 'Erreur inconnue';
+            break;
+          }
+
+          if (ci < totalChunks - 1) {
+            await new Promise(function (r) { setTimeout(r, CHUNK_DELAY_MS); });
+          }
+        }
+
+        if (importError) {
+          showToast('❌ Échec import session: ' + importError, 'error');
+          e.target.value = '';
+          return;
+        }
+
+        await refreshSessionsFromSupabase();
       }
       
       // Importer les stats actuelles si elles existent
@@ -430,7 +689,7 @@ function handleImportFile(e) {
       showToast('✅ Données importées avec succès !', "success");
       
     } catch (error) {
-      console.error('Erreur lors de l\'import:', error);
+      Logger.error('Erreur lors de l\'import:', error);
       showToast("❌ Erreur : Fichier JSON invalide ou corrompu", "error");
     }
     
@@ -445,36 +704,61 @@ function handleImportFile(e) {
   reader.readAsText(file);
 }
 
-/**
- * Réinitialise le seuil de départ - supprime la baseline et réaffiche la modal
- */
-async function resetBaseline() {
-  var ok = false;
-  if (typeof ModernConfirm !== 'undefined' && ModernConfirm.show) {
-    ok = await ModernConfirm.show({ title: 'Réinitialiser le seuil', message: 'Réinitialiser le seuil de départ ? Vous devrez ressaisir vos stats actuelles.', confirmText: 'Réinitialiser', cancelText: 'Annuler', type: 'warning' });
-  } else {
-    ok = confirm('Réinitialiser le seuil de départ ? Vous devrez ressaisir vos stats actuelles.');
+async function saveBaselineFromScan(scanData) {
+  if (!scanData || typeof scanData !== 'object') return { ok: false, error: 'Données invalides' };
+  // Ne jamais créer une deuxième baseline pour un même couple (player_id, player_server) :
+  // garder uniquement la toute première (premier scan) pour ce joueur et ce serveur.
+  if (typeof getSessionsAll === 'function') {
+    var allSessions = getSessionsAll();
+    var pid = scanData.player_id || null;
+    var pserver = scanData.server || null;
+    if (allSessions.some(function (s) { return s.is_baseline === true && (s.player_id || null) === pid && (s.player_server || null) === pserver; })) {
+      return { ok: true };
+    }
   }
-  if (!ok) return;
-
-  const sessions = getSessions().filter(s => !s.is_baseline);
-  const result = SafeStorage.set(CONFIG.STORAGE_KEYS.SESSIONS, sessions);
-
-  if (result.success) {
-    showToast('Seuil réinitialisé', 'success');
-    renderHistory();
-    updateProgressionTab();
-    if (typeof initBaselineSetup === 'function') initBaselineSetup(true);
-  } else {
-    showToast('❌ Erreur', 'error');
+  const supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+  if (!supabase) return { ok: false, error: 'Supabase non configuré' };
+  const now = Date.now();
+  const sessionDate = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const honor = scanData.initial_honor != null ? Number(scanData.initial_honor) : 0;
+  const xp = scanData.initial_xp != null ? Number(scanData.initial_xp) : 0;
+  const rankPoints = scanData.initial_rank_points != null ? Number(scanData.initial_rank_points) : 0;
+  const nextRankPoints = scanData.next_rank_points != null ? Number(scanData.next_rank_points) : rankPoints;
+  const currentRank = (scanData.initial_rank || '').toString().trim();
+  const pRow = {
+    local_id: 'baseline-' + now,
+    // Envoi en String pour éviter la perte de précision JS (Number.MAX_SAFE_INTEGER).
+    // Les RPCs lisent via ->> (TEXT) puis ::BIGINT.
+    honor: String(honor),
+    xp: String(xp),
+    rank_points: String(rankPoints),
+    next_rank_points: String(nextRankPoints || 0),
+    current_rank: currentRank,
+    note: 'Base (scan inscription)',
+    session_date: sessionDate,
+    session_timestamp: now,
+    is_baseline: true,
+    player_id: scanData.player_id || null,
+    player_server: scanData.server || null,
+    player_pseudo: scanData.game_pseudo || null
+  };
+  const { data: rpcData, error: rpcError } = await supabase.rpc('insert_user_session_secure', { p_row: pRow });
+  if (rpcError) {
+    Logger.error('[sessions] saveBaselineFromScan:', rpcError.message);
+    return { ok: false, error: rpcError.message };
   }
+  if (rpcData && rpcData.success === false) {
+    Logger.error('[sessions] saveBaselineFromScan:', rpcData.error || 'Erreur RPC');
+    return { ok: false, error: rpcData.error || 'Erreur RPC' };
+  }
+  return { ok: true };
 }
+
+window.saveBaselineFromScan = saveBaselineFromScan;
 
 // Make functions globally available
 window.deleteSession = deleteSession;
 window.loadSession = loadSession;
 window.loadLastSessionIntoForm = loadLastSessionIntoForm;
-window.resetBaseline = resetBaseline;
 window.saveBaselineSession = saveBaselineSession;
 
-console.log('💾 Module Sessions chargé');

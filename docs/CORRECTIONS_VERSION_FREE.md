@@ -1,5 +1,7 @@
 # Corrections version FREE — Rapport final
 
+> **Historique** : compte-rendu d’une vague de correctifs UI (export, sidebar, toasts). Pour l’architecture et les limites de sessions **actuelles** (RPC Supabase), voir **`docs/APP_CONTEXT.md`** et **`supabase/migrations/20260303000010_final-session-rpcs-canonical.sql`**. Ne pas confondre avec une stratégie « sessions illimitées » sauf si la migration `remove-session-limits-unlimited.sql` a été appliquée **volontairement** sur votre projet.
+
 ## 1. Fichiers modifiés
 
 ### Frontend

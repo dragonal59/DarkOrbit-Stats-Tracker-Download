@@ -26,8 +26,9 @@ const OUTPUT_FILE = path.join(BUILD_DIR, 'config.supabase.prod.js');
 
 const url = process.env.SUPABASE_URL || '';
 const anonKey = process.env.SUPABASE_ANON_KEY || '';
-// TODO: Définir AUTH_REDIRECT_BASE dans .env après déploiement GitHub Pages (ex. https://user.github.io/repo/)
-const authRedirectBase = process.env.AUTH_REDIRECT_BASE || 'https://GITHUB_USERNAME.github.io/REPO_NAME/';
+const authRedirectBase = process.env.AUTH_REDIRECT_BASE || 'https://dragonal59.github.io/darkorbit-tracker-auth/';
+const paypalClientId = process.env.PAYPAL_CLIENT_ID || '';
+const paypalPlanId = process.env.PAYPAL_PLAN_ID || '';
 
 function run() {
   if (!url || !anonKey) {
@@ -50,13 +51,15 @@ function run() {
   }
 
   const content = `/**
- * Config Supabase injectée au build — NE PAS VERSIONNER
+ * Config Supabase + PayPal injectée au build — NE PAS VERSIONNER
  * Généré par scripts/inject-supabase-config.js
  */
 module.exports = {
   url: ${JSON.stringify(url)},
   anonKey: ${JSON.stringify(anonKey)},
-  authRedirectBase: ${JSON.stringify(authRedirectBase)}
+  authRedirectBase: ${JSON.stringify(authRedirectBase)},
+  paypalClientId: ${JSON.stringify(paypalClientId)},
+  paypalPlanId: ${JSON.stringify(paypalPlanId)}
 };
 `;
 

@@ -1,0 +1,48 @@
+{
+  "id": "galaxy_gate_weekend",
+  "visible": true,
+  "image": "img/events/galaxy_gate_weekend.jpg",
+  "names": {
+    "fr": "Week-end portails",
+    "en": "Galaxy Gate Weekend",
+    "de": "Galaxy Gate Wochenende",
+    "es": "Fin de Semana de Portales",
+    "ru": "Выходные Галактических Врат",
+    "tr": "Galaksi Kapısı Haftasonu"
+  },
+  "descriptions": {
+    "fr": "À cause d'une anomalie, certains portails intergalactiques confèrent des récompenses bonus ce week-end : vous pourrez gagner des prix incroyables ! Préparez-vous à prouver que vous êtes le meilleur pilote dans l'espace !",
+    "en": "An abnormality has caused certain Galaxy Gates to yield extra rewards this weekend and you could win amazing prizes! Get prepared for action, ready to reign and prove you're the best pilot for the job!",
+    "de": "Eine Anomalie hat dazu geführt, dass bestimmte Galaxy Gates dieses Wochenende zusätzliche Belohnungen bieten und du unglaubliche Preise gewinnen kannst! Mach dich bereit und beweise, dass du der beste Pilot bist!",
+    "es": "¡Una anomalía ha provocado que ciertos Portales Galácticos otorguen recompensas extra este fin de semana y podrías ganar premios increíbles! ¡Prepárate para la acción y demuestra que eres el mejor piloto!",
+    "ru": "Аномалия привела к тому, что определённые Галактические Врата дают дополнительные награды в эти выходные — вы можете выиграть невероятные призы! Готовьтесь к бою и докажите, что вы лучший пилот!",
+    "tr": "Bir anomali nedeniyle belirli Galaksi Kapıları bu hafta sonu ekstra ödüller sunuyor ve inanılmaz ödüller kazanabilirsiniz! Harekete geçmeye hazır olun ve en iyi pilot olduğunuzu kanıtlayın!"
+  },
+  "keywords": [
+    "galaxy gate weekend",
+    "week-end portails",
+    "galaxy gate wochenende",
+    "fin de semana portales",
+    "выходные галактических врат",
+    "galaksi kapısı haftasonu",
+    "wochenende",
+    "haftasonu",
+    "выходные"
+  ],
+  "exclude_keywords": [
+    "galaxy gate doubler",
+    "double gain",
+    "double",
+    "doubler",
+    "ikiye",
+    "doppelter",
+    "двойной",
+    "special rewards day",
+    "journée de récompenses spéciales",
+    "enhanced lf-4",
+    "lf-4 amélioré",
+    "g-champion",
+    "dispatch day",
+    "jour de l'expédition"
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "id": "unstable_modules_salvage",
+  "visible": true,
+  "image": "img/events/unstable_modules_salvage.jpg",
+  "image_urls": ["umexpansionAug22", "breaking_news_umexpansion"],
+  "names": {
+    "fr": "Modules instables - Récupération",
+    "en": "Unstable Modules - Salvage",
+    "de": "",
+    "es": "",
+    "ru": "",
+    "tr": ""
+  },
+  "descriptions": {
+    "fr": "Après des mois d'études ininterrompues, nos meilleurs chercheurs ont fini par réussir à exploiter l'énergie temporelle des noyaux de récupération. Restabilisez vos modules instables l'esprit tranquille avec la nouvelle fonctionnalité de récupération.",
+    "en": "After months of endless research, our top researchers have finally found success in harnessing the temporal energy of Salvage Cores. Restabilize your unstable modules with peace of mind with the new Salvage function.",
+    "de": "",
+    "es": "",
+    "ru": "",
+    "tr": ""
+  },
+  "keywords": [
+    "unstable modules salvage",
+    "modules instables récupération",
+    "salvage cores",
+    "noyaux de récupération",
+    "unstable modules",
+    "modules instables",
+    "salvage function",
+    "fonctionnalité de récupération",
+    "temporal energy",
+    "énergie temporelle",
+    "restabilize",
+    "restabilisez"
+  ],
+  "exclude_keywords": [
+    "galaxy gate weekend",
+    "double gain",
+    "enhanced lf4"
+  ]
+}

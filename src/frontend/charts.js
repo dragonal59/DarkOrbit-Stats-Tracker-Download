@@ -9,35 +9,44 @@ function createProgressChart(sessions) {
   const xpCanvas = document.getElementById('xpChart');
   const rankCanvas = document.getElementById('rankChart');
   if (!honorCanvas || !xpCanvas || !rankCanvas) return;
-  
+
+  const chartContainer = document.getElementById('chartContainer');
+  if (chartContainer && chartContainer.style.display === 'none') return;
+
   // Détruire les graphiques existants
   if (progressCharts.length) {
     progressCharts.forEach(chart => chart.destroy());
   }
   progressCharts = [];
-  
+
   const labels = sessions.map(s => new Date(s.timestamp).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }));
   const honorData = sessions.map(s => s.honor);
   const xpData = sessions.map(s => s.xp);
-  const rankData = sessions.map(s => s.rankPoints);
-  
+  const rankData = sessions.map(s => (Number(s?.rankPoints ?? s?.rank_points ?? 0) || 0));
+
   const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
   const textColor = isDark ? '#cbd5e1' : '#334155';
   const gridColor = isDark ? '#334155' : '#e2e8f0';
-  
-  progressCharts.push(
-    createLineChart(honorCanvas, labels, honorData, 'Points d\'honneur', '#38bdf8', textColor, gridColor)
-  );
-  progressCharts.push(
-    createLineChart(xpCanvas, labels, xpData, 'Points d\'XP', '#22c55e', textColor, gridColor)
-  );
-  progressCharts.push(
-    createLineChart(rankCanvas, labels, rankData, 'Points de grade', '#f59e0b', textColor, gridColor)
-  );
+
+  // Créer les graphiques après un tick de layout pour éviter width/height -1 (Chart.js)
+  function createCharts() {
+    if (progressCharts.length) return;
+    progressCharts.push(
+      createLineChart(honorCanvas, labels, honorData, 'Points d\'honneur', '#38bdf8', textColor, gridColor)
+    );
+    progressCharts.push(
+      createLineChart(xpCanvas, labels, xpData, 'Points d\'XP', '#22c55e', textColor, gridColor)
+    );
+    progressCharts.push(
+      createLineChart(rankCanvas, labels, rankData, 'Points de grade', '#f59e0b', textColor, gridColor)
+    );
+  }
+  requestAnimationFrame(() => requestAnimationFrame(createCharts));
 }
 
 // Fonction pour mettre à jour le graphique lors du changement de thème
 function refreshChartColors() {
+  if (typeof getSessions !== 'function') return;
   if (progressCharts.length) {
     const sessions = getSessions();
     if (sessions.length >= 2) {
@@ -124,5 +133,3 @@ function hexToRgba(hex, alpha) {
   const b = parseInt(cleanHex.substring(4, 6), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
-
-console.log('📊 Module Chart chargé');

@@ -15,8 +15,6 @@ window.isSupabaseConfigured = function() {
          window.SUPABASE_CONFIG.anonKey !== '';
 };
 
-if (window.isSupabaseConfigured()) {
-  console.log('✅ Supabase config chargée:', window.SUPABASE_CONFIG.url);
-} else {
-  console.warn('⚠️ Supabase non configuré : définir SUPABASE_URL et SUPABASE_ANON_KEY dans un fichier .env à la racine du projet (voir .env.example).');
+if (!window.isSupabaseConfigured()) {
+  if (typeof Logger !== 'undefined' && Logger.warn) Logger.warn('⚠️ Supabase non configuré : définir SUPABASE_URL et SUPABASE_ANON_KEY dans un fichier .env à la racine du projet (voir .env.example).');
 }

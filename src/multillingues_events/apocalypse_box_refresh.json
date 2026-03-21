@@ -1,0 +1,22 @@
+{
+  "id": "apocalypse_box_refresh",
+  "visible": true,
+  "image": "img/events/apocalypse_box_refresh.jpg",
+  "names": {
+    "fr": "Actualisation de la boîte de l'apocalypse",
+    "en": "Apocalypse Box Refresh",
+    "de": "Apokalypse-Box Aktualisierung",
+    "es": "Actualización de la Caja del Apocalipsis",
+    "ru": "Обновление Ящика Апокалипсиса",
+    "tr": "Kıyamet Kutusu Yenilemesi"
+  },
+  "descriptions": {
+    "fr": "Nous avons mis à jour la boîte de l'apocalypse ! Confectionnez ou achetez des packs de clés pour obtenir le tout nouveau design de drone Carbonite Spectrum et des boosters de statistiques JcE temporaires !",
+    "en": "We've refreshed the Apocalypse Box! Craft or buy pack of keys for the brand new Carbonite Spectrum Drone Design and temporary PVE stat boosts!",
+    "de": "Wir haben die Apokalypse-Box aktualisiert! Stelle Schlüsselpakete her oder kaufe sie, um das brandneue Carbonite Spectrum Drohnendesign und temporäre PvE-Stat-Boosts zu erhalten!",
+    "es": "¡Hemos actualizado la Caja del Apocalipsis! ¡Fabrica o compra paquetes de llaves para obtener el nuevo diseño de dron Carbonite Spectrum y mejoras de estadísticas JcJ temporales!",
+    "ru": "Мы обновили Ящик Апокалипсиса! Создавайте или покупайте наборы ключей, чтобы получить совершенно новый дизайн дрона Carbonite Spectrum и временные бусты характеристик PvE!",
+    "tr": "Kıyamet Kutusunu yeniledik! Yepyeni Carbonite Spectrum Drone Tasarımı ve geçici PvE stat güçlendirmeleri için anahtar paketleri yap veya satın al!"
+  },
+  "keywords": ["apocalypse box refresh", "actualisation de la boîte de l'apocalypse", "apokalypse-box aktualisierung", "actualización de la caja del apocalipsis", "обновление ящика апокалипсиса", "kıyamet kutusu yenilemesi", "carbonite spectrum", "drone design", "pve"],"exclude_keywords":["obsidian","obsidiana","caja de obsidiana"]
+}

@@ -1,0 +1,35 @@
+{
+  "id": "instagram",
+  "visible": true,
+  "image": "img/events/instagram.jpg",
+  "names": {
+    "fr": "DarkOrbit sur Instagram !",
+    "en": "DarkOrbit on Instagram!",
+    "de": "DarkOrbit auf Instagram!",
+    "es": "¡DarkOrbit en Instagram!",
+    "ru": "DarkOrbit в Instagram!",
+    "tr": "DarkOrbit Instagram'da!"
+  },
+  "descriptions": {
+    "fr": "Suivez notre chaîne Instagram officielle DarkOrbit pour profiter de contenus exclusifs et d'informations passionnantes !",
+    "en": "Follow our official DarkOrbit Instagram channel for exclusive content and exciting updates!",
+    "de": "Folge unserem offiziellen DarkOrbit Instagram-Kanal für exklusive Inhalte und spannende Updates!",
+    "es": "¡Sigue nuestro canal oficial de Instagram de DarkOrbit para disfrutar de contenido exclusivo y emocionantes actualizaciones!",
+    "ru": "Подписывайтесь на официальный Instagram-канал DarkOrbit для эксклюзивного контента и захватывающих новостей!",
+    "tr": "Özel içerikler ve heyecan verici güncellemeler için resmi DarkOrbit Instagram kanalımızı takip edin!"
+  },
+  "keywords": [
+    "darkorbit on instagram",
+    "darkorbit sur instagram",
+    "instagram",
+    "darkorbit auf instagram",
+    "darkorbit en instagram",
+    "darkorbit в instagram",
+    "darkorbit instagram'da"
+  ],
+  "exclude_keywords": [
+    "discord",
+    "join do discord",
+    "rejoignez do discord"
+  ]
+}

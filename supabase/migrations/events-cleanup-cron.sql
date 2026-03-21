@@ -1,0 +1,3 @@
+-- Optionnel : cron horaire pour nettoyer les événements expirés (app fermée au moment de l'expiration)
+-- Nécessite l'extension pg_cron (activée dans Supabase Dashboard > Database > Extensions)
+-- SELECT cron.schedule('cleanup-expired-events', '0 * * * *', 'SELECT public.cleanup_expired_events()');

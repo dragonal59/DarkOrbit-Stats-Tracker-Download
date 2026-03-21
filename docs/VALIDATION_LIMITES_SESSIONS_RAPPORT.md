@@ -1,6 +1,11 @@
 # Rapport de validation — Limites de sessions (FREE=1, PRO=10)
 
-**Date :** 11 février 2026  
+> ⚠ **Statut : document historique (obsolète pour la version actuelle).**  
+> Ce rapport valide l’ancienne configuration où FREE était limité à 1 session et PRO à 10 sessions côté Supabase.  
+> Dans la version actuelle de l’app, ces limites ont été remplacées par des **sessions illimitées pour tous les badges** (`remove-session-limits-unlimited.sql`, voir `CORRECTIONS_VERSION_FREE.md`).  
+> Utiliser ce fichier uniquement comme référence d’audit, pas comme procédure à rejouer sur une base déjà migrée.
+
+**Date (configuration historique) :** 11 février 2026  
 **Périmètre :** Exécution/vérification des migrations Supabase et tests des limites.
 
 ---

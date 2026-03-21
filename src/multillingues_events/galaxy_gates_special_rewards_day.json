@@ -1,0 +1,55 @@
+{
+  "id": "galaxy_gates_special_rewards_day",
+  "visible": true,
+  "image": "img/events/special_galaxy_gate_weekend.jpg",
+  "image_urls": ["sale_galaxy_gate"],
+  "names": {
+    "fr": "Journée de récompenses spéciales des Portails Galactiques",
+    "en": "Galaxy Gates Special Rewards Day",
+    "de": "Galaxy Gates Spezielle Belohnungen Tag",
+    "es": "Día de Recompensas Especiales de Portales Galácticos",
+    "ru": "День специальных наград Галактических Врат",
+    "tr": "Galaksi Kapıları Özel Ödüller Günü"
+  },
+  "descriptions": {
+    "fr": "La Journée de récompenses spéciales des Portails Galactiques est un événement qui se déroule généralement les vendredis, samedis et dimanches. Il existe plusieurs types de cet événement : Récompenses spéciales régulières, LF-4 amélioré et Designs G-Champion.",
+    "en": "Galaxy Gates Special Rewards Day is an event that usually takes place on Fridays, Saturdays and Sundays. There are multiple types of this event: Regular Special Rewards, Enhanced LF-4 and G-Champion Designs.",
+    "de": "Der Galaxy Gates Spezielle Belohnungen Tag ist ein Event, das normalerweise freitags, samstags und sonntags stattfindet. Es gibt mehrere Arten dieses Events: Reguläre Spezialbelohnungen, Verbesserter LF-4 und G-Champion Designs.",
+    "es": "El Día de Recompensas Especiales de Portales Galácticos es un evento que generalmente tiene lugar los viernes, sábados y domingos. Hay varios tipos de este evento: Recompensas Especiales Regulares, LF-4 Mejorado y Diseños G-Champion.",
+    "ru": "День специальных наград Галактических Врат — это событие, которое обычно проходит по пятницам, субботам и воскресеньям. Существует несколько типов этого события: Обычные специальные награды, Улучшенный LF-4 и Дизайны G-Champion.",
+    "tr": "Galaksi Kapıları Özel Ödüller Günü, genellikle Cuma, Cumartesi ve Pazar günleri gerçekleşen bir etkinliktir. Bu etkinliğin birden fazla türü vardır: Normal Özel Ödüller, Gelişmiş LF-4 ve G-Champion Tasarımları."
+  },
+  "keywords": [
+    "galaxy gates special rewards day",
+    "journée de récompenses spéciales des portails galactiques",
+    "galaxy gates spezielle belohnungen tag",
+    "día de recompensas especiales de portales galácticos",
+    "день специальных наград галактических врат",
+    "galaksi kapıları özel ödüller günü",
+    "special rewards day",
+    "journée récompenses spéciales",
+    "enhanced lf-4",
+    "lf-4 amélioré",
+    "g-champion designs",
+    "designs g-champion",
+    "g-champion"
+  ],
+  "exclude_keywords": [
+    "galaxy gate weekend",
+    "week-end portails",
+    "weekend",
+    "wochenende",
+    "haftasonu",
+    "выходные",
+    "galaxy gate doubler",
+    "double gain",
+    "doubler",
+    "doppelter",
+    "двойной",
+    "ikiye",
+    "enhanced lf4 day",
+    "journée spéciale lf-4",
+    "dispatch day",
+    "jour de l'expédition"
+  ]
+}

@@ -8,14 +8,15 @@ var SERVER_CODE_TO_DISPLAY = {
   es1: 'Espagne 1',
   fr1: 'France 1',
   gbl1: 'Global PvE',
+  gbl2: 'Global 2 (Ganymede)',
   gbl3: 'Global 3 (Titan)',
   gbl4: 'Global 4 (Europa)',
   gbl5: 'Global 5 (Callisto)',
-  int1: 'Global Europe 1',
-  int5: 'Global Europe 2',
-  int7: 'Global Europe 3',
-  int11: 'Global Europe 5',
-  int14: 'Global Europe 7',
+  int1: 'Europe Global 1',
+  int5: 'Europe Global 2',
+  int7: 'Europe Global 3',
+  int11: 'Europe Global 5',
+  int14: 'Europe Global 7',
   mx1: 'Mexique 1',
   pl3: 'Pologne 3',
   ru1: 'Russie 1',
@@ -24,8 +25,8 @@ var SERVER_CODE_TO_DISPLAY = {
   tr4: 'Turquie 4',
   tr5: 'Turquie 5',
   us2: 'USA 2 (Côte Ouest)',
-  int2: 'Amerique Global 1',
-  int6: 'Amerique Global 2'
+  int2: 'Amérique Global 1',
+  int6: 'Amérique Global 2'
 };
 
 if (typeof module !== 'undefined' && module.exports) {

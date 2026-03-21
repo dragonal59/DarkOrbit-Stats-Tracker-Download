@@ -1,0 +1,40 @@
+{
+  "id": "bk_ld_sale",
+  "visible": true,
+  "image": "img/events/bk_+_ld_sale.jpg",
+  "names": {
+    "fr": "Promo CB + LF",
+    "en": "BK + LD Sale",
+    "de": "BK + LD Verkauf",
+    "es": "Oferta CB + LD",
+    "ru": "Скидка BK + LD",
+    "tr": "BK + LD İndirimi"
+  },
+  "descriptions": {
+    "fr": "Allez-vous passer à côté des Clés de butin et Logfiles à prix réduit ? Bien sûr que non ! Avec cette promo à durée limitée, vous allez faire d'énormes économies pour compléter votre expérience spatiale !",
+    "en": "Can you miss out on discounted Booty Keys and Log Disks? We think not! With this fabulous limited sale, you're making super savings to supplement your experience in space!",
+    "de": "Kannst du auf vergünstigte Beuteschlüssel und Logdateien verzichten? Wir denken nicht! Mit diesem fantastischen begrenzten Angebot sparst du enorm und ergänzt dein Erlebnis im Weltraum!",
+    "es": "¿Puedes perderte las Llaves de botín y Discos de registro con descuento? ¡Creemos que no! Con esta fabulosa oferta limitada, ahorras muchísimo para complementar tu experiencia en el espacio!",
+    "ru": "Можете ли вы пропустить скидки на Ключи добычи и Лог-диски? Мы думаем, нет! С этой замечательной ограниченной распродажей вы делаете отличную экономию, чтобы дополнить своё приключение в космосе!",
+    "tr": "İndirimli Ganimet Anahtarları ve Log Disklerini kaçırabilir misiniz? Sanmıyoruz! Bu harika sınırlı indirimle, uzay deneyiminizi tamamlamak için süper tasarruf yapıyorsunuz!"
+  },
+  "keywords": [
+    "bk + ld sale",
+    "promo cb + lf",
+    "booty keys",
+    "log disks",
+    "clés de butin",
+    "logfiles",
+    "oferta cb + ld",
+    "bk + ld verkauf",
+    "скидка bk + ld",
+    "bk + ld i̇ndirimi"
+  ],
+  "exclude_keywords": [
+    "helix blitz",
+    "obsidian box",
+    "apocalypse box",
+    "r&b box",
+    "super subscription"
+  ]
+}

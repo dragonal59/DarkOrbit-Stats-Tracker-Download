@@ -1,6 +1,7 @@
 node_modules/
 dist/
 build/
+landing/
 # config.supabase.prod.js (généré par inject-supabase-config.js) — dans build/src/
 .env
 .env.local
@@ -8,3 +9,6 @@ build/
 .supabase/
 *.log
 .DS_Store
+
+# Cache profils scraper (regénéré automatiquement)
+pythscrap/cache/

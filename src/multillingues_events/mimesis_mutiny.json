@@ -1,0 +1,50 @@
+{
+  "id": "mimesis_mutiny",
+  "visible": true,
+  "image": "img/events/mimesis_mutiny.jpg",
+  "names": {
+    "fr": "RÉBELLION DES MIMESIS",
+    "en": "MIMESIS MUTINY",
+    "de": "MIMESIS-MEUTEREI",
+    "es": "MOTÍN MIMESIS",
+    "ru": "БУНТ МИМЕСИС",
+    "tr": "MİMESİS İSYANI"
+  },
+  "descriptions": {
+    "fr": "Les balises suspectes ont refait surface et présentent de nouvelles évolutions. La terrible invasion est imminente et c'est toute l'humanité qui est en danger. Protégez l'EM Freighter jusqu'au bout pour détruire les balises et venir à bout de la menace.",
+    "en": "The suspicious beacons have surfaced and evolved again, the terrifying invasion is coming, your people needs protection. Please protect the EM Freighter to the end to destroy the beacons and fight for humanity.",
+    "de": "Die verdächtigen Markierungen sind wieder aufgetaucht und haben sich weiterentwickelt. Die schreckliche Invasion steht unmittelbar bevor und die gesamte Menschheit ist in Gefahr. Schützt den EM-Frachter bis zum Ende, um die Markierungen zu zerstören und die Bedrohung zu beseitigen.",
+    "es": "Las balizas sospechosas han vuelto a aparecer y han evolucionado de nuevo. La aterradora invasión es inminente y toda la humanidad está en peligro. Protege el EM Freighter hasta el final para destruir las balizas y acabar con la amenaza.",
+    "ru": "Подозрительные маяки снова появились и мутировали. Ужасающее вторжение неминуемо, и всё человечество в опасности. Защитите грузовик EM до конца, чтобы уничтожить маяки и покончить с угрозой.",
+    "tr": "Şüpheli işaretler yeniden ortaya çıktı ve yeni evrimler geçirdi. Korkunç istila yakın ve tüm insanlık tehlikede. İşaretleri yok etmek ve tehdidi ortadan kaldırmak için EM Freighter'ı sonuna kadar koruyun."
+  },
+  "keywords": [
+    "mimesis mutiny",
+    "rébellion des mimesis",
+    "mimesis-meuterei",
+    "motín mimesis",
+    "бунт мимесис",
+    "mimesis isyanı",
+    "em freighter",
+    "beacons",
+    "balises",
+    "markierungen",
+    "balizas",
+    "маяки",
+    "işaretler",
+    "mimesis invasion",
+    "invasion mimesis"
+  ],
+  "exclude_keywords": [
+    "deep space echoes",
+    "les échos de l'espace",
+    "tiefraumechos",
+    "ecos del espacio profundo",
+    "эхо глубокого космоса",
+    "derin uzay yankıları",
+    "stellar pathfinder",
+    "galaxy trek",
+    "into the unknown",
+    "vers l'inconnu"
+  ]
+}

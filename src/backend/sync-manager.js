@@ -37,7 +37,7 @@ const DataSync = {
 
   /**
    * Migration initiale : localStorage → Supabase (au premier lancement post-auth).
-   * Pour les comptes existants : si le profil a des initial_* mais pas de baseline, en crée une.
+   * La session de base (baseline) n'est créée que à l'inscription via la page auth (scraper), pas ici.
    */
   async migrateIfNeeded() {
     if (typeof UnifiedStorage === 'undefined') return false;
@@ -49,12 +49,11 @@ const DataSync = {
       await this._migrateSessions(userId);
       await this._migrateEvents(userId);
       await this._migrateSettings(userId);
-      await this._ensureBaselineFromProfileIfNeeded(userId);
       UnifiedStorage.set(MIGRATION_DONE_KEY, true);
       if (typeof showToast === 'function') showToast('Données migrées vers le cloud.', 'success');
       return true;
     } catch (e) {
-      console.error('Migration erreur:', e);
+      Logger.error('Migration erreur:', e);
       if (typeof showToast === 'function') showToast('Migration reportée.', 'warning');
       return false;
     } finally {
@@ -62,48 +61,9 @@ const DataSync = {
     }
   },
 
-  /**
-   * Si le profil a des stats d'inscription (initial_*) et qu'aucune baseline n'existe côté serveur,
-   * crée une session baseline à partir de ces valeurs (correction comptes existants).
-   */
-  async _ensureBaselineFromProfileIfNeeded(userId) {
-    const supabase = getSupabaseClient();
-    if (!supabase) return;
-    try {
-      const { data: profile, error: profileErr } = await supabase.from('profiles').select('initial_honor, initial_xp, initial_rank, initial_rank_points, next_rank_points').eq('id', userId).single();
-      if (profileErr || !profile) return;
-      const hasInitial = profile.initial_honor != null || profile.initial_xp != null;
-      if (!hasInitial) return;
-      const { data: sessions, error: sessionsErr } = await supabase.from('user_sessions').select('id, is_baseline').eq('user_id', userId);
-      if (sessionsErr) return;
-      const hasBaseline = sessions && sessions.some(function(s) { return s.is_baseline === true; });
-      if (hasBaseline) return;
-      const now = Date.now();
-      const sessionDate = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-      const pRow = {
-        local_id: 'baseline-migration-' + now,
-        honor: Number(profile.initial_honor) || 0,
-        xp: Number(profile.initial_xp) || 0,
-        rank_points: Number(profile.initial_rank_points) || 0,
-        next_rank_points: Number(profile.next_rank_points) || 0,
-        current_rank: profile.initial_rank || '',
-        note: 'Baseline automatique (migration)',
-        session_date: sessionDate,
-        session_timestamp: now,
-        is_baseline: true
-      };
-      const { data: rpcData, error: rpcError } = await supabase.rpc('insert_user_session_secure', { p_row: pRow });
-      if (!rpcError && rpcData && rpcData.success) {
-        console.log('[DataSync] Baseline créée depuis le profil (migration).');
-      }
-    } catch (e) {
-      console.warn('[DataSync] _ensureBaselineFromProfileIfNeeded:', e?.message || e);
-    }
-  },
-
   _sessionToRow(s, userId, localId) {
     const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
-    // local_id doit être une chaîne non vide pour la contrainte UNIQUE(user_id, local_id)
+    const activeId = (typeof getActivePlayerId === 'function' ? getActivePlayerId() : null);
     const safeLocalId = (localId != null && String(localId).trim() !== '') ? String(localId) : 'local-' + (s.timestamp || Date.now());
     return {
       user_id: userId,
@@ -116,42 +76,52 @@ const DataSync = {
       note: s.note || null,
       session_date: s.date || null,
       session_timestamp: num(s.timestamp) || Date.now(),
-      is_baseline: !!s.is_baseline
+      is_baseline: !!s.is_baseline,
+      player_id: s.player_id || activeId || null,
+      player_server: s.player_server || null,
+      player_pseudo: s.player_pseudo || null
     };
   },
 
   async _migrateSessions(userId) {
     const sessions = UnifiedStorage.get((_k.SESSIONS) || 'darkOrbitSessions', []);
     if (sessions.length === 0) return;
+    const userBadge = (typeof getCurrentBadge === 'function' ? getCurrentBadge() : (typeof BackendAPI !== 'undefined' && BackendAPI.getUserBadge ? BackendAPI.getUserBadge() : 'FREE') || '').toString().toUpperCase();
+    let sessionsToMigrate = sessions;
+    if (userBadge === 'FREE') {
+      const baselines = sessions.filter(s => s.is_baseline);
+      const baseline = baselines.length > 0 ? baselines.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))[0] : null;
+      sessionsToMigrate = baseline ? [baseline] : sessions.slice(0, 1);
+    }
     const supabase = getSupabaseClient();
     const byId = new Map();
-    for (let i = 0; i < sessions.length; i++) {
-      const s = sessions[i];
+    for (let i = 0; i < sessionsToMigrate.length; i++) {
+      const s = sessionsToMigrate[i];
       let lid = s.id != null && String(s.id).trim() !== '' ? String(s.id) : null;
       if (!lid) {
         lid = 's-' + (s.timestamp || Date.now()) + '-' + i + '-' + (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID().slice(0, 8) : Math.random().toString(36).slice(2, 10));
       }
       byId.set(lid, s);
     }
-    const rowsToSync = byId.size;
-    console.log('[DataSync] Sync user_sessions:', rowsToSync, 'session(s)');
+    const rows = [];
     for (const [lid, s] of byId.entries()) {
-      const row = this._sessionToRow(s, userId, lid);
-      try {
-        const { data, error } = await supabase.rpc('upsert_user_session_secure', { p_row: row });
-        if (error) {
-          console.error('[DataSync] Erreur Supabase user_sessions:', { message: error.message, code: error.code });
-          throw error;
-        }
-        if (data && data.success === false) {
-          const msg = data.error || 'Erreur de synchronisation des sessions.';
-          if (typeof showToast === 'function') showToast(msg, 'error');
-          throw new Error(msg);
-        }
-      } catch (e) {
-        console.error('[DataSync] Exception user_sessions:', e);
-        throw e;
+      rows.push(this._sessionToRow(s, userId, lid));
+    }
+    if (rows.length === 0) return;
+    try {
+      const { data, error } = await supabase.rpc('upsert_user_sessions_bulk', { p_rows: rows });
+      if (error) {
+        Logger.error('[DataSync] Erreur Supabase upsert_user_sessions_bulk:', { message: error.message, code: error.code });
+        throw error;
       }
+      if (data && data.success === false) {
+        const msg = data.error || 'Erreur de synchronisation des sessions.';
+        if (typeof showToast === 'function') showToast(msg, 'error');
+        throw new Error(msg);
+      }
+    } catch (e) {
+      Logger.error('[DataSync] Exception user_sessions (bulk):', e);
+      throw e;
     }
   },
 
@@ -165,7 +135,24 @@ const DataSync = {
         local_id: String(e.id),
         event_data: e
       };
-      await supabase.from('user_events').upsert(row, { onConflict: 'user_id,local_id', ignoreDuplicates: false });
+      const { error: _ueError } = await supabase.from('user_events').upsert(row, { onConflict: 'user_id,local_id', ignoreDuplicates: false });
+      if (_ueError) Logger.warn('[SyncManager] user_events upsert error (local_id=' + row.local_id + '):', _ueError.message);
+    }
+  },
+
+  /**
+   * Supprime un événement dans Supabase (user_events) par son id local.
+   * À appeler immédiatement après avoir retiré l'événement du localStorage.
+   */
+  async deleteEventRemote(eventId) {
+    if (!this.isReady()) return;
+    const userId = await this.getUserId();
+    if (!userId) return;
+    try {
+      const supabase = getSupabaseClient();
+      await supabase.from('user_events').delete().eq('user_id', userId).eq('local_id', String(eventId));
+    } catch (e) {
+      Logger.warn('[DataSync] deleteEventRemote:', e?.message || e);
     }
   },
 
@@ -177,8 +164,12 @@ const DataSync = {
     const importedRankings = UnifiedStorage.get(sk.IMPORTED_RANKINGS || 'darkOrbitImportedRankings', {});
     const boosterConfig = UnifiedStorage.get(sk.BOOSTERS || 'darkOrbitBoosters', {});
     const currentStats = UnifiedStorage.get(sk.CURRENT_STATS || 'darkOrbitCurrentStats', {});
+    const currentEvents = UnifiedStorage.get(sk.CURRENT_EVENTS, []);
     const theme = localStorage?.getItem(sk.THEME || 'darkOrbitTheme') || 'dark';
     const viewMode = localStorage?.getItem(sk.VIEW_MODE || 'darkOrbitViewMode') || 'detailed';
+    const language = localStorage?.getItem(sk.LANGUAGE || 'darkOrbitLanguage') || 'fr';
+    const themeAuto = localStorage?.getItem(sk.THEME_AUTO || 'darkOrbitThemeAuto');
+    const themeAutoBool = themeAuto === 'true' || (themeAuto !== 'false' && themeAuto !== null);
 
     const row = {
       user_id: userId,
@@ -187,8 +178,11 @@ const DataSync = {
       imported_rankings_json: importedRankings && typeof importedRankings === 'object' ? importedRankings : {},
       booster_config_json: boosterConfig,
       current_stats_json: currentStats,
+      current_events_json: Array.isArray(currentEvents) ? currentEvents : [],
       theme,
       view_mode: viewMode,
+      language: language || 'fr',
+      theme_auto: themeAutoBool,
       updated_at: new Date().toISOString()
     };
     await supabase.from('user_settings').upsert(row, { onConflict: 'user_id' });
@@ -206,7 +200,7 @@ const DataSync = {
       if (typeof clearSettingsDirtyFlag === 'function') clearSettingsDirtyFlag();
       return { success: true };
     } catch (e) {
-      console.warn('[DataSync] syncSettingsOnly erreur:', e?.message || e);
+      Logger.warn('[DataSync] syncSettingsOnly erreur:', e?.message || e);
       return { success: false, error: e?.message };
     }
   },
@@ -215,6 +209,10 @@ const DataSync = {
    * Push : envoie les données locales vers Supabase
    */
   async sync() {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      if (typeof UnifiedStorage !== 'undefined') UnifiedStorage.set(PENDING_SYNC_KEY, true);
+      return { success: false, reason: 'offline' };
+    }
     if (!this.isReady() || this._migrating) return { success: false, reason: 'not_ready' };
     const userId = await this.getUserId();
     if (!userId) return { success: false, reason: 'no_user' };
@@ -225,11 +223,14 @@ const DataSync = {
       if (typeof clearSettingsDirtyFlag === 'function') clearSettingsDirtyFlag();
       if (typeof UnifiedStorage !== 'undefined') {
         UnifiedStorage.set(LAST_SYNC_KEY, Date.now());
+        UnifiedStorage.remove(PENDING_SYNC_KEY);
       }
-      console.log('[DataSync] Sync OK');
       return { success: true };
     } catch (e) {
-      console.error('[DataSync] Sync erreur:', { message: e?.message, error: e });
+      Logger.error('[DataSync] Sync erreur:', { message: e?.message, error: e });
+      if (typeof UnifiedStorage !== 'undefined') {
+        UnifiedStorage.set(PENDING_SYNC_KEY, true);
+      }
       return { success: false, error: e?.message };
     }
   },
@@ -245,81 +246,97 @@ const DataSync = {
     if (!userId) return { success: false, reason: 'no_user' };
     const supabase = getSupabaseClient();
     try {
-      const { data: sessions, error: sessionsErr } = await supabase.from('user_sessions').select('*').eq('user_id', userId).order('session_timestamp', { ascending: false });
-      if (sessionsErr) console.error('[DataSync] Pull user_sessions erreur:', sessionsErr);
-      const { data: events, error: eventsErr } = await supabase.from('user_events').select('*').eq('user_id', userId).order('created_at', { ascending: false });
-      if (eventsErr) console.error('[DataSync] Pull user_events erreur:', eventsErr);
-      if (events && events.length > 0) {
-        console.log('[DataSync] user_events bruts (' + events.length + ')', events.map(function (r) {
-          return { id: r.id, local_id: r.local_id, event_data: r.event_data, created_at: r.created_at, updated_at: r.updated_at };
-        }));
-      }
-      const { data: settingsRow, error: settingsErr } = await supabase.from('user_settings').select('*').eq('user_id', userId).single();
-      if (settingsErr && settingsErr.code !== 'PGRST116') console.error('[DataSync] Pull user_settings erreur:', settingsErr);
+      const { data: sessions, error: sessionsErr } = await supabase.from('user_sessions').select('*').eq('user_id', userId).order('session_timestamp', { ascending: false }).limit(100);
+      if (sessionsErr) Logger.error('[DataSync] Pull user_sessions erreur:', sessionsErr);
+      const { data: events, error: eventsErr } = await supabase.from('user_events').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(200);
+      if (eventsErr) Logger.error('[DataSync] Pull user_events erreur:', eventsErr);
 
-      var sk = (typeof window !== 'undefined' && window.APP_KEYS && window.APP_KEYS.STORAGE_KEYS) ? window.APP_KEYS.STORAGE_KEYS : {};
-      if (sessions !== undefined && sessions !== null && typeof UnifiedStorage !== 'undefined') {
-        const sessKey = sk.SESSIONS || 'darkOrbitSessions';
-        const local = UnifiedStorage.get(sessKey, []);
-        const clearedFlag = typeof localStorage !== 'undefined' && localStorage.getItem('darkOrbitSessionsCleared');
-        let merged;
-        if (clearedFlag && (!local || local.length === 0)) {
-          merged = [];
-          localStorage.removeItem('darkOrbitSessionsCleared');
-        } else {
-          merged = sessions.length > 0 ? this._mergeSessions(local, sessions) : [];
-        }
-        UnifiedStorage.set(sessKey, merged);
+      const { data: settingsRow, error: settingsErr } = await supabase.from('user_settings').select('*').eq('user_id', userId).single();
+      if (settingsErr && settingsErr.code !== 'PGRST116') Logger.error('[DataSync] Pull user_settings erreur:', settingsErr);
+
+      const sk = (typeof window !== 'undefined' && window.APP_KEYS && window.APP_KEYS.STORAGE_KEYS) ? window.APP_KEYS.STORAGE_KEYS : {};
+      // Coupons et historique : stockage local uniquement (pas de sync Supabase, responsabilité / confidentialité)
+      if (typeof UserPreferencesAPI !== 'undefined') {
+        await UserPreferencesAPI.getPreferences();
+        await UserPreferencesAPI.getDarkOrbitAccounts();
+        await UserPreferencesAPI.getActivePlayerInfo();
+      }
+
+      if (sessions !== undefined && sessions !== null) {
+        var merged = this._remoteSessionsToApp(sessions);
+        if (typeof setSessionsCache === 'function') setSessionsCache(merged);
       }
       if (events !== undefined && events !== null && Array.isArray(events) && typeof UnifiedStorage !== 'undefined') {
         const evKey = sk.EVENTS || 'darkOrbitEvents';
-        const merged = this._mergeEvents(UnifiedStorage.get(evKey, []), events);
-        UnifiedStorage.set(evKey, merged);
+        var eventsFromSupabase = events.map(r => {
+          const raw = r.event_data != null ? r.event_data : r;
+          const ev = this._normalizeEventData(raw);
+          return { ...ev, id: ev.id || r.local_id || r.id || '' };
+        }).sort((a, b) => {
+          const ta = new Date(a.startDate || a.start_date || a.created_at || 0).getTime();
+          const tb = new Date(b.startDate || b.start_date || b.created_at || 0).getTime();
+          return tb - ta;
+        });
+        UnifiedStorage.set(evKey, eventsFromSupabase);
       }
       if (settingsRow && typeof UnifiedStorage !== 'undefined') {
-        if (!(typeof isSettingsDirty === 'function' && isSettingsDirty())) {
-          UnifiedStorage.set(sk.SETTINGS || 'darkOrbitSettings', settingsRow.settings_json || {});
-        }
+        UnifiedStorage.set(sk.SETTINGS || 'darkOrbitSettings', settingsRow.settings_json || {});
         if (Array.isArray(settingsRow.links_json)) UnifiedStorage.set(sk.CUSTOM_LINKS || 'darkOrbitCustomLinks', settingsRow.links_json);
         var impKey = sk.IMPORTED_RANKINGS || 'darkOrbitImportedRankings';
         var serverImp = settingsRow.imported_rankings_json;
-        var localImp = UnifiedStorage.get(impKey, {});
         if (serverImp != null && typeof serverImp === 'object') {
-          var merged = {};
-          for (var k in serverImp) if (Object.prototype.hasOwnProperty.call(serverImp, k)) merged[k] = serverImp[k];
-          if (localImp && typeof localImp === 'object') {
-            for (var lk in localImp) if (Object.prototype.hasOwnProperty.call(localImp, lk) && localImp[lk] && localImp[lk].fusion) {
-              merged[lk] = localImp[lk];
-            }
-          }
-          if (Object.keys(merged).length > 0) UnifiedStorage.set(impKey, merged);
+          UnifiedStorage.set(impKey, serverImp);
         }
         if (settingsRow.booster_config_json && typeof settingsRow.booster_config_json === 'object') UnifiedStorage.set(sk.BOOSTERS || 'darkOrbitBoosters', settingsRow.booster_config_json);
         if (settingsRow.current_stats_json && typeof settingsRow.current_stats_json === 'object') UnifiedStorage.set(sk.CURRENT_STATS || 'darkOrbitCurrentStats', settingsRow.current_stats_json);
         if (Array.isArray(settingsRow.current_events_json)) UnifiedStorage.set(sk.CURRENT_EVENTS || 'darkOrbitCurrentEvents', settingsRow.current_events_json);
         if (settingsRow.theme) localStorage?.setItem(sk.THEME || 'darkOrbitTheme', settingsRow.theme);
         if (settingsRow.view_mode) localStorage?.setItem(sk.VIEW_MODE || 'darkOrbitViewMode', settingsRow.view_mode);
+        if (settingsRow.language) localStorage?.setItem(sk.LANGUAGE || 'darkOrbitLanguage', settingsRow.language);
+        if (settingsRow.theme_auto !== undefined) localStorage?.setItem(sk.THEME_AUTO || 'darkOrbitThemeAuto', settingsRow.theme_auto ? 'true' : 'false');
       }
       UnifiedStorage?.set(LAST_SYNC_KEY, Date.now());
       if (typeof UnifiedStorage?.invalidateCache === 'function') {
-        var keysToInvalidate = [sk.SESSIONS || 'darkOrbitSessions', sk.EVENTS || 'darkOrbitEvents', sk.SETTINGS || 'darkOrbitSettings', sk.CUSTOM_LINKS || 'darkOrbitCustomLinks', sk.IMPORTED_RANKINGS || 'darkOrbitImportedRankings', sk.BOOSTERS || 'darkOrbitBoosters', sk.CURRENT_STATS || 'darkOrbitCurrentStats', sk.CURRENT_EVENTS || 'darkOrbitCurrentEvents'];
+        var keysToInvalidate = [sk.EVENTS || 'darkOrbitEvents', sk.SETTINGS || 'darkOrbitSettings', sk.CUSTOM_LINKS || 'darkOrbitCustomLinks', sk.IMPORTED_RANKINGS || 'darkOrbitImportedRankings', sk.BOOSTERS || 'darkOrbitBoosters', sk.CURRENT_STATS || 'darkOrbitCurrentStats', sk.CURRENT_EVENTS || 'darkOrbitCurrentEvents'];
         keysToInvalidate.forEach(function(k) { if (k) UnifiedStorage.invalidateCache(k); });
       }
       // Rafraîchir toute l'UI concernée par les données synchronisées
       if (typeof renderHistory === 'function') renderHistory();
       if (typeof updateEventsDisplay === 'function') updateEventsDisplay();
-      if (typeof window.updateScrapedEventsDisplay === 'function') window.updateScrapedEventsDisplay();
+      if (typeof window.refreshEventsFromSupabase === 'function') window.refreshEventsFromSupabase();
+      if (typeof window.updateBoosterAlert === 'function') window.updateBoosterAlert();
+      if (typeof window.updateBoosterWidget === 'function') window.updateBoosterWidget();
+      if (typeof window.applyBoosterVisibility === 'function') window.applyBoosterVisibility();
       if (typeof updateProgressionTab === 'function') updateProgressionTab();
       if (typeof loadCurrentStats === 'function') loadCurrentStats();
-      if (typeof initBaselineSetup === 'function') initBaselineSetup();
       if (typeof refreshChartColors === 'function') refreshChartColors();
       if (typeof window.refreshRanking === 'function') window.refreshRanking();
-      console.log('[DataSync] Pull OK');
+      if (typeof window.refreshFollowedPlayersSidebar === 'function') window.refreshFollowedPlayersSidebar();
+      if (typeof window.refreshCouponsUI === 'function') window.refreshCouponsUI();
       return { success: true };
     } catch (e) {
-      console.error('[DataSync] Pull erreur:', { message: e?.message, error: e });
+      Logger.error('[DataSync] Pull erreur:', { message: e?.message, error: e });
       return { success: false, error: e?.message };
     }
+  },
+
+  _remoteSessionsToApp(remote) {
+    const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+    return (remote || []).map(r => ({
+      id: r.local_id || r.id,
+      date: r.session_date,
+      honor: num(r.honor),
+      xp: num(r.xp),
+      rankPoints: num(r.rank_points),
+      nextRankPoints: num(r.next_rank_points),
+      currentRank: r.current_rank,
+      note: r.note,
+      timestamp: r.session_timestamp,
+      is_baseline: !!r.is_baseline,
+      player_id: r.player_id || null,
+      player_server: r.player_server || null,
+      player_pseudo: r.player_pseudo || null
+    })).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
   },
 
   /**
@@ -395,16 +412,43 @@ const DataSync = {
    * Lance la synchronisation périodique (pull puis sync).
    * Re-vérifie le statut banned à chaque cycle pour couvrir le cas où l'utilisateur est banni pendant que la page est ouverte.
    */
+  async sendHeartbeat() {
+    try {
+      var supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+      if (!supabase) return;
+      await supabase.rpc('update_last_seen');
+    } catch (e) {
+      Logger.warn('[DataSync] Heartbeat échoué:', e?.message || e);
+    }
+  },
+
   startPeriodicSync() {
     if (this._intervalId) return;
     if (!this.isReady()) return;
+    var hasPending = typeof UnifiedStorage !== 'undefined' && UnifiedStorage.get(PENDING_SYNC_KEY, false);
+    if (hasPending) {
+      this._pendingSyncTimeout = setTimeout(() => { this.queueSync(); }, 3000);
+    }
+    // Heartbeat immédiat au démarrage
+    this.sendHeartbeat();
+    const HEARTBEAT_INTERVAL_MS = 2 * 60 * 1000;
+    if (this._heartbeatIntervalId) { clearInterval(this._heartbeatIntervalId); this._heartbeatIntervalId = null; }
+    this._heartbeatIntervalId = setInterval(() => { this.sendHeartbeat(); }, HEARTBEAT_INTERVAL_MS);
+
     const run = async () => {
       if (typeof BackendAPI !== 'undefined') {
         await BackendAPI.loadUserProfile();
         const profile = BackendAPI.getUserProfile();
         if (profile && profile.status === 'banned') {
+          this.stopPeriodicSync();
           if (typeof AuthManager !== 'undefined') await AuthManager.logout();
-          if (typeof window !== 'undefined' && window.location) window.location.href = 'auth.html';
+          if (typeof window !== 'undefined') {
+            if (typeof electronAPI !== 'undefined' && electronAPI.navigateToAuth) {
+              electronAPI.navigateToAuth();
+            } else if (window.location) {
+              window.location.href = 'auth.html';
+            }
+          }
           return;
         }
       }
@@ -415,26 +459,36 @@ const DataSync = {
   },
 
   stopPeriodicSync() {
+    if (this._pendingSyncTimeout) {
+      clearTimeout(this._pendingSyncTimeout);
+      this._pendingSyncTimeout = null;
+    }
     if (this._intervalId) {
       clearInterval(this._intervalId);
       this._intervalId = null;
+    }
+    if (this._heartbeatIntervalId) {
+      clearInterval(this._heartbeatIntervalId);
+      this._heartbeatIntervalId = null;
     }
   },
 
   /**
    * À appeler après une sauvegarde locale (session, event, settings).
    * Throttle : min. 15 s entre deux syncs pour limiter les appels (rate limiting client).
-   * En cas d'échec, log et toast pour informer l'utilisateur (réessai automatique au prochain cycle).
+   * Si une sync précédente a échoué (PENDING_SYNC_KEY), le throttle est ignoré pour rattraper.
+   * En cas d'échec, marque PENDING_SYNC_KEY pour réessai au prochain cycle.
    */
   queueSync() {
     if (!this.isReady()) return;
     var now = Date.now();
-    if (now - this._lastQueueSyncAt < SYNC_THROTTLE_MS && this._lastQueueSyncAt > 0) {
+    var hasPending = typeof UnifiedStorage !== 'undefined' && UnifiedStorage.get(PENDING_SYNC_KEY, false);
+    if (!hasPending && now - this._lastQueueSyncAt < SYNC_THROTTLE_MS && this._lastQueueSyncAt > 0) {
       return;
     }
     this._lastQueueSyncAt = now;
     this.sync().catch((e) => {
-      console.warn('[DataSync] Sync reportée:', e?.message || e);
+      Logger.warn('[DataSync] Sync reportée:', e?.message || e);
       var msg = e?.message || '';
       if (msg.indexOf('RATE_LIMIT') !== -1) {
         if (typeof showToast === 'function') showToast('Trop de requêtes. Réessayez dans une minute.', 'warning');
@@ -448,4 +502,13 @@ const DataSync = {
 };
 
 window.DataSync = DataSync;
-console.log('🔄 DataSync chargé');
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    if (typeof showToast === 'function') showToast('Connexion rétablie. Synchronisation en cours…', 'info');
+    if (typeof DataSync !== 'undefined' && DataSync.isReady()) DataSync.queueSync();
+  });
+  window.addEventListener('offline', () => {
+    if (typeof showToast === 'function') showToast('Hors ligne. Les données seront synchronisées à la reconnexion.', 'warning');
+  });
+}

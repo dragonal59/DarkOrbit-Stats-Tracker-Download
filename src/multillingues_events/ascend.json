@@ -1,0 +1,50 @@
+{
+  "id": "ascend",
+  "visible": true,
+  "image": "img/events/ascend.jpg",
+  "names": {
+    "fr": "L'Ascension !",
+    "en": "Ascend!",
+    "de": "Aufstieg!",
+    "es": "¡Ascenso!",
+    "ru": "Восхождение!",
+    "tr": "Yükseliş!",
+    "pl": "Wzniesienie!"
+  },
+  "descriptions": {
+    "fr": "Écrasez la compétition avec notre sélection de packs Booster Ascension ! Sautez sur l'occasion, et profitez d'une tonne de boosters d'honneur et d'expérience pendant votre quête pour devenir l'un des meilleurs pilotes de la galaxie !",
+    "en": "Rise above the competition with our selection of Ascension Booster Packs! Act now and a wealth of honor and experience boosters will aid your quest to be one of the galaxy's best!",
+    "de": "Steige über die Konkurrenz hinaus mit unserer Auswahl an Ascension Booster Packs! Handle jetzt und eine Fülle von Ehren- und Erfahrungs-Boostern wird dir auf deinem Weg helfen, einer der Besten der Galaxis zu werden!",
+    "es": "¡Supera a la competencia con nuestra selección de Packs Booster de Ascensión! ¡Actúa ahora y una gran cantidad de boosters de honor y experiencia te ayudarán en tu búsqueda por ser uno de los mejores de la galaxia!",
+    "ru": "Поднимись выше конкурентов с нашим выбором Бустер-паков Восхождения! Действуй сейчас — множество бустеров чести и опыта помогут тебе стать одним из лучших в галактике!",
+    "tr": "Ascension Güçlendirici Paketlerimizle rakiplerinizin önüne geçin! Hemen harekete geçin; bol miktarda şeref ve deneyim güçlendiricisi, galaksinin en iyilerinden biri olma yolundaki maceranızda size yardımcı olsun!",
+    "pl": "Wznieś się ponad konkurencję dzięki naszemu wyborowi Pakietów Boosterów Wzniesienia! Działaj teraz, a bogactwo boosterów honoru i doświadczenia wspomoże twoją misję zostania jednym z najlepszych w galaktyce!"
+  },
+  "keywords": [
+    "ascend",
+    "ascension",
+    "asciende",
+    "aufstieg",
+    "ascenso",
+    "восхождение",
+    "yükseliş",
+    "wzniesienie",
+    "ascension booster",
+    "booster ascension"
+  ],
+  "exclude_keywords": [
+    "honor day",
+    "journée double honneur",
+    "xp day",
+    "journée double xp",
+    "día del honor",
+    "día de la experiencia",
+    "ehrentag",
+    "experience tag",
+    "helix",
+    "blitz",
+    "new dawn",
+    "galaxy trek",
+    "stellar pathfinder"
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "id": "new_dawn",
+  "visible": true,
+  "image": "img/events/new_dawn.jpg",
+  "names": {
+    "fr": "Nouvelle Aube",
+    "en": "New Dawn",
+    "de": "Neue Morgendämmerung",
+    "es": "Nuevo Amanecer",
+    "ru": "Новый Рассвет",
+    "tr": "Yeni Şafak"
+  },
+  "descriptions": {
+    "fr": "Un nouveau départ est imminent ! Pilotes, venez rejoindre le serveur nouvellement lancé sur Unity. Non seulement vous pouvez recevoir de magnifiques cadeaux gratuitement en montant de niveau, mais vous pouvez également mettre la main sur de superbes packs de Boosters, Munitions, Uridium ainsi que des packs de Vaisseaux et d'Armes !",
+    "en": "A new dawn is just around the corner! Pilots, come and join the newly released server on Unity. Not only can you receive gorgeous presents for free while leveling, but you can also get your hands on the shining Booster, Ammo, Uridium packs as well as Ship and Weapon packs!",
+    "de": "Eine neue Morgendämmerung steht vor der Tür! Piloten, kommt und tretet dem neu veröffentlichten Server auf Unity bei. Ihr könnt nicht nur wunderschöne Geschenke kostenlos beim Leveln erhalten, sondern auch an glänzende Booster-, Munitions-, Uridium-Packs sowie Schiffs- und Waffenpacks gelangen!",
+    "es": "¡Un nuevo amanecer está a la vuelta de la esquina! Pilotos, venid y uniros al servidor recién lanzado en Unity. ¡No solo podéis recibir preciosos regalos gratis mientras subís de nivel, sino también haceros con brillantes packs de Potenciadores, Munición, Uridium y packs de Naves y Armas!",
+    "ru": "Новый рассвет уже близко! Пилоты, приходите и присоединяйтесь к новому серверу на Unity. Вы не только можете получать великолепные подарки бесплатно во время прокачки, но и завладеть сверкающими пакетами бустеров, боеприпасов, уридиума, а также пакетами кораблей и оружия!",
+    "tr": "Yeni bir şafak yaklaşıyor! Pilotlar, Unity'deki yeni sunucuya katılın. Seviye atlarken ücretsiz muhteşem hediyeler almanın yanı sıra, parlak Güçlendirici, Mermi, Uridium paketlerinin yanı sıra Gemi ve Silah paketlerine de sahip olabilirsiniz!"
+  },
+  "keywords": [
+    "new dawn",
+    "nouvelle aube","nouvelle ère",
+    "neue morgendämmerung",
+    "nuevo amanecer",
+    "новый рассвет",
+    "yeni şafak",
+    "unity"
+  ],
+  "exclude_keywords": [
+    "deep space echoes",
+    "galaxy trek",
+    "stellar pathfinder",
+    "ascend",
+    "helix blitz"
+  ]
+}

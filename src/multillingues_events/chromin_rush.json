@@ -1,0 +1,28 @@
+{
+  "id": "chromin_rush",
+  "visible": true,
+  "image": "img/events/chromin_rush.jpg",
+  "names": {
+    "fr": "Ruée vers le Chromin",
+    "en": "Chromin Rush",
+    "de": "Chromin Rush",
+    "es": "Chromin Rush",
+    "ru": "Chromin Rush",
+    "tr": "Chromin Rush"
+  },
+  "descriptions": {
+    "fr": "Les Black Light préparent un sale coup… Des extraterrestres exploitent une nouvelle source de Chromin dans les portails intergalactiques. Nettoyez les portails envahis et obtenez du Chromin pour fabriquer des armes, des munitions et de l'équipement puissants !",
+    "en": "The Black Light are up to something - some aliens in the Galaxy Gates have been hoarding a new Chromin resource. Clear out affected Galaxy Gates to get Chromin and create powerful weapons, gear and ammunition!",
+    "de": "The Black Light are up to something - some aliens in the Galaxy Gates have been hoarding a new Chromin resource. Clear out affected Galaxy Gates to get Chromin and create powerful weapons, gear and ammunition!",
+    "es": "The Black Light are up to something - some aliens in the Galaxy Gates have been hoarding a new Chromin resource. Clear out affected Galaxy Gates to get Chromin and create powerful weapons, gear and ammunition!",
+    "ru": "The Black Light are up to something - some aliens in the Galaxy Gates have been hoarding a new Chromin resource. Clear out affected Galaxy Gates to get Chromin and create powerful weapons, gear and ammunition!",
+    "tr": "The Black Light are up to something - some aliens in the Galaxy Gates have been hoarding a new Chromin resource. Clear out affected Galaxy Gates to get Chromin and create powerful weapons, gear and ammunition!"
+  },
+  "keywords": [
+    "chromin rush",
+    "ruée vers le chromin",
+    "chromin",
+    "black light"
+  ],
+  "exclude_keywords": []
+}

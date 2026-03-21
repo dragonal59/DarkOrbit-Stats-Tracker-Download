@@ -1,0 +1,49 @@
+{
+  "id": "odysseus_laser",
+  "visible": true,
+  "image": "img/events/odysseus_laser.jpg",
+  "names": {
+    "fr": "LE LASER ODYSSEUS",
+    "en": "THE ODYSSEUS LASER",
+    "de": "DER ODYSSEUS-LASER",
+    "es": "EL LÁSER ODYSSEUS",
+    "ru": "ЛАЗЕР ОДИССЕЙ",
+    "tr": "ODYSSEUS LAZERI"
+  },
+  "descriptions": {
+    "fr": "Tapi dans l'obscurité avec votre laser Odysseus, vous cherchez à découvrir les faiblesses de l'ennemi. Faites preuve de pitié et achevez-le d'un coup fatal.",
+    "en": "Lurking in the dark with the Odysseus Laser, seek a chance to find the enemy's weaknesses. Give them a fatal blow to show your mercy.",
+    "de": "Mit dem Odysseus-Laser im Dunkeln lauernd, sucht ihr nach einer Chance, die Schwächen des Feindes zu entdecken. Versetzt ihm einen tödlichen Schlag, um eure Gnade zu zeigen.",
+    "es": "Acechando en la oscuridad con el Láser Odysseus, buscad la oportunidad de encontrar las debilidades del enemigo. Dadle un golpe fatal para mostrar vuestra misericordia.",
+    "ru": "Затаившись в темноте с лазером Одиссей, ищите возможность обнаружить слабости врага. Нанесите им смертельный удар, чтобы проявить свою милосердие.",
+    "tr": "Odysseus Lazeri ile karanlıkta pusu kurarak düşmanın zayıf noktalarını bulmak için bir fırsat kollayın. Merhametinizi göstermek için onlara ölümcül bir darbe vurun."
+  },
+  "keywords": [
+    "odysseus laser",
+    "le laser odysseus",
+    "der odysseus-laser",
+    "el láser odysseus",
+    "лазер одиссей",
+    "odysseus lazeri",
+    "odysseus",
+    "laser",
+    "fatal blow",
+    "coup fatal",
+    "tödlicher schlag",
+    "golpe fatal",
+    "смертельный удар",
+    "ölümcül darbe"
+  ],
+  "exclude_keywords": [
+    "mimesis mutiny",
+    "rébellion des mimesis",
+    "deep space echoes",
+    "les échos de l'espace",
+    "stellar pathfinder",
+    "galaxy trek",
+    "into the unknown",
+    "vers l'inconnu",
+    "em freighter",
+    "mimesis invasion"
+  ]
+}

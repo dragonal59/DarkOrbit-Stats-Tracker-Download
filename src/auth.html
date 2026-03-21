@@ -6,6 +6,7 @@
   <title>Connexion — DarkOrbit Stats Tracker Pro</title>
   <link rel="stylesheet" href="frontend/variables.css">
   <link rel="stylesheet" href="frontend/style.css">
+  <link rel="stylesheet" href="frontend/legal.css">
   <style>
     .auth-container { max-width: 420px; margin: 80px auto; padding: 32px; background: var(--bg-secondary); border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 8px 32px var(--shadow); }
     .auth-header { text-align: center; margin-bottom: 28px; }
@@ -54,9 +55,38 @@
     .auth-rank-option:last-child { border-bottom: none; }
     .auth-rank-option:hover { background: var(--accent); color: #fff; }
     .auth-rank-option .auth-rank-option-icon { width: 28px; height: 28px; object-fit: contain; flex-shrink: 0; }
+    .auth-toggle-wrap { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+    .auth-toggle { position: relative; width: 48px; height: 26px; background: #dc3545; border-radius: 13px; cursor: pointer; transition: background 0.2s; }
+    .auth-toggle.active { background: #22c55e; }
+    .auth-toggle::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; background: #fff; border-radius: 50%; transition: transform 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+    .auth-toggle.active::after { transform: translateX(22px); }
+    .auth-toggle-label { font-size: 0.9rem; color: var(--text-secondary); }
+    .auth-countdown { font-size: 0.9rem; color: var(--accent); margin-top: 8px; }
+    .auth-error-inline { margin-top: 8px; }
+    .auth-scan-progress { margin-top: 8px; }
+    .auth-scan-progress-bar { width: 100%; height: 6px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden; }
+    .auth-scan-progress-fill { height: 100%; width: 0%; background: var(--accent); transition: width 0.4s ease; }
+    .auth-scan-progress-text { margin-top: 6px; font-size: 0.85rem; color: var(--text-secondary); }
+    .auth-submit--loading { position: relative; }
+    .auth-spinner {
+      width: 16px;
+      height: 16px;
+      border-radius: 999px;
+      border: 2px solid rgba(255,255,255,0.4);
+      border-top-color: #fff;
+      display: inline-block;
+      margin-right: 8px;
+      vertical-align: middle;
+      animation: auth-spin 0.8s linear infinite;
+    }
+    @keyframes auth-spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
   </style>
 </head>
 <body>
+<button id="btnLegal" type="button" class="btn-legal-info" data-i18n-title="legal_btn_title" title="Informations légales" aria-label="Informations légales">ℹ️</button>
 <div class="auth-container">
   <div class="auth-header">
     <h1>🚀 DarkOrbit Stats Tracker Pro</h1>
@@ -88,6 +118,7 @@
     </div>
     <button type="button" id="authForgotBtn" class="auth-link auth-forgot">Mot de passe oublié ?</button>
     <button type="submit" class="auth-submit" id="loginSubmit">Se connecter</button>
+    <p id="loginInlineError" class="auth-error auth-error-inline" style="display: none; margin-top: 8px;"></p>
   </form>
 
   <form id="authRegisterForm" class="auth-form" onsubmit="return false;">
@@ -99,59 +130,35 @@
       <label for="registerPassword">Mot de passe (min. 6 caractères)</label>
       <input type="password" id="registerPassword" required minlength="6" placeholder="••••••••" autocomplete="new-password">
     </div>
-
-    <h3 class="auth-section-title">Informations du jeu</h3>
-    <div class="field">
-      <label for="registerGamePseudo">Pseudo DarkOrbit (exactement comme dans le jeu)</label>
-      <input type="text" id="registerGamePseudo" required placeholder="Votre pseudo exact" autocomplete="off">
-      <p class="auth-warning">&#x26A0;&#xFE0F; Votre pseudo sera vérifié par notre équipe. Si votre pseudo ne correspond pas à un joueur actif de DarkOrbit, votre compte sera supprimé. Vous devrez alors créer un nouveau compte avec les informations correctes.</p>
+    <div class="auth-section-title">Identifiants DarkOrbit (pour le scan)</div>
+    <div class="auth-toggle-wrap">
+      <div id="registerManualLoginToggle" class="auth-toggle" role="switch" aria-checked="false" tabindex="0"></div>
+      <span class="auth-toggle-label">Connexion manuelle DarkOrbit</span>
     </div>
     <div class="field">
-      <label for="registerServer">Serveur de jeu</label>
-      <select id="registerServer" required>
-        <option value="">— Choisir un serveur —</option>
-        <!-- Options générées depuis SERVERS_LIST (config.js) -->
-      </select>
+      <label for="registerDoPseudo">Pseudo DarkOrbit</label>
+      <input type="text" id="registerDoPseudo" placeholder="Votre pseudo en jeu" autocomplete="username">
     </div>
     <div class="field">
-      <label for="registerCompany">Votre firme</label>
-      <select id="registerCompany" required>
-        <option value="">— Choisir une firme —</option>
-        <option value="EIC" class="company-option-eic">EIC</option>
-        <option value="MMO" class="company-option-mmo">MMO</option>
-        <option value="VRU" class="company-option-vru">VRU</option>
-      </select>
-    </div>
-
-    <h3 class="auth-section-title">Statistiques actuelles</h3>
-    <div class="field">
-      <label for="registerHonor">Points d'honneur actuels</label>
-      <input type="number" id="registerHonor" required min="0" placeholder="0" autocomplete="off">
+      <label for="registerDoPassword">Mot de passe DarkOrbit</label>
+      <input type="password" id="registerDoPassword" placeholder="••••••••" autocomplete="current-password">
     </div>
     <div class="field">
-      <label for="registerXp">Points d'expérience actuels</label>
-      <input type="number" id="registerXp" required min="0" placeholder="0" autocomplete="off">
+      <label for="registerDoServer">Serveur</label>
+      <select id="registerDoServer"></select>
     </div>
     <div class="field">
-      <label for="registerInitialRank">Grade actuel</label>
-      <div class="auth-rank-wrapper" id="registerInitialRankWrapper">
-        <select id="registerInitialRank" name="registerInitialRank" required class="auth-rank-select-native" aria-hidden="true" tabindex="-1">
-          <option value="">— Choisir un grade —</option>
-        </select>
-        <div class="auth-rank-display" id="registerInitialRankDisplay" tabindex="0" role="listbox" aria-label="Grade actuel">
-          <img src="img/basic_space_pilot.png" alt="" class="auth-rank-option-icon">
-          <span class="auth-rank-option-text">— Choisir un grade —</span>
+      <button type="button" id="registerScanStatsBtn" class="auth-submit" style="background: var(--bg-secondary); color: var(--accent); border: 2px solid var(--accent); margin-top: 0;" disabled>Lancer le scan</button>
+      <p id="registerScanError" class="auth-error auth-error-inline" style="display: none;"></p>
+      <p id="registerScanHint" class="auth-warning" style="margin-top: 8px;">Ouvrez le client Dark Orbit Flash, connectez-vous, puis cliquez ci-dessus. Ces stats serviront de base et apparaîtront dans l’historique.</p>
+      <p id="registerScanCountdown" class="auth-countdown" style="display: none;"></p>
+      <div id="registerScanProgress" class="auth-scan-progress" style="display: none;">
+        <div class="auth-scan-progress-bar">
+          <div class="auth-scan-progress-fill"></div>
         </div>
-        <div class="auth-rank-options" id="registerInitialRankOptions" role="listbox"></div>
+        <p id="registerScanProgressText" class="auth-scan-progress-text">Connexion à DarkOrbit...</p>
       </div>
-    </div>
-    <div class="field">
-      <label for="registerRankPoints">Points de grade actuels</label>
-      <input type="number" id="registerRankPoints" required min="0" placeholder="0" autocomplete="off">
-    </div>
-    <div class="field">
-      <label for="registerNextRankPoints">Points pour le grade suivant</label>
-      <input type="number" id="registerNextRankPoints" required min="1" placeholder="0" autocomplete="off">
+      <p id="registerScanResult" class="auth-success" style="margin-top: 8px; display: none;"></p>
     </div>
 
     <button type="submit" class="auth-submit" id="registerSubmit">Créer un compte</button>
@@ -164,57 +171,120 @@
 <script src="backend/supabase-config.js"></script>
 <script src="backend/supabase-client.js"></script>
 <script src="config/keys.js"></script>
+<script src="backend/translations.js"></script>
+<script src="backend/i18n.js"></script>
 <script src="backend/server-mappings.js"></script>
 <script src="backend/config.js"></script>
+<script src="backend/utils.js"></script>
 <!-- UnifiedStorage puis auth -->
 <script src="backend/unified-storage.js"></script>
 <script src="backend/auth-manager.js"></script>
 <script src="frontend/auth.js"></script>
-<script>
-(function() {
-  document.addEventListener('DOMContentLoaded', function() {
-    var serverSelect = document.getElementById('registerServer');
-    if (serverSelect && typeof SERVERS_LIST !== 'undefined' && Array.isArray(SERVERS_LIST)) {
-      SERVERS_LIST.forEach(function(name) {
-        var opt = document.createElement('option');
-        opt.value = name;
-        opt.textContent = name;
-        serverSelect.appendChild(opt);
-      });
-    }
-    var select = document.getElementById('registerInitialRank');
-    var display = document.getElementById('registerInitialRankDisplay');
-    var optionsEl = document.getElementById('registerInitialRankOptions');
-    if (!select || !display || !optionsEl || typeof RANKS_DATA === 'undefined' || !RANKS_DATA.length) return;
-    RANKS_DATA.forEach(function(r) {
-      var opt = document.createElement('div');
-      opt.className = 'auth-rank-option';
-      opt.setAttribute('data-value', r.name);
-      opt.setAttribute('role', 'option');
-      opt.innerHTML = '<img src="' + r.img + '" alt="" class="auth-rank-option-icon"><span>' + r.name + '</span>';
-      opt.addEventListener('click', function(e) {
-        e.stopPropagation();
-        select.value = r.name;
-        display.querySelector('.auth-rank-option-icon').src = r.img;
-        display.querySelector('.auth-rank-option-text').textContent = r.name;
-        optionsEl.classList.remove('open');
-        optionsEl.setAttribute('aria-expanded', 'false');
-      });
-      optionsEl.appendChild(opt);
-    });
-    display.addEventListener('click', function() {
-      var isOpen = optionsEl.classList.toggle('open');
-      optionsEl.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-    });
-    document.addEventListener('click', function(e) {
-      var w = document.getElementById('registerInitialRankWrapper');
-      if (w && !w.contains(e.target)) {
-        optionsEl.classList.remove('open');
-        optionsEl.setAttribute('aria-expanded', 'false');
-      }
-    });
-  });
-})();
-</script>
+<script src="frontend/legal.js"></script>
+
+<!-- MODAL DOCUMENTS LÉGAUX (même structure que index.html) -->
+<div id="modalLegal" class="modal-legal hidden">
+  <div class="modal-legal-overlay"></div>
+  <div class="modal-legal-container">
+    <div class="modal-legal-header">
+      <h2>ℹ️ <span data-i18n="legal_modal_title">Informations légales</span></h2>
+      <button id="closeLegal" type="button" class="modal-legal-close" aria-label="Fermer">✕</button>
+    </div>
+    <div class="modal-legal-tabs">
+      <button type="button" class="legal-tab active" data-tab="cgu" data-i18n="legal_tab_cgu">CGU</button>
+      <button type="button" class="legal-tab" data-tab="rgpd" data-i18n="legal_tab_rgpd">Politique de confidentialité (RGPD)</button>
+      <button type="button" class="legal-tab" data-tab="mentions" data-i18n="legal_tab_mentions">Mentions légales</button>
+      <button type="button" class="legal-tab" data-tab="remboursement" data-i18n="legal_tab_refund">Politique de remboursement</button>
+    </div>
+    <div class="modal-legal-content">
+      <div class="legal-panel active" id="tab-cgu">
+        <h1>Conditions générales d'utilisation (CGU)</h1>
+        <p><strong>Dernière mise à jour : 2025</strong></p>
+        <h2>Article 1 — Présentation de l'application</h2>
+        <p>DarkOrbit Stats Tracker Pro (ci-après "l'Application") est une application desktop développée et commercialisée par [Ton Nom / Ton Auto-entreprise] (ci-après "le Développeur").</p>
+        <p>L'Application est un outil tiers indépendant destiné aux joueurs du jeu en ligne DarkOrbit. Elle permet le suivi de statistiques de progression, la comparaison de sessions, l'affichage d'événements en cours, et les classements serveur.</p>
+        <p><strong>L'Application n'est en aucun cas affiliée, approuvée, sponsorisée ou endorsée par Bigpoint GmbH, l'éditeur de DarkOrbit.</strong> DarkOrbit est une marque déposée de Bigpoint GmbH.</p>
+        <h2>Article 2 — Acceptation des CGU</h2>
+        <p>L'installation et l'utilisation de l'Application impliquent l'acceptation pleine et entière des présentes CGU. Si vous n'acceptez pas ces conditions, vous devez désinstaller l'Application et ne pas l'utiliser.</p>
+        <h2>Article 3 — Accès et compte utilisateur</h2>
+        <p><strong>3.1 Création de compte</strong> — L'utilisation nécessite la création d'un compte via une adresse email valide. L'utilisateur est seul responsable de la confidentialité de ses identifiants.</p>
+        <p><strong>3.2 Niveaux d'accès</strong> — FREE : accès limité (stats, progression, historique limité à 1 session, classement). PRO : accès complet (événements, notifications, boosters, liens personnalisés, historique illimité, synchronisation multi-appareils).</p>
+        <p><strong>3.3 Suspension</strong> — Le Développeur se réserve le droit de suspendre ou supprimer tout compte en cas d'abus, fraude ou violation des CGU, sans préavis ni remboursement.</p>
+        <h2>Article 4 — Abonnement et paiement</h2>
+        <p><strong>4.1 Prix</strong> — <span data-i18n="price_pro_month">7.99€/mois</span> (TVA incluse selon pays de résidence).</p>
+        <p><strong>4.2 Facturation</strong> — Mensuelle, à date anniversaire. Paiement via PayPal.</p>
+        <p><strong>4.3 Résiliation</strong> — À tout moment. Prise d'effet en fin de période en cours. Aucun remboursement partiel.</p>
+        <p><strong>4.4 Politique de remboursement</strong> — Aucun remboursement sauf défaillance technique majeure imputable au Développeur et non résolue sous 7 jours ouvrés.</p>
+        <p><strong>4.5 Modification des tarifs</strong> — Communiquée au moins 30 jours avant entrée en vigueur.</p>
+        <h2>Article 5 — Licence d'utilisation</h2>
+        <p>Licence personnelle, non exclusive, non transférable et révocable. Interdit : copier, modifier, décompiler, revendre, distribuer, partager identifiants, contourner les mesures de protection.</p>
+        <h2>Article 6 — Données et scraping</h2>
+        <p>L'Application collecte des données publiques via scraping. L'utilisateur reconnaît que cela peut être contraire aux CGU de DarkOrbit. Le Développeur ne stocke pas les mots de passe DarkOrbit.</p>
+        <h2>Article 7 — Disponibilité et maintenance</h2>
+        <p>Le Développeur s'efforce d'assurer la disponibilité mais ne peut garantir une disponibilité ininterrompue.</p>
+        <h2>Article 8 — Limitation de responsabilité</h2>
+        <p>L'Application est fournie "en l'état". Pas de garantie d'absence d'erreurs. Le Développeur ne pourra être tenu responsable des pertes de données, dommages indirects ou modifications par Bigpoint GmbH.</p>
+        <h2>Article 9 — Propriété intellectuelle</h2>
+        <p>L'Application, son code, interface et documentation sont la propriété exclusive du Développeur. © 2025 [Ton Nom]. Tous droits réservés.</p>
+        <h2>Article 10 — Droit applicable</h2>
+        <p>Droit français. Tribunaux français compétents en cas de litige.</p>
+      </div>
+      <div class="legal-panel hidden" id="tab-rgpd">
+        <h1>Politique de confidentialité (RGPD)</h1>
+        <p><strong>Dernière mise à jour : 2025</strong></p>
+        <h2>Article 1 — Responsable du traitement</h2>
+        <p>[Ton Nom / Ton Auto-entreprise]<br>Email : [ton-email@domaine.com]</p>
+        <h2>Article 2 — Données collectées</h2>
+        <table>
+          <thead><tr><th>Donnée</th><th>Finalité</th><th>Base légale</th></tr></thead>
+          <tbody>
+            <tr><td>Adresse email</td><td>Création de compte, authentification</td><td>Exécution du contrat</td></tr>
+            <tr><td>Pseudo DarkOrbit</td><td>Identification in-game</td><td>Consentement</td></tr>
+            <tr><td>Serveur de jeu</td><td>Classements et stats</td><td>Consentement</td></tr>
+            <tr><td>Statistiques de jeu</td><td>Fonctionnalités principales</td><td>Exécution du contrat</td></tr>
+            <tr><td>Sessions de jeu</td><td>Historique et progression</td><td>Exécution du contrat</td></tr>
+            <tr><td>Données de paiement</td><td>Traitement abonnement</td><td>Exécution du contrat</td></tr>
+            <tr><td>Logs de connexion</td><td>Sécurité</td><td>Intérêt légitime</td></tr>
+          </tbody>
+        </table>
+        <h2>Article 3 — Hébergement</h2>
+        <p>Données hébergées par <strong>Supabase Inc.</strong> (PostgreSQL), conforme RGPD. <a href="https://supabase.com/privacy" target="_blank" rel="noopener">supabase.com/privacy</a></p>
+        <h2>Article 4 — Durée de conservation</h2>
+        <p>Compte : durée abonnement + 12 mois après résiliation. Sessions : selon plan (FREE : 1, PRO : illimité). Logs : 90 jours.</p>
+        <h2>Article 5 — Partage des données</h2>
+        <p>Jamais vendues. Partagées uniquement avec : Supabase (hébergement), PayPal (paiements), autorités si requis par la loi.</p>
+        <h2>Article 6 — Vos droits (RGPD)</h2>
+        <p>Droit d'accès, rectification, effacement, portabilité, opposition. Contact : [ton-email@domaine.com]. Réclamation possible auprès de la CNIL (www.cnil.fr).</p>
+        <h2>Article 7 — Cookies et stockage local</h2>
+        <p>localStorage pour préférences (langue, thème). Données restent sur l'appareil.</p>
+        <h2>Article 8 — Sécurité</h2>
+        <p>Chiffrement identifiants (Electron safeStorage), auth Supabase, obfuscation, RLS Supabase.</p>
+      </div>
+      <div class="legal-panel hidden" id="tab-mentions">
+        <h1>Mentions légales</h1>
+        <p><strong>Application</strong> : DarkOrbit Stats Tracker Pro</p>
+        <p><strong>Développeur</strong> : [Ton Nom]</p>
+        <p><strong>Adresse</strong> : [Ta ville, Ton pays]</p>
+        <p><strong>Email</strong> : [ton-email@domaine.com]</p>
+        <p><strong>Hébergement des données</strong> : Supabase Inc., 970 Toa Payoh North, Singapour</p>
+        <p><strong>Avertissement</strong> : DarkOrbit Stats Tracker Pro est une application indépendante non affiliée à Bigpoint GmbH. DarkOrbit® est une marque déposée de Bigpoint GmbH.</p>
+        <p>© 2025 [Ton Nom]. Tous droits réservés.</p>
+      </div>
+      <div class="legal-panel hidden" id="tab-remboursement">
+        <h1>Politique de remboursement</h1>
+        <p>En raison de la nature numérique de l'Application et de l'accès immédiat aux fonctionnalités PRO :</p>
+        <ul>
+          <li><strong>Aucun remboursement</strong> pour une période déjà facturée</li>
+          <li><strong>Exception</strong> : dysfonctionnement majeur non résolu sous 7 jours ouvrés → remboursement du mois en cours</li>
+          <li><strong>Résiliation</strong> : effective en fin de période en cours, pas de prorata</li>
+        </ul>
+        <p>Pour toute demande : [ton-email@domaine.com]</p>
+      </div>
+    </div>
+    <div class="modal-legal-footer">
+      © 2025 DarkOrbit Stats Tracker Pro. Tous droits réservés.
+    </div>
+  </div>
+</div>
 </body>
 </html>

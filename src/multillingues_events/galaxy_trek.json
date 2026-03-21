@@ -1,0 +1,39 @@
+{
+  "id": "galaxy_trek",
+  "visible": true,
+  "image": "img/events/galaxy_trek.jpg",
+  "names": {
+    "fr": "Vers l'Inconnu… et au-delà !",
+    "en": "Into the Unknown… and Beyond!",
+    "de": "Ins Unbekannte… und darüber hinaus!",
+    "es": "Hacia lo Desconocido… ¡y más allá!",
+    "ru": "В неизведанное… и дальше!",
+    "tr": "Bilinmeyene Doğru… ve Ötesine!"
+  },
+  "descriptions": {
+    "fr": "Salutations, pilotes de l'espace ! Le saviez-vous ? Une mystérieuse galaxie inexplorée a été découverte dans les profondeurs de l'espace. Planètes étranges, anomalies bizarres et trésors inimaginables attendent les courageux qui oseront s'y aventurer. Mais attention : des forces hostiles ont été repérées partout dans la région !",
+    "en": "Greetings, Space Pilot! Did you know? A mysterious uncharted galaxy has been discovered in depths of space. Strange planets, weird anomalies, and unimaginable treasures await those who dare to venture forth - but beware: hostile forces have been spotted all around the quadrant!",
+    "de": "Grüße, Weltraumpilot! Wusstest du es? Eine mysteriöse unerforschte Galaxie wurde in den Tiefen des Weltraums entdeckt. Seltsame Planeten, merkwürdige Anomalien und unvorstellbare Schätze warten auf die Mutigen, die es wagen, sich vorzuwagen – aber Vorsicht: Feindliche Kräfte wurden im gesamten Quadranten gesichtet!",
+    "es": "¡Saludos, piloto espacial! ¿Lo sabías? Se ha descubierto una misteriosa galaxia inexplorada en las profundidades del espacio. Planetas extraños, anomalías raras y tesoros inimaginables aguardan a quienes se atrevan a aventurarse, ¡pero cuidado: se han detectado fuerzas hostiles por todo el cuadrante!",
+    "ru": "Приветствую, космический пилот! Знаете ли вы? В глубинах космоса была обнаружена таинственная неизведанная галактика. Странные планеты, загадочные аномалии и невообразимые сокровища ждут смельчаков — но осторожно: враждебные силы замечены по всему квадранту!",
+    "tr": "Selamlar, Uzay Pilotu! Biliyor muydun? Uzayın derinliklerinde gizemli, keşfedilmemiş bir galaksi keşfedildi. Garip gezegenler, tuhaf anomaliler ve hayal edilemez hazineler cesur kaşifleri bekliyor — ama dikkat: bölge genelinde düşman kuvvetler tespit edildi!"
+  },
+  "keywords": [
+    "into the unknown",
+    "vers l'inconnu",
+    "hacia lo desconocido",
+    "ins unbekannte",
+    "в неизведанное",
+    "bilinmeyene doğru"
+  ],
+  "exclude_keywords": [
+    "deep space echoes",
+    "les échos de l'espace",
+    "ecos del espacio profundo",
+    "tiefraumechos",
+    "эхо глубокого космоса",
+    "derin uzay yankıları",
+    "stellar pathfinder",
+    "quantum fluid"
+  ]
+}

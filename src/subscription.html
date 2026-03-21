@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-i18n="subscription_title">Abonnement Pro — DarkOrbit Stats Tracker</title>
+  <link rel="stylesheet" href="frontend/variables.css">
+  <link rel="stylesheet" href="frontend/style.css">
+  <link rel="stylesheet" href="frontend/legal.css">
+  <style>
+    .sub-container { max-width: 420px; margin: 80px auto; padding: 32px; background: var(--bg-secondary); border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 8px 32px var(--shadow); }
+    .sub-header { text-align: center; margin-bottom: 28px; }
+    .sub-header h1 { font-size: 1.5rem; margin-bottom: 8px; }
+    .sub-header p { color: var(--text-muted); font-size: 0.9rem; }
+    .sub-price { font-size: 1.5rem; font-weight: 700; color: var(--accent); margin: 16px 0; }
+    .sub-paypal { margin: 24px 0; min-height: 45px; padding: 16px; background: var(--bg-tertiary); border-radius: 10px; border: 1px solid var(--border); }
+    .sub-trial { margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border); }
+    .sub-trial label { display: block; margin-bottom: 6px; font-size: 0.9rem; color: var(--text-secondary); }
+    .sub-trial input { width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--input-bg); color: var(--text-primary); font-size: 1rem; }
+    .sub-trial input:focus { outline: none; border-color: var(--accent); }
+    .sub-trial button { margin-top: 12px; padding: 12px 20px; background: var(--accent); color: #fff; border: none; border-radius: 8px; cursor: pointer; font-size: 0.95rem; }
+    .sub-trial button:hover { opacity: 0.9; }
+    .sub-trial button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .sub-message { padding: 12px; border-radius: 8px; font-size: 0.9rem; margin-top: 16px; display: none; }
+    .sub-message.success { background: rgba(34, 197, 94, 0.15); color: var(--success); display: block; }
+    .sub-message.error { background: rgba(239, 68, 68, 0.15); color: var(--danger); display: block; }
+    .sub-message.activating { background: rgba(59, 130, 246, 0.15); color: var(--accent); display: block; }
+    .sub-back { display: block; text-align: center; margin-top: 24px; color: var(--accent); font-size: 0.9rem; text-decoration: none; cursor: pointer; }
+    .sub-back:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+<button id="btnLegal" type="button" class="btn-legal-info" data-i18n-title="legal_btn_title" title="Informations légales" aria-label="Informations légales">ℹ️</button>
+<div class="sub-container">
+  <div class="sub-header">
+    <h1 data-i18n="subscription_title">Abonnement Pro</h1>
+    <p data-i18n="subscription_subtitle">Accédez à toutes les fonctionnalités</p>
+    <div class="sub-price" data-i18n="price_pro_month">7.99€/mois</div>
+  </div>
+  <div id="paypalSubscribeContainer" class="sub-paypal"></div>
+  <div id="subMessage" class="sub-message"></div>
+  <div class="sub-trial">
+    <label data-i18n="trial_key_label">Clé d'essai</label>
+    <input type="text" id="trialKeyInput" placeholder="XXXX-XXXX-XXXX-XXXX" maxlength="24" autocomplete="off">
+    <button type="button" id="activateTrialBtn" data-i18n="activate_trial">Activer l'essai</button>
+  </div>
+  <a href="#" id="subBackLink" class="sub-back">← Retour à l'application</a>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="backend/supabase-config.js"></script>
+<script src="backend/supabase-client.js"></script>
+<script src="config/keys.js"></script>
+<script src="backend/translations.js"></script>
+<script src="backend/i18n.js"></script>
+<script src="backend/unified-storage.js"></script>
+<script src="backend/auth-manager.js"></script>
+<script src="backend/api.js"></script>
+<script src="backend/version-badges.js"></script>
+<script src="backend/subscription-check.js"></script>
+<script src="backend/paypal-buttons.js"></script>
+<script>
+(function() {
+  function t(k) { return (typeof TRANSLATIONS !== 'undefined' && TRANSLATIONS.t) ? TRANSLATIONS.t(k) : k; }
+  function goToApp() {
+    window.location.href = 'index.html';
+  }
+  function goToAuth() {
+    if (typeof electronAPI !== 'undefined' && electronAPI.navigateToAuth) {
+      electronAPI.navigateToAuth();
+    } else {
+      window.location.href = 'auth.html';
+    }
+  }
+  function showMessage(type, text) {
+    var el = document.getElementById('subMessage');
+    if (!el) return;
+    el.textContent = text;
+    el.className = 'sub-message ' + type;
+  }
+
+  document.getElementById('subBackLink').addEventListener('click', function(e) {
+    e.preventDefault();
+    goToApp();
+  });
+
+  document.addEventListener('DOMContentLoaded', async function() {
+    var supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+    var session = typeof AuthManager !== 'undefined' ? await AuthManager.getValidSession() : null;
+    if (!session || !supabase) {
+      goToAuth();
+      return;
+    }
+    if (typeof BackendAPI !== 'undefined') await BackendAPI.loadUserProfile();
+    var profile = typeof BackendAPI !== 'undefined' ? BackendAPI.getUserProfile() : null;
+    var subStatus = profile && profile.subscription_status ? profile.subscription_status : 'free';
+    var badge = profile && profile.badge ? profile.badge : 'FREE';
+    if (subStatus === 'premium' || badge === 'ADMIN' || badge === 'SUPERADMIN') {
+      goToApp();
+      return;
+    }
+    if (typeof document.di18n === 'function') document.di18n();
+  });
+
+  function pollForPremium() {
+    var t = typeof TRANSLATIONS !== 'undefined' && TRANSLATIONS.t ? TRANSLATIONS.t('payment_received_activating') : 'Paiement reçu, activation en cours...';
+    showMessage('activating', t);
+    var pollInterval = 3000;
+    var maxWait = 30000;
+    var start = Date.now();
+    function poll() {
+      if (Date.now() - start > maxWait) {
+        showMessage('activating', t + ' (délai dépassé, rechargez la page)');
+        return;
+      }
+      BackendAPI.invalidateProfileCache();
+      BackendAPI.loadUserProfile().then(function (p) {
+        var sub = (p && p.subscription_status) || (p && p.badge === 'PRO');
+        if (sub === 'premium' || (p && p.badge === 'PRO')) {
+          showMessage('success', 'Abonnement activé ! Redirection...');
+          setTimeout(function () { goToApp(); }, 1000);
+          return;
+        }
+        setTimeout(poll, pollInterval);
+      }).catch(function () { setTimeout(poll, pollInterval); });
+    }
+    setTimeout(poll, pollInterval);
+  }
+
+  window.addEventListener('paypal-subscription-saved', function () {
+    pollForPremium();
+  });
+
+  document.getElementById('activateTrialBtn').addEventListener('click', async function() {
+    var input = document.getElementById('trialKeyInput');
+    var btn = this;
+    var key = (input && input.value) ? input.value.trim() : '';
+    if (!key) return;
+    var supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+    if (!supabase) { showMessage('error', 'Supabase non disponible.'); return; }
+    btn.disabled = true;
+    try {
+      var { data, error } = await supabase.rpc('activate_trial_key', { p_key: key });
+      if (error) {
+        showMessage('error', error.message || 'Erreur');
+        return;
+      }
+      if (data && data.success) {
+        showMessage('success', 'Essai activé ! Redirection...');
+        if (typeof BackendAPI !== 'undefined') BackendAPI.invalidateProfileCache();
+        setTimeout(function() { goToApp(); }, 1500);
+      } else {
+        var errMsg = (data && data.error === 'invalid_key') ? 'Clé invalide ou déjà utilisée.' : ((data && data.error) || 'Erreur');
+        showMessage('error', errMsg);
+      }
+    } catch (e) {
+      showMessage('error', e && e.message ? e.message : 'Erreur');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+})();
+</script>
+<script src="frontend/legal.js"></script>
+</body>
+</html>

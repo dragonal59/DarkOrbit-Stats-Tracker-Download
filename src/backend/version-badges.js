@@ -28,15 +28,16 @@ const TABS = Object.freeze({
   EVENTS: 'events',
   CLASSEMENT: 'classement',
   SETTINGS: 'settings',
-  DASHBOARD: 'superadmin'
+  DASHBOARD: 'superadmin',
+  COUPONS: 'coupons'
 });
 
 // Onglets visibles par badge (FREE sans Événements, PRO/ADMIN/SUPERADMIN avec Événements)
 const BADGE_TABS = Object.freeze({
   [BADGES.FREE]: [TABS.STATS, TABS.PROGRESSION, TABS.HISTORY, TABS.CLASSEMENT, TABS.SETTINGS],
-  [BADGES.PRO]: [TABS.STATS, TABS.PROGRESSION, TABS.HISTORY, TABS.EVENTS, TABS.CLASSEMENT, TABS.SETTINGS],
-  [BADGES.ADMIN]: [TABS.STATS, TABS.PROGRESSION, TABS.HISTORY, TABS.EVENTS, TABS.CLASSEMENT, TABS.SETTINGS, TABS.DASHBOARD],
-  [BADGES.SUPERADMIN]: [TABS.STATS, TABS.PROGRESSION, TABS.HISTORY, TABS.EVENTS, TABS.CLASSEMENT, TABS.SETTINGS, TABS.DASHBOARD]
+  [BADGES.PRO]: [TABS.STATS, TABS.PROGRESSION, TABS.HISTORY, TABS.CLASSEMENT, TABS.SETTINGS, TABS.COUPONS],
+  [BADGES.ADMIN]: [TABS.STATS, TABS.PROGRESSION, TABS.HISTORY, TABS.CLASSEMENT, TABS.SETTINGS, TABS.COUPONS, TABS.DASHBOARD],
+  [BADGES.SUPERADMIN]: [TABS.STATS, TABS.PROGRESSION, TABS.HISTORY, TABS.CLASSEMENT, TABS.SETTINGS, TABS.COUPONS, TABS.DASHBOARD]
 });
 
 // Fonctionnalités par badge
@@ -59,7 +60,8 @@ const BADGE_FEATURES = Object.freeze({
     dashboardAdmin: false,
     dashboardBanUnban: false,
     dashboardPromoteDemote: false,
-    dashboardViewAdminLogs: false
+    dashboardViewAdminLogs: false,
+    couponsTab: false
   }),
   [BADGES.PRO]: Object.freeze({
     statsPersonal: true,
@@ -79,7 +81,8 @@ const BADGE_FEATURES = Object.freeze({
     dashboardAdmin: false,
     dashboardBanUnban: false,
     dashboardPromoteDemote: false,
-    dashboardViewAdminLogs: false
+    dashboardViewAdminLogs: false,
+    couponsTab: true
   }),
   [BADGES.ADMIN]: Object.freeze({
     statsPersonal: true,
@@ -99,7 +102,20 @@ const BADGE_FEATURES = Object.freeze({
     dashboardAdmin: true,
     dashboardBanUnban: true,
     dashboardPromoteDemote: false,
-    dashboardViewAdminLogs: false
+    dashboardViewAdminLogs: false,
+    dashboardViewUsers: true,
+    dashboardEditBadges: false,
+    dashboardGenerateKeys: false,
+    dashboardCollectRankings: false,
+    dashboardDarkOrbitAccounts: false,
+    dashboardViewSecurityLogs: false,
+    dashboardVueGenerale: false,
+    dashboardMessages: false,
+    dashboardLogsSecurite: false,
+    dashboardClesLicence: false,
+    dashboardPlanificateur: false,
+    dashboardPermissionsAdmin: false,
+    dashboardLogs: false
   }),
   [BADGES.SUPERADMIN]: Object.freeze({
     statsPersonal: true,
@@ -119,7 +135,21 @@ const BADGE_FEATURES = Object.freeze({
     dashboardAdmin: true,
     dashboardBanUnban: true,
     dashboardPromoteDemote: true,
-    dashboardViewAdminLogs: true
+    dashboardViewAdminLogs: true,
+    dashboardViewUsers: true,
+    dashboardEditBadges: true,
+    dashboardGenerateKeys: true,
+    dashboardCollectRankings: true,
+    dashboardDarkOrbitAccounts: true,
+    dashboardViewSecurityLogs: true,
+    dashboardVueGenerale: true,
+    dashboardMessages: true,
+    dashboardLogsSecurite: true,
+    dashboardClesLicence: true,
+    dashboardPlanificateur: true,
+    dashboardPermissionsAdmin: true,
+    dashboardLogs: true,
+    couponsTab: true
   })
 });
 
@@ -171,17 +201,24 @@ function getTabsFromBadge(badge) {
  * Priorité : 1) Cache permissions RPC  2) Cache profil Supabase  3) localStorage  4) FREE
  */
 function getCurrentBadge() {
-  if (_permissionsCache?.badge && BADGE_LEVEL[_permissionsCache.badge] !== undefined) return _permissionsCache.badge;
-  if (_profileCache?.badge && BADGE_LEVEL[_profileCache.badge] !== undefined) return _profileCache.badge;
-  if (typeof UnifiedStorage !== 'undefined') {
-    const stored = UnifiedStorage.get(STORAGE_KEY_BADGE, null);
-    if (stored && BADGE_LEVEL[stored] !== undefined) return stored;
+  try {
+    if (_permissionsCache?.badge && BADGE_LEVEL[_permissionsCache.badge] !== undefined) return _permissionsCache.badge;
+    if (_profileCache?.badge && BADGE_LEVEL[_profileCache.badge] !== undefined) return _profileCache.badge;
+    if (typeof UnifiedStorage !== 'undefined') {
+      const stored = UnifiedStorage.get(STORAGE_KEY_BADGE, null);
+      if (stored && BADGE_LEVEL[stored] !== undefined) return stored;
+    }
+    if (typeof localStorage !== 'undefined') {
+      const stored = localStorage.getItem(STORAGE_KEY_BADGE);
+      if (stored && BADGE_LEVEL[stored] !== undefined) return stored;
+    }
+    return DEFAULT_BADGE;
+  } catch (e) {
+    if (typeof Logger !== 'undefined' && Logger.warn) {
+      Logger.warn('[Badges] getCurrentBadge error:', e && e.message ? e.message : e);
+    }
+    return DEFAULT_BADGE;
   }
-  if (typeof localStorage !== 'undefined') {
-    const stored = localStorage.getItem(STORAGE_KEY_BADGE);
-    if (stored && BADGE_LEVEL[stored] !== undefined) return stored;
-  }
-  return DEFAULT_BADGE;
 }
 
 /**
@@ -299,4 +336,3 @@ window.currentCanAccessTab = currentCanAccessTab;
 window.hasBadgeOrHigher = hasBadgeOrHigher;
 window.generateUserBadge = generateUserBadge;
 
-console.log('🏷️ Module Version Badges chargé');

@@ -38,6 +38,7 @@ function obfuscateFile(filePath) {
   if (!basename.endsWith('.js')) return;
   if (SKIP_OBFUSCATE.includes(basename)) return;
   if (relativePath.includes('extensions')) return;
+  if (relativePath.startsWith('scraper' + path.sep) || relativePath === 'scraper') return;
 
   const code = fs.readFileSync(filePath, 'utf8');
   const result = JavaScriptObfuscator.obfuscate(code, {

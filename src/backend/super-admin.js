@@ -10,6 +10,10 @@ const SuperAdmin = {
     return { USERS: sk.ADMIN_USERS || 'darkOrbitAdminUsers', ACTION_LOGS: sk.ADMIN_ACTION_LOGS || 'darkOrbitAdminActionLogs' };
   },
   _usersCache: [],
+  _usersCacheTime: 0,
+  _usersPage: 0,
+  _usersTotalCount: null,
+  USERS_CACHE_TTL_MS: 2 * 60 * 1000,
 
   /**
    * Utilitaire : vérifie la réponse RPC et affiche erreur ou succès.
@@ -21,14 +25,14 @@ const SuperAdmin = {
    */
   handleRPCResponse(error, data, successMessage, context) {
     if (error) {
-      console.error('[SuperAdmin] Erreur RPC (' + (context || '') + '):', error);
+      Logger.error('[SuperAdmin] Erreur RPC (' + (context || '') + '):', error);
       if (typeof showToast === 'function') {
         showToast('Erreur : ' + (error.message || 'Erreur réseau'), 'error');
       }
       return { ok: false };
     }
     if (!data?.success) {
-      console.error('[SuperAdmin] Opération échouée (' + (context || '') + '):', data);
+      Logger.error('[SuperAdmin] Opération échouée (' + (context || '') + '):', data);
       if (typeof showToast === 'function') {
         showToast('Opération échouée : ' + (data?.error || 'Erreur inconnue'), 'error');
       }
@@ -41,30 +45,44 @@ const SuperAdmin = {
   },
 
   /**
-   * Charge les utilisateurs (Supabase ou fallback local)
-   * RLS : n'interroge Supabase que si l'utilisateur est ADMIN ou SUPERADMIN
+   * Charge les utilisateurs (Supabase ou fallback local), par pages de 100.
+   * RLS : n'interroge Supabase que si l'utilisateur est ADMIN ou SUPERADMIN.
+   * @param {object} [opts] - { page: number } page 0-based ; si absent, page 0. Ne recharge pas si cache < 2 min et même page.
    */
-  async loadUsers() {
+  async loadUsers(opts) {
+    const page = (opts && opts.page !== undefined) ? opts.page : 0;
+    const forceRefresh = opts && opts.forceRefresh === true;
     const isAdmin = typeof currentCanAccessTab === 'function' && currentCanAccessTab('superadmin');
     const badge = typeof getCurrentBadge === 'function' ? getCurrentBadge() : null;
     const isAdminByBadge = badge && ['ADMIN', 'SUPERADMIN'].includes(badge);
 
     if (!isAdmin && !isAdminByBadge) {
-      console.log('[SuperAdmin] loadUsers: Utilisateur non admin (badge=' + (badge || '?') + ') → liste vide');
       this._usersCache = [];
+      return this._usersCache;
+    }
+
+    const now = Date.now();
+    if (!forceRefresh && this._usersTotalCount != null && (now - this._usersCacheTime) < this.USERS_CACHE_TTL_MS && this._usersPage === page) {
       return this._usersCache;
     }
 
     const supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
     if (supabase) {
       try {
-        console.log('[SuperAdmin] loadUsers: Requête profiles (admin)…');
-        const { data, error } = await supabase.from('profiles').select('id, username, email, badge, role, status, is_suspect, metadata, created_at, updated_at, last_login');
+        const from = page * 100;
+        const to = from + 99;
+        const { data, error, count } = await supabase
+          .from('profiles')
+          .select('id, username, email, badge, role, status, is_suspect, metadata, created_at, updated_at, last_login, game_pseudo, server, company, initial_honor, initial_xp, initial_rank, initial_rank_points, next_rank_points', { count: 'exact' })
+          .order('created_at', { ascending: false })
+          .range(from, to);
         if (error) {
-          console.error('[SuperAdmin] loadUsers RPC error', error);
+          Logger.error('[SuperAdmin] loadUsers error', error);
           if (typeof showToast === 'function') showToast('Impossible de charger les utilisateurs : ' + (error.message || 'Erreur Supabase'), 'error');
         } else if (data) {
-          console.log('[SuperAdmin] loadUsers: OK, ' + data.length + ' profil(s) chargé(s)');
+          this._usersTotalCount = count != null ? count : data.length;
+          this._usersPage = page;
+          this._usersCacheTime = now;
           this._usersCache = data.map(p => ({
             id: p.id,
             email: p.email || '',
@@ -76,22 +94,33 @@ const SuperAdmin = {
             createdAt: p.created_at,
             lastActivity: p.last_login,
             adminNotes: (p.metadata?.admin_notes || []).map(n => ({ content: n.content, adminId: n.admin_id, timestamp: n.ts })),
-            metadata: p.metadata
+            metadata: p.metadata,
+            game_pseudo: p.game_pseudo ?? '',
+            server: p.server ?? '',
+            company: p.company ?? '',
+            initial_honor: p.initial_honor,
+            initial_xp: p.initial_xp,
+            initial_rank: p.initial_rank ?? '',
+            initial_rank_points: p.initial_rank_points,
+            next_rank_points: p.next_rank_points
           }));
           return this._usersCache;
         }
       } catch (e) {
-        console.error('[SuperAdmin] loadUsers: Exception', e?.message || e, e);
+        Logger.error('[SuperAdmin] loadUsers: Exception', e?.message || e, e);
         if (typeof showToast === 'function') showToast('Erreur lors du chargement des utilisateurs : ' + (e?.message || 'Exception'), 'error');
       }
     }
-    console.log('[SuperAdmin] loadUsers: Fallback localStorage (liste vide)');
     this._usersCache = [];
     return this._usersCache;
   },
 
+  getUsersTotalCount() {
+    return this._usersTotalCount != null ? this._usersTotalCount : 0;
+  },
+
   /**
-   * Récupère la liste des utilisateurs (cache)
+   * Récupère la liste des utilisateurs (cache, page courante)
    */
   getUsers() {
     if (this._usersCache.length > 0) return this._usersCache;
@@ -122,21 +151,34 @@ const SuperAdmin = {
    */
   async updateUser(userId, updates) {
     const supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
-    if (supabase && (updates.status || updates.email)) {
+    const hasAdminUpdate = updates.status != null || updates.email != null || updates.isSuspect != null ||
+      updates.game_pseudo != null || updates.server != null || updates.company != null ||
+      updates.initial_honor != null || updates.initial_xp != null || updates.initial_rank != null ||
+      updates.initial_rank_points != null || updates.next_rank_points != null;
+    if (supabase && hasAdminUpdate) {
       try {
-        const { data, error } = await supabase.rpc('admin_update_profile', {
+        const payload = {
           p_target_id: userId,
-          p_status: updates.status || null,
-          p_email: updates.email || null,
+          p_status: updates.status ?? null,
+          p_email: updates.email ?? null,
           p_is_suspect: updates.isSuspect != null ? updates.isSuspect : null
-        });
+        };
+        if (updates.game_pseudo !== undefined) payload.p_game_pseudo = updates.game_pseudo || null;
+        if (updates.server !== undefined) payload.p_server = updates.server || null;
+        if (updates.company !== undefined) payload.p_company = updates.company || null;
+        if (updates.initial_honor !== undefined) payload.p_initial_honor = updates.initial_honor;
+        if (updates.initial_xp !== undefined) payload.p_initial_xp = updates.initial_xp;
+        if (updates.initial_rank !== undefined) payload.p_initial_rank = updates.initial_rank || null;
+        if (updates.initial_rank_points !== undefined) payload.p_initial_rank_points = updates.initial_rank_points;
+        if (updates.next_rank_points !== undefined) payload.p_next_rank_points = updates.next_rank_points;
+        const { data, error } = await supabase.rpc('admin_update_profile', payload);
         const result = this.handleRPCResponse(error, data, 'Utilisateur mis à jour avec succès.', 'updateUser');
         if (!result.ok) return null;
         const u = this.getUsers().find(x => x.id === userId);
         if (u) Object.assign(u, updates);
         return u;
       } catch (e) {
-        console.error('[SuperAdmin] updateUser: Exception', e?.message || e, e);
+        Logger.error('[SuperAdmin] updateUser: Exception', e?.message || e, e);
         if (typeof showToast === 'function') showToast('Erreur lors de la mise à jour : ' + (e?.message || 'Exception'), 'error');
         return null;
       }
@@ -170,7 +212,7 @@ const SuperAdmin = {
         }
         return u;
       } catch (e) {
-        console.error('[SuperAdmin] banUser: Exception', e?.message || e, e);
+        Logger.error('[SuperAdmin] banUser: Exception', e?.message || e, e);
         if (typeof showToast === 'function') showToast('Erreur lors du bannissement : ' + (e?.message || 'Exception'), 'error');
         return null;
       }
@@ -178,6 +220,39 @@ const SuperAdmin = {
     const user = this._updateUserLocal(userId, { status: 'banned' });
     if (user) this.logAction(userId, 'ban', { email: user.email });
     if (typeof showToast === 'function') showToast('Utilisateur banni (mode local).', 'success');
+    return user;
+  },
+
+  /**
+   * Changer le badge d'un utilisateur (FREE, PRO ou ADMIN uniquement — jamais SUPERADMIN)
+   */
+  async changeBadge(userId, newBadge) {
+    const allowed = ['FREE', 'PRO', 'ADMIN'];
+    if (!allowed.includes(newBadge)) {
+      if (typeof showToast === 'function') showToast('Badge non autorisé (FREE, PRO ou ADMIN uniquement).', 'error');
+      return null;
+    }
+    const supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.rpc('admin_change_badge', { p_target_id: userId, p_new_badge: newBadge });
+        const result = this.handleRPCResponse(error, data, 'Badge mis à jour.', 'changeBadge');
+        if (!result.ok) return null;
+        const u = this.getUsers().find(x => x.id === userId);
+        if (u) u.badge = newBadge;
+        return u;
+      } catch (e) {
+        Logger.error('[SuperAdmin] changeBadge: Exception', e?.message || e, e);
+        if (typeof showToast === 'function') showToast('Erreur : ' + (e?.message || 'Exception'), 'error');
+        return null;
+      }
+    }
+    const user = this.getUsers().find(x => x.id === userId);
+    if (user) {
+      user.badge = newBadge;
+      this.logAction(userId, 'badge_change', { new: newBadge });
+    }
+    if (typeof showToast === 'function') showToast('Badge mis à jour (mode local).', 'success');
     return user;
   },
 
@@ -198,7 +273,7 @@ const SuperAdmin = {
         }
         return u;
       } catch (e) {
-        console.error('[SuperAdmin] unbanUser: Exception', e?.message || e, e);
+        Logger.error('[SuperAdmin] unbanUser: Exception', e?.message || e, e);
         if (typeof showToast === 'function') showToast('Erreur lors du débannissement : ' + (e?.message || 'Exception'), 'error');
         return null;
       }
@@ -212,8 +287,8 @@ const SuperAdmin = {
   /**
    * Suspendre un compte
    */
-  suspendUser(userId) {
-    const user = this.updateUser(userId, { status: 'suspended' });
+  async suspendUser(userId) {
+    const user = await this.updateUser(userId, { status: 'suspended' });
     if (user) this.logAction(userId, 'suspend', { email: user.email });
     return user;
   },
@@ -221,8 +296,8 @@ const SuperAdmin = {
   /**
    * Marquer comme suspect
    */
-  markSuspect(userId) {
-    const user = this.updateUser(userId, { isSuspect: true });
+  async markSuspect(userId) {
+    const user = await this.updateUser(userId, { isSuspect: true });
     if (user) this.logAction(userId, 'mark_suspect', { email: user.email });
     return user;
   },
@@ -253,7 +328,7 @@ const SuperAdmin = {
         }
         return u;
       } catch (e) {
-        console.error('[SuperAdmin] addAdminNote: Exception', e?.message || e, e);
+        Logger.error('[SuperAdmin] addAdminNote: Exception', e?.message || e, e);
         if (typeof showToast === 'function') showToast('Erreur lors de l\'ajout de la note : ' + (e?.message || 'Exception'), 'error');
         return null;
       }
@@ -282,14 +357,14 @@ const SuperAdmin = {
       try {
         const { data, error } = await supabase.rpc('get_user_admin_logs', { p_target_id: userId });
         if (error) {
-          console.error('[SuperAdmin] getUserActionLogs RPC error', error);
+          Logger.error('[SuperAdmin] getUserActionLogs RPC error', error);
           if (typeof showToast === 'function') showToast('Impossible de charger l\'historique : ' + (error.message || 'Erreur'), 'error');
           const logs = UnifiedStorage.get(this.STORAGE_KEYS.ACTION_LOGS, []);
           return logs.filter(l => l.userId === userId);
         }
         if (data) return data.map(l => ({ action: l.action, adminLabel: l.admin_id, timestamp: l.created_at, details: l.details }));
       } catch (e) {
-        console.error('[SuperAdmin] getUserActionLogs: Exception', e?.message || e, e);
+        Logger.error('[SuperAdmin] getUserActionLogs: Exception', e?.message || e, e);
         if (typeof showToast === 'function') showToast('Erreur lors du chargement de l\'historique.', 'error');
         const logs = UnifiedStorage.get(this.STORAGE_KEYS.ACTION_LOGS, []);
         return logs.filter(l => l.userId === userId);
@@ -312,13 +387,13 @@ const SuperAdmin = {
           p_event_type: eventType || undefined
         });
         if (error) {
-          console.error('[SuperAdmin] getSecurityEvents RPC error', error);
+          Logger.error('[SuperAdmin] getSecurityEvents RPC error', error);
           if (typeof showToast === 'function') showToast('Impossible de charger les événements : ' + (error.message || 'Erreur'), 'error');
           return [];
         }
         return data || [];
       } catch (e) {
-        console.error('[SuperAdmin] getSecurityEvents: Exception', e?.message || e, e);
+        Logger.error('[SuperAdmin] getSecurityEvents: Exception', e?.message || e, e);
         if (typeof showToast === 'function') showToast('Erreur lors du chargement des événements de sécurité.', 'error');
         return [];
       }
@@ -335,13 +410,13 @@ const SuperAdmin = {
       try {
         const { data, error } = await supabase.rpc('get_admin_logs', { p_limit: limit, p_offset: 0 });
         if (error) {
-          console.error('[SuperAdmin] getAdminLogs RPC error', error);
+          Logger.error('[SuperAdmin] getAdminLogs RPC error', error);
           if (typeof showToast === 'function') showToast('Impossible de charger les logs admin : ' + (error.message || 'Erreur'), 'error');
           return [];
         }
         return data || [];
       } catch (e) {
-        console.error('[SuperAdmin] getAdminLogs: Exception', e?.message || e, e);
+        Logger.error('[SuperAdmin] getAdminLogs: Exception', e?.message || e, e);
         if (typeof showToast === 'function') showToast('Erreur lors du chargement des logs admin.', 'error');
         return [];
       }
@@ -408,6 +483,9 @@ function initSuperAdmin() {
   const container = document.getElementById('superAdminContainer');
   if (!container) return;
 
+  let _saConfirmCallback = null;
+  let _saEventsCollectedRegistered = false;
+
   // Nettoyer l'ancien cache utilisateurs démo (plus utilisé)
   try {
     var sk = (typeof window !== 'undefined' && window.APP_KEYS && window.APP_KEYS.STORAGE_KEYS) ? window.APP_KEYS.STORAGE_KEYS : {};
@@ -417,13 +495,39 @@ function initSuperAdmin() {
 
   let filters = { search: '', status: 'all', suspectOnly: false, sortBy: 'createdAt', sortDir: 'desc' };
   let selectedUserId = null;
+  let currentPage = 0;
 
   async function render() {
-    await SuperAdmin.loadUsers();
+    await SuperAdmin.loadUsers({ page: currentPage });
     const users = SuperAdmin.getUsers();
     const filtered = SuperAdmin.filterUsers(users, filters);
     renderUserTable(filtered);
+    renderPagination();
     bindTableEvents();
+  }
+
+  function renderPagination() {
+    const total = SuperAdmin.getUsersTotalCount();
+    const paginationEl = document.getElementById('superAdminPagination');
+    if (!paginationEl) return;
+    if (total <= 100) {
+      paginationEl.style.display = 'none';
+      paginationEl.innerHTML = '';
+      return;
+    }
+    const totalPages = Math.ceil(total / 100);
+    paginationEl.style.display = 'flex';
+    paginationEl.innerHTML = [
+      '<button type="button" class="sa-btn sa-btn--sm" id="superAdminPagePrev" ' + (currentPage <= 0 ? 'disabled' : '') + '>← Précédent</button>',
+      '<span class="sa-pagination-info">Page ' + (currentPage + 1) + ' / ' + totalPages + ' (' + total + ' utilisateurs)</span>',
+      '<button type="button" class="sa-btn sa-btn--sm" id="superAdminPageNext" ' + (currentPage >= totalPages - 1 ? 'disabled' : '') + '>Suivant →</button>'
+    ].join('');
+    document.getElementById('superAdminPagePrev')?.addEventListener('click', function () {
+      if (currentPage > 0) { currentPage--; render(); }
+    });
+    document.getElementById('superAdminPageNext')?.addEventListener('click', function () {
+      if (currentPage < totalPages - 1) { currentPage++; render(); }
+    });
   }
 
   function renderUserTable(users) {
@@ -433,14 +537,14 @@ function initSuperAdmin() {
       const badgeHtml = typeof generateUserBadge === 'function' ? generateUserBadge(u.badge) : (u.badge || '—');
       return `
       <tr class="sa-row ${u.isSuspect ? 'sa-row--suspect' : ''}" data-user-id="${u.id}">
-        <td><code class="sa-id">${u.id}</code></td>
-        <td>${u.email}</td>
-        <td>${badgeHtml}</td>
+        <td><code class="sa-id">${escapeHtml(u.id)}</code></td>
+        <td title="${escapeHtml(u.email)}">${escapeHtml(u.email)}</td>
+        <td class="sa-col-badge">${badgeHtml}</td>
         <td>${SuperAdmin.formatDate(u.createdAt)}</td>
         <td><span class="sa-status sa-status--${u.status}">${SuperAdmin.getStatusLabel(u.status)}</span></td>
         <td>${u.isSuspect ? '<span class="sa-flag" title="Compte suspect">🚩</span>' : '—'}</td>
-        <td>${SuperAdmin.formatDate(u.lastActivity)}</td>
-        <td class="sa-actions-cell">
+        <td class="sa-col-last-activity" title="${SuperAdmin.formatDate(u.lastActivity)}">${SuperAdmin.formatDate(u.lastActivity)}</td>
+        <td class="sa-actions-cell sa-col-actions">
           <button class="sa-btn sa-btn-sm" data-action="menu" data-user-id="${u.id}" title="Actions">⋮</button>
         </td>
       </tr>
@@ -448,7 +552,7 @@ function initSuperAdmin() {
     }).join('') || '<tr><td colspan="8" class="sa-empty">Aucun utilisateur</td></tr>';
   }
 
-  function openActionPopup(userId) {
+  async function openActionPopup(userId) {
     selectedUserId = userId;
     const user = SuperAdmin.getUsers().find(u => u.id === userId);
     if (!user) return;
@@ -460,11 +564,62 @@ function initSuperAdmin() {
     document.getElementById('saPopupEmail').textContent = user.email || '—';
     const popupBadge = document.getElementById('saPopupBadge');
     if (popupBadge) popupBadge.innerHTML = typeof generateUserBadge === 'function' ? generateUserBadge(user.badge) : (user.badge || '—');
-    document.getElementById('saPopupGrade').textContent = user.grade || '—';
-    document.getElementById('saPopupLevel').textContent = user.level != null ? user.level : '—';
-    document.getElementById('saPopupHonor').textContent = user.honor != null ? user.honor.toLocaleString('fr-FR') : '—';
-    document.getElementById('saPopupXp').textContent = user.xp != null ? user.xp.toLocaleString('fr-FR') : '—';
-    document.getElementById('saPopupRankPoints').textContent = user.rankPoints != null ? user.rankPoints.toLocaleString('fr-FR') : '—';
+    var gradeEl = document.getElementById('saPopupGrade');
+    var levelEl = document.getElementById('saPopupLevel');
+    var honorEl = document.getElementById('saPopupHonor');
+    var xpEl = document.getElementById('saPopupXp');
+    var rankPointsEl = document.getElementById('saPopupRankPoints');
+    if (gradeEl) gradeEl.textContent = 'En attente';
+    if (levelEl) levelEl.textContent = 'En attente';
+    if (honorEl) honorEl.textContent = 'En attente';
+    if (xpEl) xpEl.textContent = 'En attente';
+    if (rankPointsEl) rankPointsEl.textContent = 'En attente';
+
+    var formatNumber = function (v) {
+      if (v == null || v === undefined) return 'En attente';
+      var num = Number(v);
+      if (Number.isNaN(num)) return 'En attente';
+      return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    };
+
+    const supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+    if (supabase) {
+      try {
+        const { data: stats } = await supabase.rpc('get_user_latest_stats', { p_user_id: userId });
+        if (stats) {
+          var gradeName = stats.grade || 'En attente';
+          if (gradeEl) {
+            if (typeof getRankImg === 'function' && gradeName !== 'En attente') {
+              var rankImg = getRankImg(gradeName);
+              if (rankImg) {
+                gradeEl.setAttribute('data-fallback', gradeName);
+                gradeEl.innerHTML = '<img src="' + escapeHtml(rankImg) + '" alt="' + escapeHtml(gradeName) + '" class="ranking-grade-img" width="28" height="28" onerror="var p=this.parentNode;if(p)p.textContent=p.getAttribute(\'data-fallback\')||\'—\';">';
+              } else {
+                gradeEl.textContent = gradeName;
+              }
+            } else {
+              gradeEl.textContent = gradeName;
+            }
+          }
+          if (honorEl) honorEl.textContent = formatNumber(stats.honor);
+          if (xpEl) xpEl.textContent = formatNumber(stats.xp);
+          if (rankPointsEl) rankPointsEl.textContent = formatNumber(stats.rank_points);
+        }
+
+        try {
+          const { data: profile } = await supabase
+            .from('player_profiles')
+            .select('level')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+          if (profile && profile.level != null && levelEl) {
+            levelEl.textContent = String(profile.level);
+          }
+        } catch (_) {}
+      } catch (_) {}
+    }
 
     const banBtn = popup.querySelector('[data-menu-action="ban"]');
     const unbanBtn = popup.querySelector('[data-menu-action="unban"]');
@@ -544,11 +699,19 @@ function initSuperAdmin() {
         openMessageModal(userId, user);
         break;
       case 'ban':
-        await SuperAdmin.banUser(userId);
-        break;
+        showConfirmModal('Bannir l\'utilisateur', 'Bannir définitivement cet utilisateur ? Il ne pourra plus se connecter.', async () => {
+          await SuperAdmin.banUser(userId);
+          closeActionPopup();
+          await render();
+        });
+        return;
       case 'unban':
-        await SuperAdmin.unbanUser(userId);
-        break;
+        showConfirmModal('Débannir l\'utilisateur', 'Réactiver le compte de cet utilisateur ?', async () => {
+          await SuperAdmin.unbanUser(userId);
+          closeActionPopup();
+          await render();
+        });
+        return;
       case 'suspect':
         SuperAdmin.markSuspect(userId);
         break;
@@ -610,11 +773,28 @@ function initSuperAdmin() {
     const modal = document.getElementById('superAdminEditModal');
     const emailInput = document.getElementById('superAdminEditEmail');
     const statusSelect = document.getElementById('superAdminEditStatus');
-    const badgeEl = document.getElementById('superAdminEditBadge');
+    const badgeSelect = document.getElementById('superAdminEditBadge');
     if (!modal || !emailInput || !statusSelect) return;
     emailInput.value = user.email;
     statusSelect.value = user.status;
-    if (badgeEl) badgeEl.innerHTML = typeof generateUserBadge === 'function' ? generateUserBadge(user.badge) : (user.badge || '—');
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? ''; };
+    set('superAdminEditGamePseudo', user.game_pseudo);
+    set('superAdminEditServer', user.server);
+    set('superAdminEditCompany', user.company);
+    set('superAdminEditInitialXp', user.initial_xp);
+    set('superAdminEditInitialHonor', user.initial_honor);
+    set('superAdminEditInitialRank', user.initial_rank);
+    set('superAdminEditInitialRankPoints', user.initial_rank_points);
+    set('superAdminEditNextRankPoints', user.next_rank_points);
+    if (badgeSelect) {
+      const allowedBadges = ['FREE', 'PRO', 'ADMIN'];
+      const value = allowedBadges.includes(user.badge) ? user.badge : 'ADMIN';
+      badgeSelect.value = value;
+      badgeSelect.disabled = user.badge === 'SUPERADMIN';
+      var canEditBadge = (typeof getCurrentBadge === 'function' && getCurrentBadge() === 'SUPERADMIN') || (typeof getCurrentBadge === 'function' && getCurrentBadge() === 'ADMIN' && typeof currentHasFeature === 'function' && currentHasFeature('dashboardEditBadges'));
+      var formGroup = badgeSelect.closest('.sa-form-group');
+      if (formGroup) formGroup.style.display = canEditBadge ? '' : 'none';
+    }
     modal.classList.add('sa-modal--open');
     modal.dataset.editUserId = userId;
   }
@@ -686,16 +866,75 @@ function initSuperAdmin() {
     return div.innerHTML;
   }
 
+  function showConfirmModal(title, message, onConfirm) {
+    const m = document.getElementById('saConfirmModal');
+    const titleEl = document.getElementById('saConfirmTitle');
+    const msgEl = document.getElementById('saConfirmMessage');
+    if (!m || !titleEl || !msgEl) {
+      if (onConfirm && confirm(message)) onConfirm();
+      return;
+    }
+    titleEl.textContent = title;
+    msgEl.textContent = message;
+    _saConfirmCallback = onConfirm;
+    m.classList.add('sa-modal--open');
+  }
+
+  function closeConfirmModal() {
+    const m = document.getElementById('saConfirmModal');
+    if (m) m.classList.remove('sa-modal--open');
+    _saConfirmCallback = null;
+  }
+
+  document.getElementById('saConfirmCancel')?.addEventListener('click', closeConfirmModal);
+  document.getElementById('saConfirmCancelBtn')?.addEventListener('click', closeConfirmModal);
+  document.getElementById('saConfirmOk')?.addEventListener('click', () => {
+    if (typeof _saConfirmCallback === 'function') {
+      _saConfirmCallback();
+      _saConfirmCallback = null;
+    }
+    closeConfirmModal();
+  });
+  document.querySelectorAll('#saConfirmModal .sa-modal-overlay').forEach(el => {
+    el.addEventListener('click', function (e) { if (e.target === el) closeConfirmModal(); });
+  });
+
   document.getElementById('superAdminEditSave')?.addEventListener('click', async () => {
     const modal = document.getElementById('superAdminEditModal');
     const userId = modal?.dataset.editUserId;
     const email = document.getElementById('superAdminEditEmail')?.value;
     const status = document.getElementById('superAdminEditStatus')?.value;
-    if (userId && email && status) {
-      await SuperAdmin.updateUser(userId, { email, status });
-      closeEditModal();
-      await render();
+    const badgeSelect = document.getElementById('superAdminEditBadge');
+    const badgeRow = badgeSelect && badgeSelect.closest('.sa-form-group');
+    const newBadge = (badgeSelect && badgeRow && badgeRow.style.display !== 'none') ? badgeSelect.value : null;
+    const user = userId ? SuperAdmin.getUsers().find(u => u.id === userId) : null;
+    if (!userId || !email || !status) return;
+    const num = (id) => { const v = document.getElementById(id)?.value; return (v === '' || v == null) ? undefined : (parseInt(v, 10) || 0); };
+    const updates = {
+      email,
+      status,
+      game_pseudo: document.getElementById('superAdminEditGamePseudo')?.value?.trim() ?? '',
+      server: document.getElementById('superAdminEditServer')?.value?.trim() ?? '',
+      company: document.getElementById('superAdminEditCompany')?.value?.trim() ?? '',
+      initial_rank: document.getElementById('superAdminEditInitialRank')?.value?.trim() ?? ''
+    };
+    if (num('superAdminEditInitialXp') !== undefined) updates.initial_xp = num('superAdminEditInitialXp');
+    if (num('superAdminEditInitialHonor') !== undefined) updates.initial_honor = num('superAdminEditInitialHonor');
+    if (num('superAdminEditInitialRankPoints') !== undefined) updates.initial_rank_points = num('superAdminEditInitialRankPoints');
+    if (num('superAdminEditNextRankPoints') !== undefined) updates.next_rank_points = num('superAdminEditNextRankPoints');
+    const badgeChanged = user && newBadge && user.badge !== newBadge && ['FREE', 'PRO', 'ADMIN'].includes(newBadge);
+    if (badgeChanged) {
+      showConfirmModal('Changer le badge', 'Confirmer le changement de badge vers ' + newBadge + ' pour cet utilisateur ?', async () => {
+        await SuperAdmin.changeBadge(userId, newBadge);
+        await SuperAdmin.updateUser(userId, updates);
+        closeEditModal();
+        await render();
+      });
+      return;
     }
+    await SuperAdmin.updateUser(userId, updates);
+    closeEditModal();
+    await render();
   });
 
   document.getElementById('superAdminEditCancel')?.addEventListener('click', closeEditModal);
@@ -703,6 +942,12 @@ function initSuperAdmin() {
   document.getElementById('superAdminMessageClose')?.addEventListener('click', closeMessageModal);
   document.getElementById('superAdminGlobalMessageBtn')?.addEventListener('click', () => {
     if (typeof openGlobalMessageModal === 'function') openGlobalMessageModal();
+  });
+  document.getElementById('superAdminGlobalMessageBtnMessages')?.addEventListener('click', () => {
+    if (typeof openGlobalMessageModal === 'function') openGlobalMessageModal();
+  });
+  document.getElementById('superAdminSecurityEventsBtnPanel')?.addEventListener('click', () => {
+    if (typeof openSecurityModal === 'function') openSecurityModal();
   });
   document.getElementById('superAdminMessageSend')?.addEventListener('click', async () => {
     const modal = document.getElementById('superAdminMessageModal');
@@ -722,15 +967,24 @@ function initSuperAdmin() {
       if (typeof showToast === 'function') showToast('Destinataire manquant.', 'warning');
       return;
     }
-    const result = isGlobal
-      ? await MessagesAPI.sendGlobalMessage(subject, content)
-      : await MessagesAPI.sendMessage(userId, subject, content);
-    if (result?.success) {
-      if (typeof showToast === 'function') showToast(isGlobal ? ('Message envoyé à ' + (result.count || 0) + ' utilisateur(s).') : 'Message envoyé.', 'success');
-      closeMessageModal();
-    } else {
-      if (typeof showToast === 'function') showToast(result?.error || 'Erreur d\'envoi', 'error');
+    function doSend() {
+      (async function () {
+        const result = isGlobal
+          ? await MessagesAPI.sendGlobalMessage(subject, content)
+          : await MessagesAPI.sendMessage(userId, subject, content);
+        if (result?.success) {
+          if (typeof showToast === 'function') showToast(isGlobal ? ('Message envoyé à ' + (result.count || 0) + ' utilisateur(s).') : 'Message envoyé.', 'success');
+          closeMessageModal();
+        } else {
+          if (typeof showToast === 'function') showToast(result?.error || 'Erreur d\'envoi', 'error');
+        }
+      })();
     }
+    if (isGlobal) {
+      showConfirmModal('Message global', 'Envoyer ce message à tous les utilisateurs ?', () => { doSend(); });
+      return;
+    }
+    doSend();
   });
 
   document.getElementById('superAdminNotesAdd')?.addEventListener('click', async () => {
@@ -759,9 +1013,6 @@ function initSuperAdmin() {
   if (logsBtn && typeof currentHasFeature === 'function' && currentHasFeature('dashboardViewAdminLogs')) logsBtn.style.display = '';
   if (securityBtn && typeof currentHasFeature === 'function' && currentHasFeature('dashboardViewAdminLogs')) securityBtn.style.display = '';
   if (keysSection && typeof currentHasFeature === 'function' && currentHasFeature('dashboardViewAdminLogs')) keysSection.style.display = '';
-  document.getElementById('superAdminRefreshBtn')?.addEventListener('click', async () => {
-    await render();
-  });
   document.getElementById('superAdminLogsBtn')?.addEventListener('click', async () => {
     if (typeof currentHasFeature !== 'function' || !currentHasFeature('dashboardViewAdminLogs')) return;
     const modal = document.getElementById('superAdminLogsModal');
@@ -906,153 +1157,277 @@ function initSuperAdmin() {
     }
   });
 
-  // Scraper classements (Electron)
-  if (typeof window.electronScraper === 'object') {
-    const startBtn = document.getElementById('superAdminCollectStartBtn');
-    const stopBtn = document.getElementById('superAdminCollectStopBtn');
-    const progressEl = document.getElementById('superAdminCollectProgress');
-    const detailEl = document.getElementById('superAdminCollectDetail');
-    const rateLimitEl = document.getElementById('superAdminCollectRateLimit');
-    let pollInterval = null;
-
-    function updateDisplay(s) {
-      if (!s) return;
-      if (progressEl) progressEl.textContent = s.running ? (s.currentServerIndex || 0) + '/' + (s.totalServers || 23) : '—';
-      if (detailEl) detailEl.textContent = s.running && s.currentServer ? s.currentServer + ' · ' + (s.completed?.length || 0) + ' terminé(s)' : (s.running ? 'Démarrage...' : 'En attente');
-    }
-
-    window.electronScraper.onProgress((s) => updateDisplay(s));
-    window.electronScraper.onError((d) => {
-      if (rateLimitEl) { rateLimitEl.style.display = ''; rateLimitEl.textContent = '⚠ Erreur ' + (d.server_id || '') + ': ' + (d.message || ''); }
-      if (typeof showToast === 'function') showToast('Erreur scraping ' + (d.server_id || '') + ': ' + (d.message || ''), 'warning');
-    });
-    if (window.electronScraper.onCaptchaRequired) {
-      window.electronScraper.onCaptchaRequired((d) => {
-        const msg = (d && d.message) ? d.message : 'Valide le CAPTCHA pour ' + (d?.server_id || '');
-        if (rateLimitEl) { rateLimitEl.style.display = ''; rateLimitEl.textContent = '⚠ ' + msg; }
-        if (typeof showToast === 'function') showToast(msg, 'warning');
-      });
-    }
-    if (window.electronScraper.onCaptchaResolved) {
-      window.electronScraper.onCaptchaResolved((d) => {
-        if (rateLimitEl) rateLimitEl.style.display = 'none';
-        if (typeof showToast === 'function') showToast('CAPTCHA validé pour ' + (d?.server_id || '') + ' – reprise automatique', 'success');
-      });
-    }
-    if (window.electronScraper.onCaptchaTimeout) {
-      window.electronScraper.onCaptchaTimeout((d) => {
-        if (rateLimitEl) rateLimitEl.style.display = ''; rateLimitEl.textContent = '⏱ Timeout CAPTCHA ' + (d?.server_id || '');
-        if (typeof showToast === 'function') showToast('Timeout 2 min – CAPTCHA non validé pour ' + (d?.server_id || ''), 'error');
-      });
-    }
-    if (window.electronScraper.onScrapingFinished) {
-      window.electronScraper.onScrapingFinished((d) => {
-        if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
-        if (startBtn) startBtn.style.display = '';
-        if (stopBtn) stopBtn.style.display = 'none';
-        if (progressEl) progressEl.textContent = (d?.completedCount ?? 0) + '/23';
-        if (detailEl) detailEl.textContent = 'Collecte terminée ✅';
-        if (rateLimitEl) rateLimitEl.style.display = 'none';
-        const count = d?.completedCount ?? 0;
-        if (typeof showToast === 'function') showToast('Collecte terminée – ' + count + ' serveur(s) traité(s)', 'success');
-      });
-    }
-    window.electronScraper.onRankingsUpdated(async (d) => {
-      if (rateLimitEl) rateLimitEl.style.display = 'none';
-      if (typeof DataSync !== 'undefined' && DataSync.pull) {
-        try {
-          await DataSync.pull();
-        } catch (e) {
-          console.warn('[SuperAdmin] DataSync.pull après rankings-updated:', e?.message);
-        }
-      }
-      if (typeof UnifiedStorage !== 'undefined' && typeof UnifiedStorage.invalidateCache === 'function') {
-        var sk = (typeof window !== 'undefined' && window.APP_KEYS && window.APP_KEYS.STORAGE_KEYS) ? window.APP_KEYS.STORAGE_KEYS : {};
-        UnifiedStorage.invalidateCache(sk.IMPORTED_RANKINGS || 'darkOrbitImportedRankings');
-      }
-      if (typeof window.refreshRanking === 'function') window.refreshRanking();
-      else if (document.getElementById('ranking-table') && typeof initRankingTab === 'function') {
-        initRankingTab();
-        if (typeof window.refreshRanking === 'function') window.refreshRanking();
-      }
-    });
-
-    startBtn?.addEventListener('click', async () => {
-      const supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
-      if (supabase) {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user?.id && session?.access_token) {
-          window.electronScraper.setUserContext(session.user.id, session.access_token);
-        }
-      }
-      const res = await window.electronScraper.start();
-      if (res && res.ok) {
-        if (startBtn) startBtn.style.display = 'none';
-        if (stopBtn) stopBtn.style.display = '';
-        if (progressEl) progressEl.textContent = '…';
-        if (detailEl) detailEl.textContent = 'Démarrage...';
-        if (rateLimitEl) rateLimitEl.style.display = 'none';
-        pollInterval = setInterval(async () => {
-          const s = await window.electronScraper.getState();
-          updateDisplay(s);
-          if (!s.running) {
-            clearInterval(pollInterval);
-            pollInterval = null;
-            if (startBtn) startBtn.style.display = '';
-            if (stopBtn) stopBtn.style.display = 'none';
-            // Toast de fin géré par onScrapingFinished (évite doublon)
-          }
-        }, 2000);
-      } else if (res && res.error && typeof showToast === 'function') {
-        showToast('Erreur : ' + res.error, 'error');
-      }
-    });
-
-    stopBtn?.addEventListener('click', async () => {
-      if (typeof window.electronScraper?.stop === 'function') {
-        await window.electronScraper.stop();
-      }
-      if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
-      if (startBtn) startBtn.style.display = '';
-      if (stopBtn) stopBtn.style.display = 'none';
-      if (progressEl) progressEl.textContent = '—';
-      if (detailEl) detailEl.textContent = 'Arrêté';
-      if (typeof showToast === 'function') showToast('Scraping arrêté.', 'info');
-    });
-
-    document.getElementById('superAdminCollectDebugBtn')?.addEventListener('click', async () => {
-      if (typeof window.electronScraper?.showDebugWindow === 'function') {
-        await window.electronScraper.showDebugWindow();
-      }
-    });
-  }
-
-  document.getElementById('superAdminCollectClearBtn')?.addEventListener('click', async () => {
-    if (!confirm('Voulez-vous vraiment supprimer TOUS les classements importés ? Cette action est irréversible.')) return;
-    try {
-      var sk = (typeof window !== 'undefined' && window.APP_KEYS && window.APP_KEYS.STORAGE_KEYS) ? window.APP_KEYS.STORAGE_KEYS : {};
-      var impKey = sk.IMPORTED_RANKINGS || 'darkOrbitImportedRankings';
-      if (typeof UnifiedStorage !== 'undefined') {
-        UnifiedStorage.set(impKey, {});
-        if (typeof UnifiedStorage.invalidateCache === 'function') UnifiedStorage.invalidateCache(impKey);
-      }
-      if (typeof DataSync !== 'undefined' && DataSync.sync) {
-        await DataSync.sync();
-      }
-      if (typeof window.refreshRanking === 'function') window.refreshRanking();
-      else if (document.getElementById('ranking-table') && typeof initRankingTab === 'function') {
-        initRankingTab();
-        if (typeof window.refreshRanking === 'function') window.refreshRanking();
-      }
-      if (typeof showToast === 'function') showToast('Tous les classements ont été supprimés', 'success');
-    } catch (e) {
-      console.error('[SuperAdmin] Nettoyage classements:', e);
-      if (typeof showToast === 'function') showToast('Erreur lors du nettoyage : ' + (e?.message || 'inconnue'), 'error');
+  // Planificateur : uniquement le bouton Interface Scraper
+  document.getElementById('superAdminScraperWindowBtn')?.addEventListener('click', function () {
+    if (typeof window.electronScraperWindow?.open === 'function') {
+      window.electronScraperWindow.open();
+    } else if (typeof showToast === 'function') {
+      showToast('Fenêtre Scraper non disponible', 'warning');
     }
   });
 
+  var _logsUnsubscribe = null;
+  function loadLogsPanel() {
+    var out = document.getElementById('saLogsOutput');
+    var levelSelect = document.getElementById('saLogsLevelSelect');
+    if (!out) return;
+    if (typeof Logger === 'undefined' || !Logger.getRecentErrorWarnLogs || !Logger.subscribe) {
+      out.textContent = 'Logger non disponible.';
+      return;
+    }
+    if (levelSelect) {
+      var current = (typeof Logger.getLevel === 'function' ? Logger.getLevel() : 'warn') || 'warn';
+      levelSelect.value = current;
+      if (!levelSelect._logsLevelBound) {
+        levelSelect._logsLevelBound = true;
+        levelSelect.addEventListener('change', function () {
+          var val = levelSelect.value;
+          if (typeof Logger.setLevel === 'function') Logger.setLevel(val);
+        });
+      }
+    }
+    if (_logsUnsubscribe) {
+      try { _logsUnsubscribe(); } catch (e) {}
+      _logsUnsubscribe = null;
+    }
+    function renderLogs() {
+      var entries = Logger.getRecentErrorWarnLogs();
+      if (!entries.length) {
+        out.textContent = '(aucun message error/warn)';
+        return;
+      }
+      out.textContent = entries.map(function (e) {
+        return '[' + (e.ts || '') + '] ' + (e.level || '') + ' ' + (e.message || '');
+      }).join('\n');
+      out.scrollTop = out.scrollHeight;
+    }
+    renderLogs();
+    _logsUnsubscribe = Logger.subscribe(function () {
+      renderLogs();
+    });
+  }
+
+  document.getElementById('superAdminForceSyncBtn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('superAdminForceSyncBtn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="sa-collect-btn-icon">⏳</span>'; }
+    try {
+      if (typeof DataSync === 'undefined' || !DataSync.sync || !DataSync.pull) {
+        if (typeof showToast === 'function') showToast('DataSync non disponible.', 'error');
+        return;
+      }
+      const syncResult = await DataSync.sync();
+      if (syncResult && syncResult.success === false) {
+        if (typeof showToast === 'function') showToast('Erreur sync : ' + (syncResult.reason || syncResult.error || 'inconnue'), 'error');
+        return;
+      }
+      await DataSync.pull();
+      if (typeof window.refreshRanking === 'function') window.refreshRanking();
+      if (typeof showToast === 'function') showToast('Synchronisation serveur terminée.', 'success');
+    } catch (e) {
+      Logger.error('[SuperAdmin] Synchronisation serveur:', e);
+      if (typeof showToast === 'function') showToast('Erreur : ' + (e?.message || 'inconnue'), 'error');
+    } finally {
+      if (btn) { btn.disabled = false; btn.innerHTML = '<span class="sa-collect-btn-icon" aria-hidden="true">🔄</span>'; }
+    }
+  });
+
+  var _vueGeneraleStatsCache = null;
+  var _vueGeneraleStatsCacheAt = 0;
+  var VUE_GENERALE_CACHE_MS = 60000;
+  function _applyVueGeneraleStats(stats, totalEl, connectedEl, sessionsEl, freeEl, proEl, adminEl) {
+    if (!totalEl) return;
+    if (stats) {
+      totalEl.textContent = stats.total_users || 0;
+      if (connectedEl) connectedEl.textContent = stats.connected_users != null ? stats.connected_users : '—';
+      if (sessionsEl) sessionsEl.textContent = stats.sessions_today != null ? stats.sessions_today : '—';
+      if (freeEl) freeEl.textContent = stats.free_count != null ? stats.free_count : '—';
+      if (proEl) proEl.textContent = stats.pro_count != null ? stats.pro_count : '—';
+      if (adminEl) adminEl.textContent = (stats.admin_count || 0) + (stats.superadmin_count || 0);
+    } else {
+      totalEl.textContent = '—';
+      if (connectedEl) connectedEl.textContent = '—';
+      if (sessionsEl) sessionsEl.textContent = '—';
+      if (freeEl) freeEl.textContent = '—';
+      if (proEl) proEl.textContent = '—';
+      if (adminEl) adminEl.textContent = '—';
+    }
+  }
+  async function loadVueGeneraleStats() {
+    const totalEl = document.getElementById('saStatTotalUsers');
+    const connectedEl = document.getElementById('saStatConnectedUsers');
+    const sessionsEl = document.getElementById('saStatSessionsToday');
+    const supabaseEl = document.getElementById('saStatSupabase');
+    const freeEl = document.getElementById('saStatFree');
+    const proEl = document.getElementById('saStatPro');
+    const adminEl = document.getElementById('saStatAdmin');
+    var now = Date.now();
+    if (_vueGeneraleStatsCache && (now - _vueGeneraleStatsCacheAt) < VUE_GENERALE_CACHE_MS) {
+      _applyVueGeneraleStats(_vueGeneraleStatsCache, totalEl, connectedEl, sessionsEl, freeEl, proEl, adminEl);
+      return;
+    }
+    if (!totalEl) return;
+    const supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+    if (supabase) {
+      try {
+        const { data: stats, error: rpcErr } = await supabase.rpc('get_dashboard_stats');
+        var toCache = !rpcErr && stats ? stats : null;
+        _vueGeneraleStatsCache = toCache;
+        _vueGeneraleStatsCacheAt = Date.now();
+        _applyVueGeneraleStats(toCache, totalEl, connectedEl, sessionsEl, freeEl, proEl, adminEl);
+      } catch (_) {
+        _applyVueGeneraleStats(null, totalEl, connectedEl, sessionsEl, freeEl, proEl, adminEl);
+      }
+    } else {
+      await SuperAdmin.loadUsers();
+      const users = SuperAdmin.getUsers();
+      totalEl.textContent = users.length;
+      if (connectedEl) connectedEl.textContent = '—';
+      if (sessionsEl) sessionsEl.textContent = '—';
+      if (freeEl) freeEl.textContent = users.filter(u => u.badge === 'FREE').length;
+      if (proEl) proEl.textContent = users.filter(u => u.badge === 'PRO').length;
+      if (adminEl) adminEl.textContent = users.filter(u => ['ADMIN', 'SUPERADMIN'].includes(u.badge)).length;
+    }
+    if (supabaseEl) {
+      if (supabase) {
+        try {
+          const { error } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).limit(1);
+          supabaseEl.textContent = error ? 'Erreur' : 'Connecté';
+          supabaseEl.className = 'sa-stat-value sa-status-dot ' + (error ? 'sa-status--error' : 'sa-status--ok');
+        } catch (_) {
+          supabaseEl.textContent = 'Hors ligne';
+          supabaseEl.className = 'sa-stat-value sa-status-dot sa-status--error';
+        }
+      } else {
+        supabaseEl.textContent = 'Hors ligne';
+        supabaseEl.className = 'sa-stat-value sa-status-dot sa-status--error';
+      }
+    }
+  }
+
+  async function loadPermissionsAdmin() {
+    const grid = document.getElementById('saPermissionsAdminGrid');
+    const saveBtn = document.getElementById('saPermissionsAdminSaveBtn');
+    if (!grid || !saveBtn) return;
+    const supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+    if (!supabase || (typeof getCurrentBadge === 'function' && getCurrentBadge() !== 'SUPERADMIN')) return;
+
+    const PERMISSION_LIST = [
+      { key: 'dashboardViewUsers', label: 'Voir utilisateurs' },
+      { key: 'dashboardEditBadges', label: 'Éditer badges utilisateurs' },
+      { key: 'dashboardBanUnban', label: 'Bannir utilisateurs' },
+      { key: 'dashboardGenerateKeys', label: 'Générer clés de licence' },
+      { key: 'dashboardCollectRankings', label: 'Collecte automatique' },
+      { key: 'dashboardViewSecurityLogs', label: 'Logs de sécurité' },
+      { key: 'dashboardVueGenerale', label: 'Vue générale' },
+      { key: 'dashboardMessages', label: 'Messages' },
+      { key: 'dashboardLogsSecurite', label: 'Logs de sécurité' },
+      { key: 'dashboardClesLicence', label: 'Clés de licence' },
+      { key: 'dashboardPlanificateur', label: 'Planificateur' },
+      { key: 'dashboardPermissionsAdmin', label: 'Permissions administrateurs' }
+    ];
+
+    // Enregistrer le handler de sauvegarde une seule fois, en dehors du try/catch
+    if (!saveBtn._permBound) {
+      saveBtn._permBound = true;
+      saveBtn.addEventListener('click', async function () {
+        const toggles = grid.querySelectorAll('.sa-permission-toggle');
+        const pFeatures = {};
+        toggles.forEach(function (t) { pFeatures[t.dataset.saFeature] = t.checked; });
+        const prevText = saveBtn.textContent;
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Sauvegarde…';
+        try {
+          const { error: err } = await supabase.rpc('admin_update_admin_permissions', { p_features: pFeatures });
+          if (err) {
+            if (typeof showToast === 'function') showToast('Erreur : ' + (err.message || 'Sauvegarde'), 'error');
+          } else {
+            if (typeof BackendAPI !== 'undefined' && typeof BackendAPI.invalidateProfileCache === 'function') {
+              BackendAPI.invalidateProfileCache();
+            }
+            if (typeof showToast === 'function') showToast('Permissions enregistrées. Les admins verront les changements au prochain rechargement.', 'success');
+          }
+        } catch (ex) {
+          if (typeof showToast === 'function') showToast('Erreur : ' + (ex?.message || ''), 'error');
+        } finally {
+          saveBtn.disabled = false;
+          saveBtn.textContent = prevText;
+        }
+      });
+    }
+
+    try {
+      const { data: features, error } = await supabase.rpc('get_admin_permissions_config');
+      if (error) throw error;
+      grid.innerHTML = PERMISSION_LIST.map(function (item) {
+        var checked = features && features[item.key] ? ' checked' : '';
+        return '<div class="sa-permission-row sa-switch-wrap"><label>' + item.label + '</label><label class="sa-switch"><input type="checkbox" class="sa-permission-toggle" data-sa-feature="' + item.key + '"' + checked + '><span class="sa-switch-slider"></span></label></div>';
+      }).join('');
+    } catch (e) {
+      Logger.error('[SuperAdmin] loadPermissionsAdmin', e);
+      grid.innerHTML = '<p class="sa-error-msg">Erreur chargement permissions : ' + (e?.message || '') + '</p>';
+      if (typeof showToast === 'function') showToast('Erreur chargement permissions : ' + (e?.message || ''), 'error');
+    }
+  }
+
+  function initDashboardSubTabs() {
+    const badge = typeof getCurrentBadge === 'function' ? getCurrentBadge() : '';
+    const isSuper = badge === 'SUPERADMIN';
+    const can = function (f) { return typeof currentHasFeature === 'function' && currentHasFeature(f); };
+    const panels = [
+      { id: 'vue-generale', superOnly: false, feature: 'dashboardVueGenerale' },
+      { id: 'utilisateurs', superOnly: false, feature: 'dashboardViewUsers' },
+      { id: 'messages', superOnly: false, feature: 'dashboardMessages' },
+      { id: 'logs-securite', superOnly: false, feature: 'dashboardLogsSecurite' },
+      { id: 'cles-licence', superOnly: false, feature: 'dashboardClesLicence' },
+      { id: 'planificateur', superOnly: false, feature: 'dashboardPlanificateur' },
+      { id: 'permissions-admin', superOnly: false, feature: 'dashboardPermissionsAdmin' },
+      { id: 'logs', superOnly: false, feature: 'dashboardLogs' }
+    ];
+    const allowed = panels.filter(function (p) {
+      return (isSuper || badge === 'ADMIN') && can(p.feature);
+    });
+    Logger.debug('[initDashboardSubTabs] badge=', badge, ', currentHasFeature(dashboardVueGenerale)=', typeof currentHasFeature === 'function' ? currentHasFeature('dashboardVueGenerale') : 'N/A', ', allowed=', allowed);
+    document.querySelectorAll('#saSubtabs .sa-subtab-btn').forEach(function (btn) {
+      const panelId = btn.dataset.saPanel;
+      const inAllowed = allowed.some(function (a) { return a.id === panelId; });
+      Logger.debug('[initDashboardSubTabs] tuile data-sa-panel=', panelId, ', inAllowed=', inAllowed);
+      btn.style.display = inAllowed ? '' : 'none';
+      btn.classList.toggle('active', panelId === (allowed[0] && allowed[0].id));
+    });
+    const firstId = (allowed[0] && allowed[0].id) || 'utilisateurs';
+    document.querySelectorAll('.sa-panel').forEach(function (panel) {
+      const panelId = panel.dataset.saPanel;
+      const visible = allowed.some(function (a) { return a.id === panelId; });
+      panel.hidden = !visible || panelId !== firstId;
+    });
+    const firstPanel = document.getElementById('sa-panel-' + firstId);
+    if (firstPanel) firstPanel.hidden = false;
+    var subtabsEl = document.getElementById('saSubtabs');
+    if (subtabsEl && !subtabsEl._saBound) {
+      subtabsEl._saBound = true;
+      subtabsEl.addEventListener('click', function (e) {
+        const btn = e.target.closest('.sa-subtab-btn');
+        if (!btn || btn.style.display === 'none') return;
+        const panelId = btn.dataset.saPanel;
+        document.querySelectorAll('#saSubtabs .sa-subtab-btn').forEach(function (b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        document.querySelectorAll('.sa-panel').forEach(function (p) {
+          p.hidden = p.dataset.saPanel !== panelId;
+        });
+        if (panelId === 'vue-generale') loadVueGeneraleStats();
+        if (panelId === 'permissions-admin') loadPermissionsAdmin();
+        if (panelId === 'logs') loadLogsPanel();
+        if (panelId === 'utilisateurs') { SuperAdmin.loadUsers({ page: currentPage }).then(function () { var u = SuperAdmin.getUsers(); renderUserTable(SuperAdmin.filterUsers(u, filters)); renderPagination(); bindTableEvents(); }); }
+      });
+    }
+    if (firstId === 'vue-generale') loadVueGeneraleStats();
+    if (firstId === 'permissions-admin') loadPermissionsAdmin();
+    if (firstId === 'logs') loadLogsPanel();
+    if (firstId === 'utilisateurs') { SuperAdmin.loadUsers({ page: currentPage }).then(function () { var u = SuperAdmin.getUsers(); renderUserTable(SuperAdmin.filterUsers(u, filters)); renderPagination(); bindTableEvents(); }); }
+  }
+
+  window.initDashboardSubTabs = initDashboardSubTabs;
   render();
 }
 
 document.addEventListener('DOMContentLoaded', initSuperAdmin);
-console.log('🛡️ Module Super Admin chargé');

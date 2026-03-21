@@ -33,6 +33,7 @@
   function updateLicenseUIBasedOnBadge() {
     var formEl = document.getElementById('licenseActivationForm');
     var alreadyEl = document.getElementById('licenseAlreadyPro');
+    var manageBtn = document.getElementById('manageSubscriptionBtn');
     if (!formEl || !alreadyEl) return;
 
     var badge = typeof getCurrentBadge === 'function' ? getCurrentBadge() : 'FREE';
@@ -45,6 +46,7 @@
     } else {
       formEl.style.display = 'none';
       alreadyEl.style.display = 'block';
+      if (manageBtn) manageBtn.style.display = b === 'PRO' ? '' : 'none';
     }
   }
 
@@ -84,6 +86,20 @@
         setTimeout(function () {
           updateLicenseUIBasedOnBadge();
         }, 2000);
+        return;
+      }
+      var trialRes = await supabase.rpc('activate_trial_key', { p_key: keyFormatted });
+      if (trialRes.data && trialRes.data.success === true) {
+        showLicenseMessage('success', '✅ Code d\'essai activé. Votre compte est en période trial PRO.');
+        input.value = '';
+        if (typeof BackendAPI !== 'undefined') BackendAPI.invalidateProfileCache();
+        if (typeof BackendAPI !== 'undefined') await BackendAPI.loadUserProfile();
+        if (typeof applyPermissionsUI === 'function') applyPermissionsUI();
+        if (typeof updateExportButtonVisibility === 'function') await updateExportButtonVisibility();
+        if (typeof window.updatePayPalButtonsVisibility === 'function') window.updatePayPalButtonsVisibility();
+        setTimeout(function () {
+          updateLicenseUIBasedOnBadge();
+        }, 2000);
       } else {
         showLicenseMessage('error', typeof t === 'function' ? t('license_activation_error') : '❌ Clé invalide ou déjà utilisée.');
       }
@@ -94,7 +110,18 @@
     }
   }
 
+  function openManageSubscription() {
+    var url = 'https://www.paypal.com/myaccount/autopay/';
+    if (typeof window.electronAPI !== 'undefined' && window.electronAPI.openExternal) {
+      window.electronAPI.openExternal(url);
+    } else {
+      window.open(url, '_blank');
+    }
+  }
+
   function initLicenseActivation() {
+    var manageBtn = document.getElementById('manageSubscriptionBtn');
+    if (manageBtn) manageBtn.addEventListener('click', openManageSubscription);
     var input = document.getElementById('licenseKeyInput');
     var btn = document.getElementById('activateLicenseBtn');
     if (input) {

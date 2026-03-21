@@ -1,26 +1,411 @@
 /**
- * Gestion des événements DarkOrbit scrapés (current_events_json)
- * Affichage sidebar, timers en temps réel, mise à jour à la réception de events-updated
+ * Gestion des événements DarkOrbit scrapés (événements du jour)
+ * Source unique : Supabase shared_events. Enrichissement via multillingues_events.
+ * Affichage sidebar, timers en temps réel, mise à jour à la réception de events-updated.
  */
 (function () {
   'use strict';
 
-  var sk = (typeof window !== 'undefined' && window.APP_KEYS && window.APP_KEYS.STORAGE_KEYS) ? window.APP_KEYS.STORAGE_KEYS : {};
-  var CURRENT_EVENTS_KEY = sk.CURRENT_EVENTS || 'darkOrbitCurrentEvents';
+  var _cachedEvents = [];
   var countdownInterval = null;
   var MAX_DESC_LENGTH = 80;
+  var MATCH_SCORE_THRESHOLD = 2;
 
-  function getScrapedEvents() {
-    if (typeof UnifiedStorage === 'undefined') return [];
-    var raw = UnifiedStorage.get(CURRENT_EVENTS_KEY, []);
-    return Array.isArray(raw) ? raw : [];
+  /** Fichiers JSON des événements multilingues (src/multillingues_events/). Pour un nouvel événement, l’ajouter ici. */
+  var EVENTS_DB_FILES = [
+    'agatus_breach.json',
+    'apocalypse_box_refresh.json',
+    'ascend.json',
+    'battle_pass.json',
+    'bk_+_ld_sale.json',
+    'bonus_rewards_gate.json',
+    'chromin_rush.json',
+    'chinese_new_year.json',
+    'deep_space_echoes.json',
+    'discord.json',
+    'dispatch_day.json',
+    'enhanced_lf4_day.json',
+    'galaxy_gate_weekend.json',
+    'galaxy_gates_double_reward.json',
+    'galaxy_gates_special_rewards_day.json',
+    'galaxy_trek.json',
+    'helix_blitz_sale.json',
+    'honor_day.json',
+    'immortal_union.json',
+    'instagram.json',
+    'mimesis_mutiny.json',
+    'monthly_deluxe_calendar.json',
+    'new_dawn.json',
+    'obsidian_box_refresh.json',
+    'odysseus_laser.json',
+    'r&b_box_refresh.json',
+    'season_pass_waning_crescent.json',
+    'stellar_pathfinder_bundles.json',
+    'super_subscription.json',
+    'empyrian_march.json',
+    'unstable_modules_salvage.json',
+    'trinity_trials.json',
+    'uridium_bank.json',
+    'vortex_of_greed.json',
+    'xp_day.json'
+  ];
+
+  var _eventsDatabase = null;
+  var _eventsDatabasePromise = null;
+
+  function getEventsDbBaseUrl() {
+    var href = (typeof location !== 'undefined' && location.href) ? location.href : '';
+    href = href.replace(/[#?].*$/, '').replace(/\/[^/]*$/, '/');
+    return href + 'multillingues_events/';
+  }
+
+  function getEventsDbBaseUrlFallback() {
+    if (typeof location === 'undefined' || !location.pathname) return '';
+    var segs = location.pathname.split('/').filter(Boolean);
+    if (segs.length === 0) return '';
+    segs.pop();
+    return location.origin + '/' + segs.join('/') + '/multillingues_events/';
+  }
+
+  function normalizeForLookup(str) {
+    if (!str || typeof str !== 'string') return '';
+    var s = str.trim().toLowerCase();
+    s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    s = s.replace(/[!¡?¿.,;:'"…]/g, '').replace(/[\-–—]/g, ' ');
+    return s.replace(/\s+/g, ' ').trim();
+  }
+
+  function containsWord(textNorm, keywordNorm) {
+    if (!textNorm || !keywordNorm) return false;
+    var escaped = keywordNorm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp('(^|[\\s\\W])' + escaped + '([\\s\\W]|$)').test(textNorm);
   }
 
   /**
-   * Parse le timer brut (ex: "33:31:52" ou "Duración restante: 33:31:52") et scrapedAt ISO
+   * Charge tous les JSON de src/multillingues_events/, indexe par titres exacts (names.fr/en).
+   * @returns {Promise<{events: Array, byExactTitle: Object}>}
+   */
+  function loadEventsDatabase() {
+    if (_eventsDatabase) return Promise.resolve(_eventsDatabase);
+    if (_eventsDatabasePromise) return _eventsDatabasePromise;
+    var baseUrl = getEventsDbBaseUrl();
+    function fetchOne(base, filename) {
+      var url = base + encodeURIComponent(filename);
+      return fetch(url).then(function (r) { return r.ok ? r.json() : null; }).catch(function (e) {
+        Logger.warn('[Events] loadEventsDatabase — échec fetch:', url, e?.message || e);
+        return null;
+      });
+    }
+    _eventsDatabasePromise = Promise.all(EVENTS_DB_FILES.map(function (filename) {
+      return fetchOne(baseUrl, filename).then(function (data) {
+        if (data != null) return data;
+        var fallback = getEventsDbBaseUrlFallback();
+        if (fallback && fallback !== baseUrl) return fetchOne(fallback, filename);
+        return null;
+      });
+    })).then(function (results) {
+      var events = [];
+      results.forEach(function (r, idx) {
+        if (Array.isArray(r)) r.forEach(function (ev) { if (ev && typeof ev === 'object') events.push(ev); });
+        else if (r && typeof r === 'object') events.push(r);
+        else if (r == null && EVENTS_DB_FILES[idx]) Logger.warn('[Events] FICHIER MANQUANT ou INVALIDE :', EVENTS_DB_FILES[idx]);
+      });
+      var byExactTitle = {};
+      events.forEach(function (ev) {
+        if (ev.names && typeof ev.names === 'object') {
+          ['fr', 'en', 'de', 'es', 'ru', 'tr'].forEach(function (lang) {
+            var v = ev.names[lang];
+            if (v && typeof v === 'string') {
+              var norm = normalizeForLookup(v);
+              if (norm && !byExactTitle[norm]) byExactTitle[norm] = ev;
+            }
+          });
+        }
+      });
+      if (window.DEBUG) Logger.debug('[Events] loadEventsDatabase — fichiers chargés:', events.length, 'titres exacts:', Object.keys(byExactTitle).length);
+      _eventsDatabase = { events: events, byExactTitle: byExactTitle };
+      return _eventsDatabase;
+    });
+    return _eventsDatabasePromise;
+  }
+
+  function _matchEventByKeywords(titleNorm, descNorm, db) {
+    var events = (db && db.events) || [];
+    var best = null;
+    var bestScore = 0;
+    for (var i = 0; i < events.length; i++) {
+      var ev = events[i];
+      var exclude = ev.exclude_keywords || [];
+      var excluded = false;
+      for (var e = 0; e < exclude.length; e++) {
+        var exNorm = normalizeForLookup(exclude[e]);
+        if (exNorm && (containsWord(titleNorm, exNorm) || (descNorm && containsWord(descNorm, exNorm)))) { excluded = true; break; }
+      }
+      if (excluded) continue;
+      var score = 0;
+      var keywords = ev.keywords || [];
+      for (var k = 0; k < keywords.length; k++) {
+        var kw = normalizeForLookup(keywords[k]);
+        if (!kw) continue;
+        if (containsWord(titleNorm, kw)) score += 2;
+        if (descNorm && containsWord(descNorm, kw)) score += 1;
+      }
+      var idStr = (ev.id || '').trim();
+      if (idStr && titleNorm) {
+        var idSlugNorm = idStr.toLowerCase().replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim();
+        if (idSlugNorm.length >= 2 && titleNorm.indexOf(idSlugNorm) !== -1) score += 3;
+      }
+      if (score >= MATCH_SCORE_THRESHOLD && score > bestScore) {
+        bestScore = score;
+        best = ev;
+      }
+    }
+    return best;
+  }
+
+  function findEventInDatabase(rawName) {
+    if (!rawName || typeof rawName !== 'string') return null;
+    if (!_eventsDatabase) return null;
+    var norm = normalizeForLookup(rawName);
+    if (!norm) return null;
+    var db = _eventsDatabase;
+    if (db.byExactTitle && db.byExactTitle[norm]) return db.byExactTitle[norm];
+    var found = _matchEventByKeywords(norm, '', db);
+    if (found) return found;
+    if (window.DEBUG) Logger.debug('[EventMatcher] Aucun match fiable pour :', rawName);
+    return null;
+  }
+
+  function _matchEventByImageUrl(imageUrl, db) {
+    if (!imageUrl || typeof imageUrl !== 'string') return null;
+    var events = (db && db.events) || [];
+    var urlLower = imageUrl.toLowerCase();
+    var m = imageUrl.match(/\/([^/?#]+?)(?:\.[a-z]{2,4})?(?:[?#].*)?$/i);
+    var fileSlug = m ? m[1].toLowerCase().replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim() : '';
+    for (var i = 0; i < events.length; i++) {
+      var evDb = events[i];
+      var imgUrls = evDb.image_urls || [];
+      for (var j = 0; j < imgUrls.length; j++) {
+        var pattern = (imgUrls[j] || '').toLowerCase().trim();
+        if (pattern && urlLower.indexOf(pattern) !== -1) return evDb;
+      }
+      if (fileSlug) {
+        var idSlug = (evDb.id || '').toLowerCase().replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim();
+        if (idSlug && fileSlug === idSlug) return evDb;
+      }
+    }
+    if (fileSlug && fileSlug.length >= 2) {
+      var bestByKw = null;
+      var bestKwScore = 0;
+      for (var idx = 0; idx < events.length; idx++) {
+        var ev = events[idx];
+        var keywords = ev.keywords || [];
+        var kwScore = 0;
+        for (var k = 0; k < keywords.length; k++) {
+          var kwNorm = normalizeForLookup(keywords[k]);
+          if (!kwNorm) continue;
+          if (fileSlug.indexOf(kwNorm) !== -1 || kwNorm.indexOf(fileSlug) !== -1) kwScore += 2;
+        }
+        var evIdNorm = (ev.id || '').toLowerCase().replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim();
+        if (evIdNorm && (fileSlug.indexOf(evIdNorm) !== -1 || evIdNorm.indexOf(fileSlug) !== -1)) kwScore += 2;
+        if (kwScore > bestKwScore) {
+          bestKwScore = kwScore;
+          bestByKw = ev;
+        }
+      }
+      if (bestByKw) return bestByKw;
+    }
+    return null;
+  }
+
+  function findEventInDatabaseForScraped(ev) {
+    var name = (ev.name || ev.title || '').trim();
+    var desc = (ev.description || '').trim();
+    var descNorm = desc ? normalizeForLookup(desc) : '';
+    if (!name && !descNorm) return null;
+    if (!_eventsDatabase) return null;
+    var db = _eventsDatabase;
+    if (name) {
+      var norm = normalizeForLookup(name);
+      if (db.byExactTitle && db.byExactTitle[norm]) return db.byExactTitle[norm];
+      var found = _matchEventByKeywords(norm, descNorm, db);
+      if (found) return found;
+    }
+    if (descNorm) {
+      var foundByDesc = _matchEventByKeywords(descNorm, '', db);
+      if (foundByDesc) return foundByDesc;
+    }
+    Logger.warn('[EventMatcher] AUCUN MATCH pour :', name);
+    return null;
+  }
+
+  function getScrapedEvents() {
+    return Array.isArray(_cachedEvents) ? _cachedEvents : [];
+  }
+
+  /** Enrichit chaque événement avec la base JSON. Sans match : conserve les données scrapées brutes. */
+  function enrichScrapedEventsWithDb(events) {
+    if (!Array.isArray(events)) return events;
+    var lang = (typeof window.getCurrentLang === 'function' ? window.getCurrentLang() : 'fr') || 'fr';
+    return events.map(function (ev) {
+      var db = findEventInDatabaseForScraped(ev);
+      var rawName = (ev.name || '').trim();
+      var name = (db && db.names && (db.names[lang] || db.names.fr || db.names.en)) || rawName;
+      var desc = (db && db.descriptions && (db.descriptions[lang] || db.descriptions.fr || db.descriptions.en)) || (ev.description || '');
+      var img = (db && db.image && db.image.trim()) || (ev.imageUrl || '');
+      return Object.assign({}, ev, { name: name || rawName, description: desc, imageUrl: img, dbId: db ? db.id : undefined });
+    });
+  }
+
+  function _dedupeEvents(arr) {
+    if (!Array.isArray(arr)) return arr;
+    var seen = {};
+    return arr.filter(function (ev) {
+      var id = String(ev.id || ev.name || '').trim();
+      if (!id) return true;
+      if (seen[id]) return false;
+      seen[id] = true;
+      return true;
+    });
+  }
+
+  function _setCachedEvents(arr) {
+    if (!Array.isArray(arr)) return;
+    var deduped = _dedupeEvents(arr);
+    var active = deduped.filter(function (ev) { return !isEventExpired(ev); });
+    _cachedEvents = active;
+  }
+
+  function _applyScrapedEvents(arr) {
+    if (!Array.isArray(arr)) return;
+    var nowIso = new Date().toISOString();
+    var withScrapedAt = arr.map(function (ev) {
+      return ev.scrapedAt ? ev : Object.assign({}, ev, { scrapedAt: nowIso });
+    });
+    var newIds = withScrapedAt.map(function (e) { return String(e.id || ''); }).filter(Boolean);
+    getScrapedEvents().forEach(function (e) {
+      var id = String(e.id || '');
+      if (id && newIds.indexOf(id) === -1) {
+        // Ne jamais supprimer en base un évènement sans timer / sans expires_at (règle projet).
+        deleteExpiredEvent(id, e);
+      }
+    });
+    _setCachedEvents(withScrapedAt);
+    upsertEventsToSupabase(enrichScrapedEventsWithDb(withScrapedAt));
+    renderScrapedEvents();
+    if (getScrapedEvents().length > 0) startCountdownInterval();
+    if (typeof window.updateBoosterAlert === 'function') window.updateBoosterAlert();
+    if (typeof window.updateBoosterWidget === 'function') window.updateBoosterWidget();
+    if (typeof window.applyBoosterVisibility === 'function') window.applyBoosterVisibility();
+  }
+
+  async function loadVisibleEventsFromSupabase() {
+    try {
+      var supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+      if (!supabase) return [];
+      var { data, error } = await supabase.rpc('get_visible_events');
+      if (error || !data) return [];
+      var rows = Array.isArray(data) ? data : [];
+      if (window.DEBUG) Logger.debug('[Events] get_visible_events →', rows.length, 'évènement(s)');
+      return rows.map(function (row) {
+        var ed = row.event_data || {};
+        return {
+          id: row.id,
+          name: ed.name || ed.title || '',
+          description: ed.description || '',
+          imageUrl: ed.imageUrl || ed.image || '',
+          endMs: row.expires_at ? new Date(row.expires_at).getTime() : null,
+          expires_at: row.expires_at
+        };
+      });
+    } catch (e) {
+      Logger.error('[Events] get_visible_events — erreur Supabase:', e?.message || e);
+      return [];
+    }
+  }
+
+  async function upsertEventsToSupabase(events) {
+    if (!Array.isArray(events) || events.length === 0) return;
+    var supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+    if (!supabase) return;
+    var payload = events.map(function (ev) {
+      var endMs = getEndTimestamp(ev);
+      return {
+        id: String(ev.id || '').trim(),
+        visible: true,
+        expires_at: endMs ? new Date(endMs).toISOString() : null,
+        event_data: {
+          name: ev.name || ev.title || '',
+          description: ev.description || '',
+          imageUrl: ev.imageUrl || ev.image || ''
+        }
+      };
+    }).filter(function (p) { return p.id; });
+    if (payload.length === 0) return;
+    try {
+      var _r = await supabase.rpc('upsert_sidebar_events', { p_events: payload });
+      if (_r.error) throw _r.error;
+    } catch (e) {
+      Logger.error('[Events] upsert_sidebar_events — erreur Supabase:', e?.message || e);
+    }
+  }
+
+  /**
+   * Supprime une ligne dans `events` (sidebar) par id.
+   * @param {string} eventId
+   * @param {object} [sourceEvent] — si fourni et sans échéance calculable, on n’appelle pas le RPC (évènements permanents).
+   */
+  async function deleteExpiredEvent(eventId, sourceEvent) {
+    if (!eventId) return;
+    if (sourceEvent != null && typeof sourceEvent === 'object' && getEndTimestamp(sourceEvent) == null) {
+      if (typeof window !== 'undefined' && window.DEBUG && typeof Logger !== 'undefined' && Logger.debug) {
+        Logger.debug('[Events] deleteExpiredEvent ignoré (pas d’échéance):', eventId);
+      }
+      return;
+    }
+    var supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+    if (!supabase) return;
+    var { error } = await supabase.rpc('delete_event_by_id', { p_id: String(eventId) });
+    if (error) Logger.error('[Events] delete_event_by_id:', error);
+  }
+
+  /**
+   * Charge les événements partagés depuis Supabase (table shared_events).
+   * Appelé uniquement si pas de données locales.
+   * @returns {Promise<Array>}
+   */
+  async function loadSharedEvents() {
+    try {
+      var supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+      if (!supabase) return [];
+      var { data, error } = await supabase.rpc('get_shared_events');
+      if (error || !data) return [];
+      var raw = Array.isArray(data.events_json) ? data.events_json : [];
+      if (window.DEBUG) Logger.debug('[Events] get_shared_events → events_json:', raw.length, 'évènement(s)');
+      if (raw.length === 0) {
+        Logger.warn('[Events] shared_events.events_json est vide — le scraper n\'a peut-être rien trouvé');
+      }
+      var scrapedAt = (data.uploaded_at && data.uploaded_at !== 'null') ? data.uploaded_at : new Date().toISOString();
+      var withScrapedAt = raw.map(function (ev) {
+        return ev.scrapedAt ? ev : Object.assign({}, ev, { scrapedAt: scrapedAt });
+      });
+      return _dedupeEvents(withScrapedAt);
+    } catch (e) {
+      Logger.error('[Events] shared_events erreur — Supabase:', e?.message || e);
+      return [];
+    }
+  }
+
+  /**
+   * Parse le timer brut (ex: "33:31:52") ou expires_at/endMs (table events Supabase)
    * @returns {number|null} Timestamp de fin en ms, ou null si pas de timer
    */
   function getEndTimestamp(ev) {
+    if (ev.endMs && !isNaN(ev.endMs)) return Number(ev.endMs);
+    if (ev.expires_at) {
+      var t = new Date(ev.expires_at).getTime();
+      if (!isNaN(t)) return t;
+    }
     var timer = (ev.timer || '').trim();
     if (!timer) return null;
     var match = timer.match(/(\d+):(\d+):(\d+)/);
@@ -34,10 +419,15 @@
     return scrapedAt + (hours * 3600 + minutes * 60 + seconds) * 1000;
   }
 
+  function isEventExpired(ev) {
+    var end = getEndTimestamp(ev);
+    return end != null && end <= Date.now();
+  }
+
   function formatCountdown(endMs) {
     var now = Date.now();
     var left = Math.max(0, Math.floor((endMs - now) / 1000));
-    if (left <= 0) return 'Terminé';
+    if (left <= 0) return (typeof window.i18nT === 'function' ? window.i18nT('event_countdown_finished') : 'Terminé');
     var d = Math.floor(left / 86400);
     var h = Math.floor((left % 86400) / 3600);
     var m = Math.floor((left % 3600) / 60);
@@ -53,41 +443,200 @@
     return div.innerHTML;
   }
 
+  var TRANSITION_DURATION_MS = 400;
+
+  /**
+   * Carte événement scrapé : si l'événement est trouvé dans la base JSON (multillingues_events/),
+   * utilise image, nom et description traduits ; sinon fallback sur le nom brut et les données scrapées.
+   */
+  function buildScrapedEventCard(ev) {
+    var endMs = getEndTimestamp(ev);
+    var rawName = (ev.name || '').trim();
+    var lang = (typeof window.getCurrentLang === 'function') ? window.getCurrentLang() : 'fr';
+    var dbEvent = findEventInDatabaseForScraped(ev);
+    var name;
+    var desc;
+    var imageUrl;
+    if (dbEvent && dbEvent.names) {
+      name = (dbEvent.names[lang] || dbEvent.names.fr || dbEvent.names.en || rawName || '').trim() || (typeof window.i18nT === 'function' ? window.i18nT('event_default_name') : 'Événement');
+      desc = (dbEvent.descriptions && (dbEvent.descriptions[lang] || dbEvent.descriptions.fr || dbEvent.descriptions.en)) || '';
+      if (desc.length > MAX_DESC_LENGTH) desc = desc.slice(0, MAX_DESC_LENGTH) + '...';
+      imageUrl = (dbEvent.image || '').trim();
+    } else {
+      name = rawName || (typeof window.i18nT === 'function' ? window.i18nT('event_default_name') : 'Événement');
+      desc = (ev.description || '').trim();
+      if (desc.length > MAX_DESC_LENGTH) desc = desc.slice(0, MAX_DESC_LENGTH) + '...';
+      imageUrl = (ev.imageUrl || '').trim();
+    }
+    var badgeText = typeof window.i18nT === 'function' ? window.i18nT('events_current') : 'En cours';
+    var timerClass = endMs && (endMs - Date.now()) < 24 * 3600 * 1000 ? 'scraped-event-timer-urgent' : 'scraped-event-timer';
+    var timerHtml = endMs ? '<span class="' + timerClass + '" data-end-ms="' + endMs + '">' + escapeHtml(formatCountdown(endMs)) + '</span>' : '';
+    var cardClass = 'event-card event-card-compact scraped-event-card manual-event-card';
+    var evId = escapeHtml(ev.id || '');
+    var hidden = (typeof window.isEventHidden === 'function') ? window.isEventHidden(ev.id) : false;
+    var eyeTitle = hidden ? 'Afficher dans la sidebar' : 'Masquer de la sidebar';
+    var eyeClass = 'event-card-eye-btn' + (hidden ? ' event-card-eye-btn--hidden' : '');
+    var html = '<div class="' + cardClass + '" data-event-id="' + evId + '">';
+    html += '<button type="button" class="event-card-info-btn" data-event-id="' + evId + '" title="Info" aria-label="Info">ℹ️</button>';
+    html += '<button class="' + eyeClass + '" data-action="toggle-hide" data-event-id="' + evId + '" title="' + eyeTitle + '" aria-label="' + eyeTitle + '">' + (hidden ? '🙈' : '👁') + '</button>';
+    if (imageUrl) {
+      html += '<img src="' + escapeHtml(imageUrl) + '" alt="" class="manual-event-bg scraped-event-img">';
+    } else {
+      html += '<div class="manual-event-placeholder"></div>';
+    }
+    html += '<span class="event-badge current">' + escapeHtml(badgeText) + '</span>';
+    html += '<div class="event-card-content">';
+    html += '<div class="event-name">' + escapeHtml(name) + '</div>';
+    if (desc) html += '<div class="event-description scraped-event-desc">' + escapeHtml(desc) + '</div>';
+    if (timerHtml) html += '<div class="event-time">' + timerHtml + '</div>';
+    html += '</div></div>';
+    return html;
+  }
+
+  function attachScrapedCarouselHoverOnce(container) {
+    if (container._carouselHoverAttached) return;
+    container._carouselHoverAttached = true;
+    container.addEventListener('mouseenter', function () {
+      if (container._intervalId) { clearInterval(container._intervalId); container._intervalId = null; }
+    });
+    container.addEventListener('mouseleave', function () {
+      if (container._total > 1 && !container._intervalId && container._next) container._intervalId = setInterval(container._next, 15000);
+    });
+  }
+
+  function _updateScrapedResetBtn(container, allEvents, visibleEvents) {
+    var hiddenCount = allEvents.length - visibleEvents.length;
+    var resetBtnId = 'sidebarScrapedEventsResetHidden';
+    var btn = document.getElementById(resetBtnId);
+    if (hiddenCount > 0) {
+      if (!btn) {
+        btn = document.createElement('button');
+        btn.id = resetBtnId;
+        btn.type = 'button';
+        btn.className = 'sidebar-events-reset-hidden';
+        var parent = container.parentNode;
+        if (parent) parent.appendChild(btn);
+      }
+      btn.textContent = '👁 Tout afficher (' + hiddenCount + ' masqué' + (hiddenCount > 1 ? 's' : '') + ')';
+      btn.style.display = '';
+      btn.onclick = function () {
+        if (typeof window.getHiddenEventIds !== 'function') return;
+        var scrapedIds = allEvents.map(function (ev) { return String(ev.id || ''); });
+        var remaining = window.getHiddenEventIds().filter(function (id) { return scrapedIds.indexOf(id) === -1; });
+        if (typeof window.toggleEventHidden === 'function' && typeof window.saveHiddenEventIds === 'function') {
+          window.saveHiddenEventIds(remaining);
+        }
+        renderScrapedEvents();
+        if (typeof window.updateEventsDisplay === 'function') window.updateEventsDisplay();
+      };
+    } else if (btn) {
+      btn.style.display = 'none';
+    }
+  }
+
   function renderScrapedEvents() {
     var container = document.getElementById('sidebarScrapedEvents');
     if (!container) return;
-    var events = getScrapedEvents();
+    if (container._intervalId) { clearInterval(container._intervalId); container._intervalId = null; }
+    var allEvents = getScrapedEvents().filter(function (ev) {
+      if (isEventExpired(ev)) return false;
+      var dbEvent = findEventInDatabaseForScraped(ev);
+      return !dbEvent || dbEvent.visible !== false;
+    });
+    var hiddenIds = (typeof window.getHiddenEventIds === 'function') ? window.getHiddenEventIds() : [];
+    var events = hiddenIds.length > 0
+      ? allEvents.filter(function (ev) { return hiddenIds.indexOf(String(ev.id || '')) === -1; })
+      : allEvents;
     var noEventText = (typeof window.i18nT === 'function' ? window.i18nT('no_event_in_progress') : 'Aucun événement en cours');
     if (events.length === 0) {
       container.innerHTML = '<div class="no-event">' + noEventText + '</div>';
+      container.classList.remove('events-carousel--multi');
+      container._goTo = null;
+      container._next = null;
+      container._total = 0;
+      _updateScrapedResetBtn(container, allEvents, events);
       return;
     }
-    var html = '';
-    events.forEach(function (ev) {
-      var endMs = getEndTimestamp(ev);
-      var name = (ev.name || '').trim() || 'Événement';
-      var desc = (ev.description || '').trim();
-      if (desc.length > MAX_DESC_LENGTH) desc = desc.slice(0, MAX_DESC_LENGTH) + '...';
-      var imageUrl = (ev.imageUrl || '').trim();
-      var bgStyle = imageUrl ? 'background-image:url(' + escapeHtml(imageUrl) + ')' : '';
-      var timerClass = endMs && (endMs - Date.now()) < 24 * 3600 * 1000 ? 'scraped-event-timer-urgent' : 'scraped-event-timer';
-      var timerHtml = endMs ? '<span class="' + timerClass + '" data-end-ms="' + endMs + '">' + escapeHtml(formatCountdown(endMs)) + '</span>' : '';
-      html += '<div class="event-card event-card-compact scraped-event-card" data-event-id="' + escapeHtml(ev.id || '') + '" style="' + bgStyle + '">';
-      html += '<div class="event-card-content">';
-      html += '<div class="event-name">' + escapeHtml(name) + '</div>';
-      if (desc) html += '<div class="event-description scraped-event-desc">' + escapeHtml(desc) + '</div>';
-      if (timerHtml) html += '<div class="event-time">' + timerHtml + '</div>';
-      html += '</div></div>';
-    });
-    container.innerHTML = html;
+    if (events.length === 1) {
+      container.innerHTML = '<div class="events-carousel-viewport"><div class="events-carousel-track events-carousel-track--single"><div class="events-carousel-slide">' + buildScrapedEventCard(events[0]) + '</div></div></div>';
+      container.classList.remove('events-carousel--multi');
+      container._goTo = null;
+      container._next = null;
+      container._total = 0;
+      _updateScrapedResetBtn(container, allEvents, events);
+      return;
+    }
+    var slidePct = (100 / events.length).toFixed(2);
+    var slidesHtml = events.map(function (ev) {
+      return '<div class="events-carousel-slide" style="flex:0 0 ' + slidePct + '%">' + buildScrapedEventCard(ev) + '</div>';
+    }).join('');
+    var dotsHtml = events.map(function (_, i) {
+      return '<button type="button" class="events-carousel-dot' + (i === 0 ? ' active' : '') + '" data-index="' + i + '" aria-label="Slide ' + (i + 1) + '"></button>';
+    }).join('');
+    container.innerHTML =
+      '<div class="events-carousel-viewport">' +
+        '<div class="events-carousel-track" style="width:' + events.length * 100 + '%; transform:translateX(0)">' + slidesHtml + '</div>' +
+      '</div>' +
+      '<div class="events-carousel-nav">' +
+        '<button type="button" class="events-carousel-prev" aria-label="' + escapeHtml(typeof window.i18nT === 'function' ? window.i18nT('carousel_prev') : 'Précédent') + '">‹</button>' +
+        '<div class="events-carousel-dots">' + dotsHtml + '</div>' +
+        '<button type="button" class="events-carousel-next" aria-label="' + escapeHtml(typeof window.i18nT === 'function' ? window.i18nT('carousel_next') : 'Suivant') + '">›</button>' +
+      '</div>';
+    container.classList.add('events-carousel--multi');
+    container.setAttribute('data-carousel-index', '0');
+    container._isTransitioning = false;
+    var total = events.length;
+
+    function goTo(index) {
+      if (container._isTransitioning) return;
+      if (total === 0) return;
+      index = (index % total + total) % total;
+      container._isTransitioning = true;
+      container.setAttribute('data-carousel-index', String(index));
+      var track = container.querySelector('.events-carousel-track');
+      if (track) track.style.transform = 'translateX(-' + (index * 100 / total) + '%)';
+      var dots = container.querySelectorAll('.events-carousel-dot');
+      for (var d = 0; d < dots.length; d++) dots[d].classList.toggle('active', d === index);
+      setTimeout(function () { container._isTransitioning = false; }, TRANSITION_DURATION_MS);
+    }
+
+    function next() {
+      if (container._isTransitioning) return;
+      var i = parseInt(container.getAttribute('data-carousel-index'), 10) || 0;
+      goTo(i + 1);
+    }
+
+    container._goTo = goTo;
+    container._next = next;
+    container._total = total;
+    container._intervalId = setInterval(next, 15000);
+    attachScrapedCarouselHoverOnce(container);
+
+    _updateScrapedResetBtn(container, allEvents, events);
   }
 
   function updateCountdowns() {
+    var now = Date.now();
+    var expiredIds = [];
     document.querySelectorAll('.scraped-event-timer, .scraped-event-timer-urgent').forEach(function (el) {
       var endMs = parseInt(el.getAttribute('data-end-ms'), 10);
-      if (!endMs) return;
+      if (!Number.isFinite(endMs) || endMs <= 0) return;
+      if (endMs <= now) {
+        var card = el.closest && el.closest('[data-event-id]');
+        if (card) {
+          var eid = card.getAttribute('data-event-id');
+          if (eid && expiredIds.indexOf(eid) === -1) expiredIds.push(eid);
+        }
+      }
       el.textContent = formatCountdown(endMs);
     });
+    expiredIds.forEach(function (id) {
+      var ev = getScrapedEvents().find(function (e) { return String(e.id || '') === String(id); });
+      if (ev && getEndTimestamp(ev) == null) return;
+      deleteExpiredEvent(id, ev);
+      _setCachedEvents(getScrapedEvents().filter(function (e) { return String(e.id || '') !== id; }));
+    });
+    if (expiredIds.length > 0) renderScrapedEvents();
   }
 
   function startCountdownInterval() {
@@ -102,37 +651,195 @@
     }
   }
 
-  function setScrapedEventsFromIPC(events) {
+  function pushEventsToSupabase(events) {
     if (!Array.isArray(events)) return;
-    if (typeof UnifiedStorage !== 'undefined') {
-      UnifiedStorage.set(CURRENT_EVENTS_KEY, events);
-      if (typeof UnifiedStorage.invalidateCache === 'function') UnifiedStorage.invalidateCache(CURRENT_EVENTS_KEY);
-    }
-    renderScrapedEvents();
-    if (events.length > 0) startCountdownInterval();
-    if (typeof window.updateBoosterAlert === 'function') window.updateBoosterAlert();
-    if (typeof window.updateBoosterWidget === 'function') window.updateBoosterWidget();
+    var supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+    if (!supabase) return;
+    (async function () {
+      var userId = null;
+      if (typeof AuthManager !== 'undefined' && typeof AuthManager.getCurrentUser === 'function') {
+        var user = await AuthManager.getCurrentUser();
+        userId = (user?.id ?? null);
+      }
+      try {
+        var _r = await supabase.rpc('upsert_shared_events', { p_events: events, p_uploaded_by: userId });
+        if (_r.error) throw _r.error;
+      } catch (e) {
+        Logger.warn('[Events] upsert_shared_events:', e?.message || e);
+      }
+    })();
+  }
+
+  function setScrapedEventsFromIPC(events) {
+    if (!Array.isArray(events)) return Promise.resolve();
+    return loadEventsDatabase().then(function () {
+      _applyScrapedEvents(enrichScrapedEventsWithDb(events));
+    }).catch(function () {
+      _applyScrapedEvents(events);
+    });
+  }
+
+  var _lastRefreshEventsAt = 0;
+  var REFRESH_EVENTS_THROTTLE_MS = 60000;
+  function refreshEventsFromSupabase(force) {
+    var now = Date.now();
+    var cacheEmpty = getScrapedEvents().length === 0;
+    if (!force && !cacheEmpty && now - _lastRefreshEventsAt < REFRESH_EVENTS_THROTTLE_MS && _lastRefreshEventsAt > 0) return;
+    _lastRefreshEventsAt = now;
+    loadEventsDatabase().then(function () {
+      loadVisibleEventsFromSupabase().then(function (visible) {
+        if (visible.length > 0) {
+          _setCachedEvents(enrichScrapedEventsWithDb(visible));
+        } else {
+          Logger.warn('[Events] Aucun évènement visible via get_visible_events → fallback get_shared_events');
+          return loadSharedEvents().then(function (sharedEvents) {
+            var raw = Array.isArray(sharedEvents) ? sharedEvents : [];
+            _setCachedEvents(enrichScrapedEventsWithDb(raw));
+            if (raw.length > 0) upsertEventsToSupabase(enrichScrapedEventsWithDb(raw));
+          });
+        }
+      }).then(function () {
+        renderScrapedEvents();
+        if (getScrapedEvents().some(function (e) { return getEndTimestamp(e); })) startCountdownInterval();
+        if (typeof window.updateBoosterAlert === 'function') window.updateBoosterAlert();
+        if (typeof window.updateBoosterWidget === 'function') window.updateBoosterWidget();
+        if (typeof window.applyBoosterVisibility === 'function') window.applyBoosterVisibility();
+      }).catch(function () {
+        loadSharedEvents().then(function (sharedEvents) {
+          var raw = Array.isArray(sharedEvents) ? sharedEvents : [];
+          _setCachedEvents(enrichScrapedEventsWithDb(raw));
+          renderScrapedEvents();
+        }).catch(function () { renderScrapedEvents(); });
+      });
+    }).catch(function () {
+      renderScrapedEvents();
+    });
   }
 
   function init() {
-    renderScrapedEvents();
-    var events = getScrapedEvents();
-    if (events.some(function (e) { return getEndTimestamp(e); })) startCountdownInterval();
-    if (window.electronScraper && window.electronScraper.onEventsUpdated) {
-      window.electronScraper.onEventsUpdated(function (payload) {
-        var list = payload && Array.isArray(payload.events) ? payload.events : [];
-        setScrapedEventsFromIPC(list);
-      });
+    loadEventsDatabase().then(function () {
+      refreshEventsFromSupabase();
+    }).catch(function () {
+      refreshEventsFromSupabase();
+    });
+
+    if (window.electronScraper) {
+      if (window.electronScraper.onEventsUpdated) {
+        window.electronScraper.onEventsUpdated(function (payload) {
+          var list = payload && Array.isArray(payload.events) ? payload.events : null;
+          if (list && list.length > 0) {
+            setScrapedEventsFromIPC(list).then(function () {
+              refreshEventsFromSupabase(true);
+            });
+          } else {
+            Logger.warn('[Events] events-updated reçu sans événements valides:', payload);
+            refreshEventsFromSupabase(true);
+          }
+        });
+      }
+      if (window.electronScraper.onEventsCollected) {
+        window.electronScraper.onEventsCollected(function () {
+          refreshEventsFromSupabase(true);
+        });
+      }
     }
   }
 
+  // ── Détection booster 50% ──────────────────────────────────────────────────
+  // Source de vérité unique : les events scrapés déjà présents dans cette IIFE.
+  // updateBoosterAlert() (boosters.js) délègue ici via window.getActiveBoosterType.
+
+  var _BOOSTER_HONOR_KW = [
+    'honor', 'honneur', 'honour', 'honnor', 'ehre', 'honra', 'честь', 'onur',
+    'honor_day', 'honor day', 'honnor_day', 'honnor day', 'honneur_day', 'honneur day', 'honour_day', 'honour day',
+    'ehre_tag', 'honra_dia', 'honra día', 'jour honneur', 'journée double honneur', 'honor tag'
+  ];
+  var _BOOSTER_XP_KW = [
+    'experience', 'xp', 'erfahrung', 'experiencia', 'опыт', 'deneyim',
+    'xp_day', 'xp day', 'experience_day', 'experience day', 'exp_day', 'exp day',
+    'erfahrung_tag', 'experiencia_dia', 'experiencia día', 'jour xp', 'jour exp',
+    'journée double xp', 'journée xp', 'xp tag', 'experience tag'
+  ];
+  var _BOOSTER_DAY_PHRASES = [
+    'honor_day', 'honor day', 'honnor_day', 'honnor day', 'honneur_day', 'honneur day',
+    'honour_day', 'honour day', 'journée double honneur', 'journée honneur',
+    'xp_day', 'xp day', 'experience_day', 'experience day',
+    'journée double xp', 'journée xp'
+  ];
+
+  var _BOOSTER_HONOR_IDS = ['honor_day', 'honnor_day', 'honour_day', 'ehren_tag', 'honor_day_2'];
+  var _BOOSTER_XP_IDS    = ['xp_day', 'experience_day', 'xp_day_2', 'exp_day'];
+
+  function _detectBoosterType(text) {
+    if (!text || typeof text !== 'string') return null;
+    var t = text.toLowerCase();
+    var hasDayPhrase = _BOOSTER_DAY_PHRASES.some(function (p) { return t.indexOf(p) !== -1; });
+    if (!/50\s*%/.test(t) && !hasDayPhrase) return null;
+    var hasHonor = _BOOSTER_HONOR_KW.some(function (kw) { return t.indexOf(kw) !== -1; });
+    var hasXp    = _BOOSTER_XP_KW.some(function (kw)    { return t.indexOf(kw) !== -1; });
+    if (hasHonor && !hasXp) return 'honor';
+    if (hasXp && !hasHonor) return 'xp';
+    if (hasHonor) return 'honor';
+    return null;
+  }
+
+  /**
+   * Retourne le type de booster actif ('honor', 'xp') ou null.
+   * Priorité : dbId matché au JSON > détection textuelle.
+   */
+  function getActiveBoosterType() {
+    var events = getScrapedEvents();
+    var now = Date.now();
+    var foundHonor = false;
+    var foundXp    = false;
+    for (var i = 0; i < events.length; i++) {
+      var ev = events[i];
+      var endMs = getEndTimestamp(ev);
+      if (endMs != null && endMs <= now) continue;
+      var evDbId = (ev.dbId || '').toLowerCase();
+      if (evDbId && _BOOSTER_HONOR_IDS.indexOf(evDbId) !== -1) { foundHonor = true; continue; }
+      if (evDbId && _BOOSTER_XP_IDS.indexOf(evDbId) !== -1)    { foundXp    = true; continue; }
+      var text = ((ev.name || '') + ' ' + (ev.description || '')).trim();
+      var type = _detectBoosterType(text);
+      if (type === 'honor') foundHonor = true;
+      if (type === 'xp')    foundXp    = true;
+    }
+    if (foundHonor) return 'honor';
+    if (foundXp)    return 'xp';
+    return null;
+  }
+
+  function getScrapedEventForModal(eventId) {
+    var list = getScrapedEvents();
+    for (var i = 0; i < list.length; i++) {
+      if (String(list[i].id || '') !== String(eventId)) continue;
+      var ev = list[i];
+      var rawName = (ev.name || '').trim();
+      var lang = (typeof window.getCurrentLang === 'function') ? window.getCurrentLang() : 'fr';
+      var dbEvent = findEventInDatabaseForScraped(ev);
+      var name = (dbEvent && dbEvent.names) ? (dbEvent.names[lang] || dbEvent.names.fr || dbEvent.names.en || rawName || '').trim() : rawName;
+      var desc = (dbEvent && dbEvent.descriptions) ? (dbEvent.descriptions[lang] || dbEvent.descriptions.fr || dbEvent.descriptions.en || '') : (ev.description || '');
+      return { id: ev.id, name: name || 'Événement', description: (desc || '').trim(), endDate: getEndTimestamp(ev), startDate: null, scraped: true };
+    }
+    return null;
+  }
+
   window.getScrapedEvents = getScrapedEvents;
+  window.getScrapedEventForModal = getScrapedEventForModal;
   window.updateScrapedEventsDisplay = renderScrapedEvents;
+  window.refreshEventsFromSupabase = refreshEventsFromSupabase;
   window.setScrapedEventsFromIPC = setScrapedEventsFromIPC;
+  window.loadEventsDatabase = loadEventsDatabase;
+  window.findEventInDatabase = findEventInDatabase;
+  window.loadSharedEvents = loadSharedEvents;
+  window.getActiveBoosterType = getActiveBoosterType;
 
   window.addEventListener('languageChanged', function () {
     renderScrapedEvents();
   });
+
+  window.addEventListener('beforeunload', stopCountdownInterval);
+  window.addEventListener('userLoggedOut', stopCountdownInterval);
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);

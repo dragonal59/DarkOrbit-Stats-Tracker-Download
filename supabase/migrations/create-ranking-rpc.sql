@@ -5,6 +5,8 @@
 
 -- Retourne le classement : un enregistrement par utilisateur avec sa dernière session.
 -- Filtres : serveur, firmes. Tri : honor, xp ou rank_points. Limite : p_limit.
+DROP FUNCTION IF EXISTS public.get_ranking(text, text[], text, integer);
+DROP FUNCTION IF EXISTS public.get_ranking(text, text[], text, int);
 CREATE OR REPLACE FUNCTION public.get_ranking(
   p_server TEXT DEFAULT NULL,
   p_companies TEXT[] DEFAULT NULL,

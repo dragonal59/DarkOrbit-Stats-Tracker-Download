@@ -1,0 +1,35 @@
+{
+  "id": "immortal_union",
+  "visible": true,
+  "image": "img/events/immortal_union.jpg",
+  "names": {
+    "fr": "Union Immortelle",
+    "en": "Immortal Union",
+    "de": "Unsterbliche Union",
+    "es": "Unión Inmortal",
+    "ru": "Бессмертный Союз",
+    "tr": "Ölümsüz Birlik"
+  },
+  "descriptions": {
+    "fr": "Parviendrez-vous à réunir les amants perdus ? Leurs désirs ravivés, ce sont maintenant aux Styxus et aux Charopos de s'opposer à leurs retrouvailles. Éliminez-les, récupérez des éclats de Styxus et de Charopos et confectionnez des récompenses spéciales !",
+    "en": "Can you reunite the lost lovers? Now with rekindled desires, the Styxus and Charopos stand valiantly in the way of the reunion. Defeat them, collect Styxus and Charopos Shards, and craft special rewards!",
+    "de": "Kannst du die verlorenen Liebenden wieder vereinen? Mit neu entfachten Wünschen stellen sich die Styxus und Charopos tapfer dem Wiedersehen in den Weg. Besiege sie, sammle Styxus- und Charopos-Splitter und stelle besondere Belohnungen her!",
+    "es": "¿Puedes reunir a los amantes perdidos? Con deseos reavivados, los Styxus y Charopos se interponen valientemente en el camino del reencuentro. ¡Derrótales, recoge Fragmentos de Styxus y Charopos y elabora recompensas especiales!",
+    "ru": "Сможете ли вы воссоединить потерянных влюблённых? С вновь разгоревшимися желаниями Стикс и Харопос доблестно встают на пути воссоединения. Победите их, соберите осколки Стикс и Харопос и создайте особые награды!",
+    "tr": "Kayıp sevgilileri yeniden bir araya getirebilir misin? Yeniden alevlenen arzularıyla Styxus ve Charopos, kavuşmanın önünde yiğitçe duruyor. Onları yen, Styxus ve Charopos Kırıkları topla ve özel ödüller üret!"
+  },
+  "keywords": [
+    "immortal union",
+    "union immortelle",
+    "unión inmortal",
+    "unsterbliche union",
+    "бессмертный союз",
+    "ölümsüz birlik"
+  ],
+  "exclude_keywords": [
+    "chinese new year",
+    "nouvel an chinois",
+    "agatus breach",
+    "trinity trials"
+  ]
+}

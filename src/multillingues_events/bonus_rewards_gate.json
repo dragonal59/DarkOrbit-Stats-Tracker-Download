@@ -1,0 +1,41 @@
+{
+  "id": "bonus_rewards_gate",
+  "visible": true,
+  "image": "img/events/bonus_rewards_gate.jpg",
+  "names": {
+    "fr": "Récompenses bonus",
+    "en": "Bonus Rewards",
+    "de": "Bonusbelohnungen",
+    "es": "Recompensas Bonus",
+    "ru": "Бонусные Награды",
+    "tr": "Bonus Ödüller",
+    "pl": "Nagrody Bonusowe"
+  },
+  "descriptions": {
+    "fr": "Obtenez des récompenses supplémentaires en terminant aujourd'hui certains portails intergalactiques pour la première fois ! Les récompenses changent toutes les 24 heures, ne manquez pas cette occasion d'obtenir du butin exceptionnel !",
+    "en": "Get additional rewards when you complete selected Galaxy Gates for the first time today! The rewards change every 24 hours, so don't miss your chance to grab some valuable loot!",
+    "de": "Erhalte zusätzliche Belohnungen, wenn du heute ausgewählte Galaxy Gates zum ersten Mal abschließt! Die Belohnungen ändern sich alle 24 Stunden, also verpasse nicht deine Chance, wertvolle Beute zu ergattern!",
+    "es": "¡Obtén recompensas adicionales cuando completes hoy por primera vez ciertos Portales Galácticos seleccionados! Las recompensas cambian cada 24 horas, ¡no pierdas tu oportunidad de conseguir un botín valioso!",
+    "ru": "Получайте дополнительные награды, впервые завершая выбранные Галактические Врата сегодня! Награды меняются каждые 24 часа — не упустите шанс захватить ценную добычу!",
+    "tr": "Bugün seçili Galaksi Kapılarını ilk kez tamamladığında ek ödüller kazan! Ödüller her 24 saatte bir değişiyor, bu yüzden değerli ganimetleri kapma şansını kaçırma!",
+    "pl": "Zdobądź dodatkowe nagrody, ukończając dziś wybrane Bramy Galaktyczne po raz pierwszy! Nagrody zmieniają się co 24 godziny, nie przegap swojej szansy na cenne łupy!"
+  },
+  "keywords": [
+    "bonus rewards gate",
+    "récompenses bonus portails",
+    "bonusbelohnungen gate",
+    "recompensas bonus portales",
+    "бонусные награды врата",
+    "bonus ödüller kapı",
+    "nagrody bonusowe brama"
+  ],
+  "exclude_keywords": [
+    "galaxy gate weekend",
+    "galaxy gate doubler",
+    "double gain",
+    "week-end portails",
+    "enhanced lf4",
+    "dispatch day",
+    "jour de l'expédition"
+  ]
+}

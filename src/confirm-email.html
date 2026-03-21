@@ -6,6 +6,7 @@
   <title>Email confirmé — DarkOrbit Stats Tracker Pro</title>
   <link rel="stylesheet" href="frontend/variables.css">
   <link rel="stylesheet" href="frontend/style.css">
+  <link rel="stylesheet" href="frontend/legal.css">
   <script>
     (function(){ var t = localStorage.getItem('darkOrbitTheme') || 'dark'; document.documentElement.setAttribute('data-theme', t === 'light' ? 'light' : 'dark'); })();
   </script>
@@ -29,6 +30,7 @@
   </style>
 </head>
 <body>
+<button id="btnLegal" type="button" class="btn-legal-info" title="Informations légales" aria-label="Informations légales">ℹ️</button>
 <div class="auth-container">
   <div class="auth-header">
     <div class="auth-icon" id="confirmIcon">✉️</div>
@@ -64,6 +66,9 @@
 <script src="backend/supabase-config.js"></script>
 <script src="backend/supabase-client.js"></script>
 <script src="config/keys.js"></script>
+<script src="backend/translations.js"></script>
+<script src="backend/i18n.js"></script>
+<script src="frontend/legal.js"></script>
 <script>
 (function() {
   const loadingEl = document.getElementById('loadingState');
@@ -149,5 +154,27 @@
   });
 })();
 </script>
+<div id="modalLegal" class="modal-legal hidden">
+  <div class="modal-legal-overlay"></div>
+  <div class="modal-legal-container">
+    <div class="modal-legal-header">
+      <h2>ℹ️ <span data-i18n="legal_modal_title">Informations légales</span></h2>
+      <button id="closeLegal" type="button" class="modal-legal-close" aria-label="Fermer">✕</button>
+    </div>
+    <div class="modal-legal-tabs">
+      <button type="button" class="legal-tab active" data-tab="cgu" data-i18n="legal_tab_cgu">CGU</button>
+      <button type="button" class="legal-tab" data-tab="rgpd" data-i18n="legal_tab_rgpd">RGPD</button>
+      <button type="button" class="legal-tab" data-tab="mentions" data-i18n="legal_tab_mentions">Mentions</button>
+      <button type="button" class="legal-tab" data-tab="remboursement" data-i18n="legal_tab_refund">Remboursement</button>
+    </div>
+    <div class="modal-legal-content">
+      <div class="legal-panel active" id="tab-cgu"><p>Consultez les documents légaux complets sur la <a href="auth.html">page de connexion</a>.</p></div>
+      <div class="legal-panel hidden" id="tab-rgpd"><p>Consultez la politique de confidentialité sur la <a href="auth.html">page de connexion</a>.</p></div>
+      <div class="legal-panel hidden" id="tab-mentions"><p>Consultez les mentions légales sur la <a href="auth.html">page de connexion</a>.</p></div>
+      <div class="legal-panel hidden" id="tab-remboursement"><p>Consultez la politique de remboursement sur la <a href="auth.html">page de connexion</a>.</p></div>
+    </div>
+    <div class="modal-legal-footer">© 2025 DarkOrbit Stats Tracker Pro</div>
+  </div>
+</div>
 </body>
 </html>

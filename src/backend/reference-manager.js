@@ -144,4 +144,4 @@ window.getReferenceSession = getReferenceSession;
 window.calculateGains = calculateGains;
 window.hasBaseline = hasBaseline;
 window.shouldShowBaselineModal = shouldShowBaselineModal;
-console.log('📌 Module Reference Manager chargé');
+

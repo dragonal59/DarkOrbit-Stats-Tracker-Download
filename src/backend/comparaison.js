@@ -30,8 +30,8 @@ function compareSessions() {
   }
   
   const sessions = getSessions();
-  const session1 = sessions.find(s => s.id == id1);
-  const session2 = sessions.find(s => s.id == id2);
+  const session1 = sessions.find(s => String(s.id) === String(id1));
+  const session2 = sessions.find(s => String(s.id) === String(id2));
   
   if (!session1 || !session2) return;
   
@@ -121,4 +121,3 @@ function compareSessions() {
   `;
 }
 
-console.log('🔄 Module Comparison chargé');

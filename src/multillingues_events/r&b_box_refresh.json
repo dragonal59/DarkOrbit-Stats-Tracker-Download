@@ -1,0 +1,22 @@
+{
+  "id": "rb_box_refresh",
+  "visible": true,
+  "image": "img/events/r&b_box_refresh.jpg",
+  "names": {
+    "fr": "Actualisation de la Boîte R&B",
+    "en": "R&B Box Refresh",
+    "de": "R&B-Box-Aktualisierung",
+    "es": "Actualización de Caja R&B",
+    "ru": "Обновление коробки R&B",
+    "tr": "R&B Kutusu Yenileme"
+  },
+  "descriptions": {
+    "fr": "Confectionnez des clés rouges et bleues ou achetez des packs dans le magasin pour tenter d'obtenir le nouveau design de R.E.X. Phantasm Spectrum ce mois-ci !",
+    "en": "Craft red and blue keys or buy packs in the shop for a chance to get your hands on the new Phantasm Spectrum P.E.T. Design this month!",
+    "de": "Stelle rote und blaue Schlüssel her oder kaufe Packs im Shop, um eine Chance auf das neue Phantasm Spectrum R.E.X.-Design diesen Monat zu haben!",
+    "es": "¡Fabrica llaves rojas y azules o compra packs en la tienda para tener la oportunidad de obtener el nuevo diseño Phantasm Spectrum R.E.X. este mes!",
+    "ru": "Создавайте красные и синие ключи или покупайте паки в магазине, чтобы получить шанс на новый дизайн Phantasm Spectrum R.E.X. в этом месяце!",
+    "tr": "Bu ay yeni Phantasm Spectrum R.E.X. Tasarımına sahip olmak için kırmızı ve mavi anahtarlar üret veya mağazadan paketler satın al!"
+  },
+  "keywords": ["r&b box refresh", "actualisation de la boîte r&b", "actualización de caja r&b", "r&b-box-aktualisierung", "обновление коробки r&b", "r&b kutusu yenileme", "actualización de caja roja y azul"],"exclude_keywords":["obsidian","obsidiana","apocalypse","apocalipsis"]
+}

@@ -1,21 +1,18 @@
 {
   "versions": [
     {
-      "version": "2.3.0",
-      "date": "2026-03-02",
+      "version": "2.5.2",
+      "date": "2026-03-20",
       "type": "standard",
       "changes": {
         "nouveautés": [
-          "Scraping Hall of Fame pour 24 serveurs internationaux",
-          "Sidebar événements DarkOrbit en temps réel"
+          "Aucune nouveauté"
         ],
         "améliorations": [
-          "Performances du scraping optimisées",
-          "Interface dashboard redessinée"
+          "Amélioration du classement"
         ],
         "corrections": [
-          "Correction du remappage serveurs gbl2/gbl3",
-          "Fix sécurité vue profiles_public"
+          "Patch 'Récupérer mes stats' corriger"
         ]
       }
     }

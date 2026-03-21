@@ -1,0 +1,37 @@
+{
+  "id": "super_subscription",
+  "visible": true,
+  "image": "img/events/best_subscriptions.jpg",
+  "names": {
+    "fr": "Super Abonnement",
+    "en": "Super Subscription",
+    "de": "Super-Abonnement",
+    "es": "Supersuscripciones",
+    "ru": "Суперподписки",
+    "tr": "Süper Abonelikler"
+  },
+  "descriptions": {
+    "fr": "Nous avons tout un tas d'offres d'abonnement pour tous les pilotes ! Retrouvez le pack Avantage Double Gain XL, le pack Avantage Réduction XL et le pack Avantage Uridium XL. Une affaire !",
+    "en": "We've got a host of superb subscription deals for all pilots! Check out what's on offer, like the XL Doubler Advantage Packs; XL Rebate Advantage Packs and XL Uridium Advantage Packs. What a deal!",
+    "de": "Wir haben eine Menge toller Abonnementangebote für alle Piloten! Entdecke das XL-Verdoppler-Vorteilspaket, das XL-Rabatt-Vorteilspaket und das XL-Uridium-Vorteilspaket. Ein echtes Schnäppchen!",
+    "es": "¡Tenemos un montón de ofertas de suscripción para todos los pilotos! Descubre el Pack Ventaja Doble XL, el Pack Ventaja Descuento XL y el Pack Ventaja Uridium XL. ¡Una ganga!",
+    "ru": "У нас есть масса отличных предложений по подписке для всех пилотов! Ознакомьтесь с пакетом Преимущество XL Удвоитель, пакетом Преимущество XL Скидка и пакетом Преимущество XL Уридиум. Отличная сделка!",
+    "tr": "Tüm pilotlar için harika abonelik teklifleri sunuyoruz! XL İkiye Katlama Avantaj Paketi, XL İndirim Avantaj Paketi ve XL Uridyum Avantaj Paketine göz atın. Kaçırılmaz fırsat!"
+  },
+  "keywords": [
+    "super subscription",
+    "super abonnement",
+    "supersuscripciones",
+    "super-abonnement",
+    "суперподписки",
+    "süper abonelikler"
+  ],
+  "exclude_keywords": [
+    "season pass",
+    "pass de saison",
+    "battle pass",
+    "pass bataille",
+    "monthly deluxe calendar",
+    "calendrier deluxe mensuel"
+  ]
+}

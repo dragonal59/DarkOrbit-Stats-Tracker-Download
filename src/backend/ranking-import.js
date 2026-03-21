@@ -27,6 +27,21 @@ function _fusionVal(p, snake, camel, fallback) {
 
 var GRADE_INVALID = /^(splitter_|spacer_|line_|decoration|hof_|rank_arrow|unknown)/i;
 
+/** Limite garde-fou (taille mémoire / UI) */
+var RANKING_IMPORT_MAX_PLAYERS = 25000;
+
+function _rankingImportFmt(key, params) {
+  var raw = (typeof i18nT === 'function') ? i18nT(key) : key;
+  if (!params) return raw;
+  var s = raw;
+  for (var pk in params) {
+    if (Object.prototype.hasOwnProperty.call(params, pk)) {
+      s = s.split('{{' + pk + '}}').join(String(params[pk]));
+    }
+  }
+  return s;
+}
+
 function _fusionGrade(p) {
   var g = _fusionVal(p, 'grade', 'grade', null) || p.rank_title || p.rankTitle || _fusionVal(p, 'grade_normalized', 'gradeNormalized', null) || null;
   if (g && typeof g === 'string' && GRADE_INVALID.test(g.trim())) return null;
@@ -41,21 +56,36 @@ function transformFusionPlayerToUI(p, server, index) {
   const currentRank = _fusionGrade(p);
   const gradeLevel = _fusionVal(p, 'grade_level', 'gradeLevel', null);
   const gradeNormalized = _fusionVal(p, 'grade_normalized', 'gradeNormalized', null);
+  var npcKills = _fusionVal(p, 'npc_kills', 'npcKills', null) ?? _fusionVal(p, 'npc_kills_value', 'npcKillsValue', null);
+  var shipKills = _fusionVal(p, 'ship_kills', 'shipKills', null) ?? _fusionVal(p, 'ship_kills_value', 'shipKillsValue', null);
+  var galaxyGates = _fusionVal(p, 'galaxy_gates', 'galaxyGates', null);
   return {
     id: 'imported-' + server + '-fusion-' + index,
     game_pseudo: p.name != null ? String(p.name) : '—',
     company: p.company || null,
+    honor_rank: _fusionVal(p, 'honor_rank', 'honorRank', null),
+    experience_rank: _fusionVal(p, 'experience_rank', 'experienceRank', null),
+    top_user_rank: _fusionVal(p, 'top_user_rank', 'topUserRank', 'rank'),
+    ship_kills_rank: _fusionVal(p, 'ship_kills_rank', 'shipKillsRank', null),
+    npc_kills_rank: _fusionVal(p, 'npc_kills_rank', 'npcKillsRank', null),
     honor: parseRankingNumber(_fusionVal(p, 'honor_value', 'honorValue', 'honor')),
     xp: parseRankingNumber(_fusionVal(p, 'experience_value', 'experienceValue', 'experience')),
     rank_points: parseRankingNumber(_fusionVal(p, 'top_user_value', 'topUserValue', 'top_user')),
+    npc_kills: npcKills != null ? parseRankingNumber(npcKills) : null,
+    ship_kills: shipKills != null ? parseRankingNumber(shipKills) : null,
+    galaxy_gates: galaxyGates != null ? parseRankingNumber(galaxyGates) : null,
+    galaxy_gates_json: p.galaxy_gates_json || p.galaxyGatesJson || null,
     next_rank_points: null,
     current_rank: currentRank,
     grade_level: gradeLevel != null ? Number(gradeLevel) : null,
+    level: _fusionVal(p, 'level', 'level', null) != null ? Number(_fusionVal(p, 'level', 'level', null)) : null,
     grade_normalized: gradeNormalized || null,
     session_date: null,
     session_timestamp: null,
     note: null,
-    _source: 'imported'
+    _source: 'imported',
+    _server: server || null,
+    userId: _fusionVal(p, 'userId', 'user_id', null)
   };
 }
 
@@ -140,12 +170,6 @@ function transformRankingEntries(entries, server, rankType) {
   });
 }
 
-/**
- * @deprecated Utiliser transformRankingEntries. Conservé pour compat.
- */
-function transformPlayers(players, server) {
-  return transformRankingEntries(players, server, null);
-}
 
 /**
  * Importe le fichier fusion JSON de classement.
@@ -187,6 +211,13 @@ function importRankingFile(file) {
           return;
         }
         var players = json.players;
+        if (players.length > RANKING_IMPORT_MAX_PLAYERS) {
+          resolve({
+            success: false,
+            error: _rankingImportFmt('ranking_import_too_many_players', { max: RANKING_IMPORT_MAX_PLAYERS })
+          });
+          return;
+        }
         var sk = (typeof window !== 'undefined' && window.APP_KEYS && window.APP_KEYS.STORAGE_KEYS) ? window.APP_KEYS.STORAGE_KEYS : {};
         const key = sk.IMPORTED_RANKINGS || 'darkOrbitImportedRankings';
         const current = typeof UnifiedStorage !== 'undefined' ? UnifiedStorage.get(key, {}) : {};
@@ -194,6 +225,15 @@ function importRankingFile(file) {
         for (var k in current) if (Object.prototype.hasOwnProperty.call(current, k)) updated[k] = current[k];
         var serverData = updated[server];
         if (!serverData || typeof serverData !== 'object') serverData = {};
+        var hadFusion = serverData.fusion && Array.isArray(serverData.fusion.players) && serverData.fusion.players.length > 0;
+        if (hadFusion) {
+          var prevN = serverData.fusion.players.length;
+          var cmsg = _rankingImportFmt('ranking_import_replace_confirm', { server: server, count: prevN, newcount: players.length });
+          if (typeof window !== 'undefined' && window.confirm && !window.confirm(cmsg)) {
+            resolve({ success: false, error: _rankingImportFmt('ranking_import_user_cancelled') });
+            return;
+          }
+        }
         var copy = {};
         for (var skey in serverData) if (Object.prototype.hasOwnProperty.call(serverData, skey)) copy[skey] = serverData[skey];
         copy.fusion = {
@@ -338,4 +378,4 @@ window.importRankingFile = importRankingFile;
 window.getImportedRanking = getImportedRanking;
 window.getImportedServerList = getImportedServerList;
 window.getImportedRankingTimestamp = getImportedRankingTimestamp;
-console.log('📥 Module Ranking Import chargé');
+

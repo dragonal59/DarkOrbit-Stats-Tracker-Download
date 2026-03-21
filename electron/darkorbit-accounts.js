@@ -6,12 +6,25 @@ const { app, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
-/** Mapping centralisé (src/backend/server-mappings.js) */
-const SERVER_NAMES = require(path.join(__dirname, '..', 'src', 'backend', 'server-mappings.js'));
+/** Mapping centralisé (src/backend/server-mappings.js) — chargement différé (app.getSrcPath doit être défini). */
+let _serverNamesCache = null;
+function getServerNames() {
+  if (!_serverNamesCache) {
+    try {
+      _serverNamesCache = require(app.getSrcPath('backend/server-mappings.js'));
+    } catch (e) {
+      console.warn('[darkorbit-accounts] Impossible de charger server-mappings.js:', e?.message || e);
+      _serverNamesCache = {};
+    }
+  }
+  return _serverNamesCache;
+}
 
 const SERVERS = [
-  'de2', 'de4', 'es1', 'fr1', 'gbl1', 'gbl3', 'gbl4', 'gbl5', 'int1', 'int2',
-  'int5', 'int6', 'int7', 'int11', 'int14', 'mx1', 'pl3', 'ru1', 'ru5',
+  'de2', 'de4', 'es1', 'fr1',
+  'gbl1', 'gbl2', 'gbl3', 'gbl4', 'gbl5',
+  'int1', 'int2', 'int5', 'int6', 'int7', 'int11', 'int14',
+  'mx1', 'pl3', 'ru1', 'ru5',
   'tr3', 'tr4', 'tr5', 'us2'
 ];
 
@@ -190,8 +203,9 @@ module.exports = {
   },
 
   /**
-   * Liste des 23 comptes pour le scraper (server_id, server_name, username, password).
-   * Retourne uniquement les serveurs ayant un compte assigné.
+   * Liste des comptes pour le scraper (server_id, server_name, username, password).
+   * Retourne les serveurs ayant un compte assigné. Si aucun assigné mais au moins un compte actif,
+   * retourne ce compte sur un serveur par défaut (scrap événements).
    */
   getScraperAccounts() {
     const data = loadDecrypted();
@@ -205,11 +219,28 @@ module.exports = {
       const creds = this.getCredentials(accountId);
       if (!creds) continue;
       accounts.push({
+        accountId: accountId,
         server_id: serverId,
-        server_name: SERVER_NAMES[serverId] || serverId.toUpperCase(),
+        server_name: getServerNames()[serverId] || serverId.toUpperCase(),
         username: creds.email,
         password: creds.password
       });
+    }
+    if (accounts.length === 0) {
+      const first = data.accounts.find(a => a.isActive && a.passwordEncrypted);
+      if (first) {
+        const creds = this.getCredentials(first.id);
+        if (creds) {
+          const defaultServer = 'gbl5';
+          accounts.push({
+            accountId: first.id,
+            server_id: defaultServer,
+            server_name: getServerNames()[defaultServer] || defaultServer.toUpperCase(),
+            username: creds.email,
+            password: creds.password
+          });
+        }
+      }
     }
     return accounts;
   }

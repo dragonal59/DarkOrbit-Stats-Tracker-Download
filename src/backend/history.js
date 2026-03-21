@@ -17,8 +17,12 @@ function renderHistory() {
     return;
   }
   
-  // Trier par date décroissante
+  // Trier par date décroissante (plus récent en premier)
   const sortedSessions = [...sessions].sort((a, b) => b.timestamp - a.timestamp);
+  
+  // Gains par session : toujours par rapport à la session chronologiquement précédente (toutes périodes),
+  // ou par rapport à la baseline pour la plus ancienne — pas par rapport à la première de la semaine.
+  const gainsBySessionId = computeGainsBySession(sortedSessions);
   
   // Grouper les sessions par période
   const grouped = groupSessionsByPeriod(sortedSessions);
@@ -36,7 +40,6 @@ function renderHistory() {
           <div class="history-period-info">
             <span class="history-period-icon" id="period-icon-${period}">${isCurrentPeriod ? '▼' : '▶'}</span>
             <span class="history-period-label">${label}</span>
-            <span class="history-period-count">${periodSessions.length} session${periodSessions.length > 1 ? 's' : ''}</span>
           </div>
           <div class="history-period-summary">
             <span class="period-stat">🏆 +${formatNumberCompact(totalHonor)}</span>
@@ -45,7 +48,7 @@ function renderHistory() {
         </div>
         <div class="history-period-content ${isCurrentPeriod ? 'show' : ''}" id="period-content-${period}">
           <div class="history-period-inner">
-            ${renderPeriodSessions(periodSessions)}
+            ${renderPeriodSessions(periodSessions, gainsBySessionId)}
           </div>
         </div>
       </div>
@@ -111,76 +114,126 @@ function groupSessionsByPeriod(sessions) {
 }
 
 /**
- * Obtenir le début de la semaine (lundi)
- */
-function getWeekStart(date) {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  d.setDate(diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-/**
  * Obtenir la clé de la période actuelle
  */
 function getCurrentPeriodKey() {
   return 'this-week';
 }
 
-/**
- * Formater un nombre de façon compacte
- */
-function formatNumberCompact(num) {
-  if (num < 0) return '-' + formatNumberCompact(-num);
-  if (num >= 1000000000) return (num / 1000000000).toFixed(1) + 'B';
-  if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
-  if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
-  return Math.round(num).toLocaleString('en-US');
-}
-
-function formatNumberDisplay(num) {
-  const abs = Math.abs(Number(num) || 0);
-  if (abs >= 10000000) {
-    return abs.toLocaleString('en-US');
-  }
-  const padded = String(abs).padStart(8, '0');
-  return padded.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+/** Échappe un ID de session pour l'utiliser en toute sécurité dans un attribut onclick. */
+function attrSessionId(id) {
+  return "'" + String(id).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'";
 }
 
 /**
- * Rendre les sessions d'une période
+ * Calcule les gains pour chaque session par rapport à la session chronologiquement précédente
+ * (toutes périodes confondues). Pour la plus ancienne session, utilise la baseline si elle existe.
+ * @param {Array} sortedSessions - Sessions triées par date décroissante (plus récent en premier)
+ * @returns {Object} Map sessionId -> { honor, xp, rankPoints }
  */
-function renderPeriodSessions(sessions) {
-  return sessions.map((session, index) => {
-    const rankData = RANKS_DATA.find(r => r.name === session.currentRank);
-    const rankImg = rankData ? rankData.img : '';
-    const currentLevel = getCurrentLevel(session.xp);
-    const hasNote = session.note && session.note.trim() !== '';
-    
-    // Calculer les gains par rapport à la session précédente
-    let gains = {
-      honor: null,
-      xp: null,
-      rankPoints: null
-    };
-    if (index < sessions.length - 1) {
-      const prevSession = sessions[index + 1]; // sessions triées par date décroissante
-      gains = {
-        honor: session.honor - prevSession.honor,
-        xp: session.xp - prevSession.xp,
-        rankPoints: session.rankPoints - prevSession.rankPoints
+function computeGainsBySession(sortedSessions) {
+  const out = {};
+  if (!sortedSessions || sortedSessions.length === 0) return out;
+  const baseline = sortedSessions.find(s => s.is_baseline === true);
+  for (let i = 0; i < sortedSessions.length; i++) {
+    const session = sortedSessions[i];
+    const sid = session.id != null ? String(session.id) : 's-' + (session.timestamp || i);
+    const prev = sortedSessions[i + 1]; // session chronologiquement précédente (plus ancienne)
+    if (prev) {
+      out[sid] = {
+        honor: session.honor - prev.honor,
+        xp: session.xp - prev.xp,
+        rankPoints: session.rankPoints - prev.rankPoints
       };
+    } else if (baseline && baseline.id !== session.id && !session.is_baseline) {
+      out[sid] = {
+        honor: session.honor - baseline.honor,
+        xp: session.xp - baseline.xp,
+        rankPoints: session.rankPoints - baseline.rankPoints
+      };
+    } else {
+      out[sid] = { honor: null, xp: null, rankPoints: null };
     }
-    
+  }
+  return out;
+}
+
+/**
+ * Rendre les sessions d'une période.
+ * Règles :
+ * - Une seule carte par jour de calendrier (regroupement par date).
+ * - La baseline (is_baseline) n'affiche jamais de gain (0 / vide).
+ * - Les gains d'un jour = somme des gains de toutes les sessions de ce jour,
+ *   en réutilisant computeGainsBySession pour chaque session.
+ */
+function renderPeriodSessions(sessions, gainsBySessionId) {
+  if (!gainsBySessionId) gainsBySessionId = {};
+  if (!sessions || !Array.isArray(sessions) || sessions.length === 0) return '';
+
+  // Grouper les sessions de la période par jour (YYYY-MM-DD)
+  const byDay = {};
+  sessions.forEach(function (session) {
+    const d = new Date(session.timestamp);
+    if (Number.isNaN(d.getTime())) return;
+    const dayKey =
+      d.getFullYear() +
+      '-' +
+      String(d.getMonth() + 1).padStart(2, '0') +
+      '-' +
+      String(d.getDate()).padStart(2, '0');
+    if (!byDay[dayKey]) {
+      byDay[dayKey] = { sessions: [], hasBaseline: false };
+    }
+    byDay[dayKey].sessions.push(session);
+    if (session.is_baseline) byDay[dayKey].hasBaseline = true;
+  });
+
+  const dailyGroups = Object.values(byDay).map(function (g) {
+    // session la plus récente du jour pour l'affichage
+    const last = g.sessions.slice().sort((a, b) => b.timestamp - a.timestamp)[0];
+    return { last, sessions: g.sessions, hasBaseline: g.hasBaseline };
+  });
+
+  // Trier les jours par date décroissante (jour le plus récent en haut)
+  dailyGroups.sort(function (a, b) {
+    return b.last.timestamp - a.last.timestamp;
+  });
+
+  return dailyGroups.map(({ last, sessions: daySessions, hasBaseline }) => {
+    const session = last;
+    let rankKey = session.currentRank || '';
+    if (rankKey.startsWith('rank_') && typeof RANK_KEY_TO_RANK_NAME !== 'undefined') rankKey = RANK_KEY_TO_RANK_NAME[rankKey] || rankKey;
+    const rankData = typeof RANKS_DATA !== 'undefined' ? RANKS_DATA.find(r => r.rank === rankKey || r.name === rankKey) : null;
+    const rankImg = rankData ? rankData.img : '';
+    const rankDisplay = rankData ? rankData.name : rankKey || session.currentRank || '';
+    const currentLevel = getCurrentLevel(session.xp);
+
+    // Gains du jour = somme des gains de toutes les sessions de ce jour,
+    // basés sur computeGainsBySession.
+    let gains = { honor: 0, xp: 0, rankPoints: 0 };
+    daySessions.forEach(function (s) {
+      const sid = s.id != null ? String(s.id) : 's-' + (s.timestamp || 0);
+      const g = gainsBySessionId[sid];
+      if (!g) return;
+      if (typeof g.honor === 'number') gains.honor += g.honor;
+      if (typeof g.xp === 'number') gains.xp += g.xp;
+      if (typeof g.rankPoints === 'number') gains.rankPoints += g.rankPoints;
+    });
+
+    // Baseline : aucun gain affiché
+    if (hasBaseline) {
+      gains = { honor: null, xp: null, rankPoints: null };
+    }
+
+    var baselineBadge = (hasBaseline && typeof window !== 'undefined' && typeof window.i18nT === 'function')
+      ? window.i18nT('baseline_label')
+      : (hasBaseline ? 'Seuil de départ' : '');
     return `
     <div class="session-card">
       <div class="session-header">
-        <div class="session-date">📅 ${session.date}</div>
+        <div class="session-date">📅 ${session.date}${baselineBadge ? ' • <span class="session-baseline-badge">' + baselineBadge + '</span>' : ''}</div>
         <div class="session-actions">
-          <button class="session-btn" onclick="loadSession(${session.id})" title="Charger cette session">📂</button>
-          <button class="session-btn error" onclick="deleteSession(${session.id})" title="Supprimer">🗑️</button>
+          <button class="session-btn error" onclick="deleteSession(${attrSessionId(session.id)})" title="Supprimer">🗑️</button>
         </div>
       </div>
       <div class="session-stats">
@@ -188,9 +241,9 @@ function renderPeriodSessions(sessions) {
           <div class="session-stat-label">Grade</div>
           <div class="session-stat-main">
             <div class="grade-block grade-block--compact">
-              <div class="grade-block-name">${session.currentRank}</div>
+              <div class="grade-block-name">${rankDisplay}</div>
               <div class="grade-block-icon">
-                ${rankImg ? `<img src="${rankImg}" alt="${session.currentRank}" class="grade-block-img">` : ''}
+                ${rankImg ? `<img src="${rankImg}" alt="${rankDisplay}" class="grade-block-img">` : ''}
               </div>
             </div>
           </div>
@@ -200,38 +253,27 @@ function renderPeriodSessions(sessions) {
           <div class="session-stat-main">Niveau ${currentLevel}</div>
         </div>
         <div class="session-stat">
-          <div class="session-stat-label">Honneur</div>
+          <div class="session-stat-label"><img src="img/icon_btn/honor_icon.png" alt="" class="session-stat-icon"> Honneur</div>
           <div class="session-stat-values">
             <div class="session-stat-main">${formatNumberDisplay(session.honor)}</div>
-            <div class="session-stat-gain session-gain ${getGainClass(gains.honor)}">${formatSignedGain(gains.honor)}</div>
+            <div class="session-stat-gain session-gain ${getGainClass(gains.honor, 'pn')}">${formatSignedGain(gains.honor, true)}</div>
           </div>
         </div>
         <div class="session-stat">
-          <div class="session-stat-label">XP</div>
+          <div class="session-stat-label"><img src="img/icon_btn/xp_icon.png" alt="" class="session-stat-icon"> XP</div>
           <div class="session-stat-values">
             <div class="session-stat-main">${formatNumberDisplay(session.xp)}</div>
-            <div class="session-stat-gain session-gain ${getGainClass(gains.xp)}">${formatSignedGain(gains.xp)}</div>
+            <div class="session-stat-gain session-gain ${getGainClass(gains.xp, 'pn')}">${formatSignedGain(gains.xp, true)}</div>
           </div>
         </div>
         <div class="session-stat">
-          <div class="session-stat-label">Points de grade</div>
+          <div class="session-stat-label"><img src="img/icon_btn/rp_icon.png" alt="" class="session-stat-icon"> Points de grade</div>
           <div class="session-stat-values">
             <div class="session-stat-main">${formatNumberDisplay(session.rankPoints)}</div>
-            <div class="session-stat-gain session-gain ${getGainClass(gains.rankPoints)}">${formatSignedGain(gains.rankPoints)}</div>
+            <div class="session-stat-gain session-gain ${getGainClass(gains.rankPoints, 'pn')}">${formatSignedGain(gains.rankPoints, true)}</div>
           </div>
         </div>
       </div>
-      ${hasNote ? `
-      <div class="session-note-container">
-        <div class="session-note-toggle" onclick="toggleNote(${session.id})">
-          <span class="session-note-icon" id="note-icon-${session.id}">▶</span>
-          <span class="session-note-label">📝 Note</span>
-        </div>
-        <div class="session-note-content" id="note-content-${session.id}">
-          <div class="session-note-text">${session.note}</div>
-        </div>
-      </div>
-      ` : ''}
     </div>
   `;
   }).join('');
@@ -253,57 +295,9 @@ function toggleHistoryPeriod(periodId) {
   }
 }
 
-function toggleNote(sessionId) {
-  const icon = document.getElementById(`note-icon-${sessionId}`);
-  const content = document.getElementById(`note-content-${sessionId}`);
-  
-  if (content.classList.contains('show')) {
-    content.classList.remove('show');
-    icon.textContent = '▶';
-    icon.classList.remove('open');
-  } else {
-    content.classList.add('show');
-    icon.textContent = '▼';
-    icon.classList.add('open');
-  }
-}
-
-function addNoteTemplate(template) {
-  const noteField = document.getElementById('sessionNote');
-  const currentNote = noteField.value.trim();
-  
-  if (currentNote === '') {
-    noteField.value = template;
-  } else {
-    noteField.value = currentNote + '\n' + template;
-  }
-  
-  // Auto-save
-  saveCurrentStats();
-}
-
-function clearNote() {
-  document.getElementById('sessionNote').value = '';
-  saveCurrentStats();
-}
-
-function formatSignedGain(num) {
-  if (num === null || typeof num === 'undefined') return '-';
-  if (num < 0) return `-${formatNumberCompact(Math.abs(num))}`;
-  return `+${formatNumberCompact(num)}`;
-}
-
-function getGainClass(num) {
-  if (num === null || typeof num === 'undefined') return 'neutral';
-  if (num > 0) return 'positive';
-  if (num < 0) return 'negative';
-  return 'neutral';
-}
+// formatSignedGain et getGainClass sont centralisés dans utils.js
 
 // Make functions globally available
-window.toggleNote = toggleNote;
 window.toggleHistoryPeriod = toggleHistoryPeriod;
-window.addNoteTemplate = addNoteTemplate;
-window.clearNote = clearNote;
+window.attrSessionId = attrSessionId;
 
-console.log('📚 Module History chargé');

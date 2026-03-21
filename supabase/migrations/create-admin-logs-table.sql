@@ -26,6 +26,7 @@ ALTER TABLE admin_logs ENABLE ROW LEVEL SECURITY;
 
 -- SELECT : uniquement les utilisateurs dont le rôle ou le badge est ADMIN ou SUPERADMIN
 -- (utilise les fonctions SECURITY DEFINER existantes pour éviter récursion RLS sur profiles)
+DROP POLICY IF EXISTS "admin_logs_select_admin_superadmin" ON admin_logs;
 CREATE POLICY "admin_logs_select_admin_superadmin"
   ON admin_logs FOR SELECT
   USING (

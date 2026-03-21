@@ -114,6 +114,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
+-- [UTILITY] Export manuel admin_logs pour SUPERADMIN. Non appelé par l'application.
 -- RPC : export admin_logs (SUPERADMIN, pour monitoring externe)
 CREATE OR REPLACE FUNCTION get_admin_logs_export(
   p_limit INT DEFAULT 500,

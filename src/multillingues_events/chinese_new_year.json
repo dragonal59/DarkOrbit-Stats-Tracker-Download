@@ -1,0 +1,35 @@
+{
+  "id": "chinese_new_year",
+  "visible": true,
+  "image": "img/events/chinese_new_year.jpg",
+  "names": {
+    "fr": "Joyeux Nouvel An Chinois !",
+    "en": "Happy Chinese New Year!",
+    "de": "Frohes Chinesisches Neujahr!",
+    "es": "¡Feliz Año Nuevo Chino!",
+    "ru": "С Китайским Новым Годом!",
+    "tr": "Mutlu Çin Yeni Yılı!"
+  },
+  "descriptions": {
+    "fr": "Plongez dans les festivités de l'événement Prosperous ! La toute dernière série de designs Prosperous est arrivée : design de vaisseau Prosperous Paladin et design de vaisseau Prosperous Diminisher !",
+    "en": "Indulge in festivities this Prosperous Event! The latest line of Prosperous Designs has arrived; Prosperous Paladin Ship Design and Prosperous Diminisher Ship Design!",
+    "de": "Tauche ein in die Festlichkeiten des Prosperous-Events! Die neueste Linie der Prosperous-Designs ist eingetroffen: Prosperous Paladin Schiffsdesign und Prosperous Diminisher Schiffsdesign!",
+    "es": "¡Sumérgete en las festividades del evento Prosperous! La última línea de diseños Prosperous ha llegado: ¡diseño de nave Prosperous Paladin y diseño de nave Prosperous Diminisher!",
+    "ru": "Погрузитесь в праздничную атмосферу события Prosperous! Новейшая линейка дизайнов Prosperous прибыла: дизайн корабля Prosperous Paladin и дизайн корабля Prosperous Diminisher!",
+    "tr": "Prosperous Etkinliğinin şenliklerine katıl! En yeni Prosperous Tasarım serisi geldi: Prosperous Paladin Gemi Tasarımı ve Prosperous Diminisher Gemi Tasarımı!"
+  },
+  "keywords": [
+    "happy chinese new year",
+    "joyeux nouvel an chinois",
+    "¡feliz año nuevo chino!",
+    "frohes chinesisches neujahr",
+    "с китайским новым годом",
+    "mutlu çin yeni yılı"
+  ],
+  "exclude_keywords": [
+    "immortal union",
+    "union immortelle",
+    "agatus breach",
+    "trinity trials"
+  ]
+}

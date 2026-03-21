@@ -1,0 +1,42 @@
+{
+  "id": "enhanced_lf4_day",
+  "visible": true,
+  "image": "img/events/enhanced_lf4_day.jpg",
+  "names": {
+    "fr": "Journée spéciale LF-4 amélioré",
+    "en": "Enhanced LF-4 Day",
+    "de": "Verbesserter LF-4 Tag",
+    "es": "Día del LF-4 Mejorado",
+    "ru": "День улучшенного LF-4",
+    "tr": "Gelişmiş LF-4 Günü"
+  },
+  "descriptions": {
+    "fr": "Une énorme cargaison de lasers LF-4 a été repérée dans certains portails intergalactiques aujourd'hui ! Ne manquez pas cette occasion cosmique qui vous permettra d'augmenter votre puissance de feu grâce aux LF-4-Hyperplasmoid, LF-4 Paritydrill et LF-4 Magmadrill !",
+    "en": "Large stockpile of enhanced LF4 lasers have been detected in certain Galaxy Gates today! Now's your chance to take advantage of this cosmic opportunity to strengthen your firepower with HP-LF4s, PD-LF4s and MD-LF4s!",
+    "de": "Heute wurden große Vorräte an verbesserten LF-4-Lasern in bestimmten Galaxy Gates entdeckt! Nutze jetzt diese kosmische Gelegenheit, um deine Feuerkraft mit HP-LF4s, PD-LF4s und MD-LF4s zu stärken!",
+    "es": "¡Hoy se han detectado grandes reservas de láseres LF-4 mejorados en ciertos Portales Galácticos! ¡Aprovecha esta oportunidad cósmica para fortalecer tu potencia de fuego con HP-LF4s, PD-LF4s y MD-LF4s!",
+    "ru": "Сегодня в определённых Галактических Вратах обнаружены большие запасы улучшенных лазеров LF-4! Воспользуйтесь этой космической возможностью, чтобы усилить огневую мощь с помощью HP-LF4, PD-LF4 и MD-LF4!",
+    "tr": "Bugün belirli Galaksi Kapılarında büyük miktarda gelişmiş LF-4 lazeri tespit edildi! HP-LF4, PD-LF4 ve MD-LF4 ile ateş gücünüzü artırmak için bu kozmik fırsatı değerlendirin!"
+  },
+  "keywords": [
+    "enhanced lf4 day",
+    "journée spéciale lf-4",
+    "verbesserter lf-4 tag",
+    "día lf-4 mejorado",
+    "день улучшенного lf-4",
+    "gelişmiş lf-4 günü",
+    "lf4",
+    "lf-4",
+    "hyperplasmoid",
+    "paritydrill",
+    "magmadrill"
+  ],
+  "exclude_keywords": [
+    "galaxy gate weekend",
+    "galaxy gate doubler",
+    "double gain",
+    "week-end portails",
+    "dispatch day",
+    "jour de l'expédition"
+  ]
+}

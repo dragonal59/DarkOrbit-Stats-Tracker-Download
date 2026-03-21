@@ -39,7 +39,7 @@
       servers = await API.getServers() || [];
       assignments = await API.getAssignments() || {};
     } catch (e) {
-      console.error('[DarkOrbitAccounts] load', e);
+      Logger.error('[DarkOrbitAccounts] load', e);
       if (typeof showToast === 'function') showToast('Erreur lors du chargement des comptes : ' + (e?.message || e), 'error');
     }
   }
@@ -90,7 +90,7 @@
       if (typeof showToast === 'function') showToast(isActive ? 'Compte activé' : 'Compte désactivé', 'success');
       renderTable();
     } catch (e) {
-      console.error('[DarkOrbitAccounts] setAccountActive', e);
+      Logger.error('[DarkOrbitAccounts] setAccountActive', e);
       if (typeof showToast === 'function') showToast('Erreur : ' + (e?.message || e), 'error');
     }
   }
@@ -170,7 +170,7 @@
       closeForm();
       await refresh();
     } catch (e) {
-      console.error('[DarkOrbitAccounts] save', e);
+      Logger.error('[DarkOrbitAccounts] save', e);
       if (typeof showToast === 'function') showToast('Erreur : ' + (e?.message || e), 'error');
     }
   }
@@ -182,7 +182,7 @@
       if (typeof showToast === 'function') showToast('Compte supprimé', 'success');
       await refresh();
     } catch (e) {
-      console.error('[DarkOrbitAccounts] delete', e);
+      Logger.error('[DarkOrbitAccounts] delete', e);
       if (typeof showToast === 'function') showToast('Erreur : ' + (e?.message || e), 'error');
     }
   }
@@ -293,7 +293,7 @@
       closeAssignments();
       await refresh();
     } catch (e) {
-      console.error('[DarkOrbitAccounts] saveAssignments', e);
+      Logger.error('[DarkOrbitAccounts] saveAssignments', e);
       if (typeof showToast === 'function') showToast('Erreur : ' + (e?.message || e), 'error');
     }
   }
@@ -331,9 +331,51 @@
       if (typeof showToast === 'function') showToast(active ? 'Tous les comptes activés' : 'Tous les comptes désactivés', 'success');
       await refresh();
     } catch (e) {
-      console.error('[DarkOrbitAccounts] selectAll', e);
+      Logger.error('[DarkOrbitAccounts] selectAll', e);
       if (typeof showToast === 'function') showToast('Erreur : ' + (e?.message || e), 'error');
     }
+  }
+
+  async function importFromJsonFile(file) {
+    if (!file) return;
+    const text = await new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = () => reject(new Error('Lecture du fichier impossible'));
+      r.readAsText(file, 'UTF-8');
+    });
+    let list;
+    try {
+      list = JSON.parse(text);
+    } catch (e) {
+      if (typeof showToast === 'function') showToast('Fichier JSON invalide.', 'error');
+      return;
+    }
+    if (!Array.isArray(list) || list.length === 0) {
+      if (typeof showToast === 'function') showToast('Le JSON doit être un tableau non vide.', 'error');
+      return;
+    }
+    let ok = 0;
+    let err = 0;
+    for (const item of list) {
+      const label = (item.label != null ? String(item.label) : '').trim();
+      const email = (item.username != null ? String(item.username) : item.email != null ? String(item.email) : '').trim();
+      const password = item.password != null ? String(item.password) : '';
+      if (!email || !password) {
+        err++;
+        continue;
+      }
+      try {
+        await API.save({ label: label || email, email: email, password: password });
+        ok++;
+      } catch (e) {
+        err++;
+      }
+    }
+    document.getElementById('darkorbitAccountsImportJsonInput').value = '';
+    await load();
+    renderTable();
+    if (typeof showToast === 'function') showToast(ok + ' compte(s) importé(s)' + (err ? ', ' + err + ' ignoré(s) ou en erreur' : '') + '.', err ? 'warning' : 'success');
   }
 
   function init() {
@@ -344,6 +386,15 @@
     document.getElementById('darkorbitAccountsAssignmentsBtn')?.addEventListener('click', openAssignments);
     document.getElementById('darkorbitAccountsSelectAllBtn')?.addEventListener('click', () => selectAllAccounts(true));
     document.getElementById('darkorbitAccountsDeselectAllBtn')?.addEventListener('click', () => selectAllAccounts(false));
+    const importBtn = document.getElementById('darkorbitAccountsImportJsonBtn');
+    const importInput = document.getElementById('darkorbitAccountsImportJsonInput');
+    if (importBtn && importInput) {
+      importBtn.addEventListener('click', () => importInput.click());
+      importInput.addEventListener('change', function () {
+        const f = importInput.files && importInput.files[0];
+        if (f) importFromJsonFile(f);
+      });
+    }
     document.getElementById('darkorbitAccountModalClose')?.addEventListener('click', closeForm);
     document.querySelector('#darkorbitAccountModal .sa-modal-overlay')?.addEventListener('click', closeForm);
     document.getElementById('darkorbitAccountSaveBtn')?.addEventListener('click', saveAccount);
@@ -353,5 +404,4 @@
   }
 
   init();
-  console.log('🎮 Module DarkOrbit Accounts UI chargé');
 })();

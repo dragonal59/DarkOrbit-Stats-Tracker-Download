@@ -22,11 +22,15 @@
 
   function setStoredLang(lang) {
     try {
-      if (LANGS.indexOf(lang) !== -1) localStorage.setItem(langKey, lang);
+      if (LANGS.indexOf(lang) !== -1) {
+        localStorage.setItem(langKey, lang);
+        if (typeof DataSync !== 'undefined' && DataSync.syncSettingsOnly) DataSync.syncSettingsOnly().catch(function () {});
+      }
     } catch (e) {}
   }
 
   function t(key, lang) {
+    if (lang === undefined || lang === null) lang = getStoredLang();
     return (typeof window !== 'undefined' && window.TRANSLATIONS && window.TRANSLATIONS.t) ? window.TRANSLATIONS.t(key, lang) : key;
   }
 
@@ -44,6 +48,10 @@
     root.querySelectorAll('[data-i18n-title]').forEach(function (el) {
       var key = el.getAttribute('data-i18n-title');
       if (key) el.title = t(key, lang);
+    });
+    root.querySelectorAll('[data-i18n-aria-label]').forEach(function (el) {
+      var key = el.getAttribute('data-i18n-aria-label');
+      if (key) el.setAttribute('aria-label', t(key, lang));
     });
     root.setAttribute('lang', lang === 'en' ? 'en' : lang === 'de' ? 'de' : lang === 'ru' ? 'ru' : lang === 'es' ? 'es' : lang === 'tr' ? 'tr' : 'fr');
   }

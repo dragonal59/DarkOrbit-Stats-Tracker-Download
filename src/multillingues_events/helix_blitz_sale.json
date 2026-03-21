@@ -1,0 +1,47 @@
+{
+  "id": "helix_blitz_sale",
+  "visible": true,
+  "image": "img/events/helix_blitz_sale.jpg",
+  "image_urls": ["ghh_400"],
+  "names": {
+    "fr": "400% Helix Blitz Sale",
+    "en": "400% Helix Blitz Sale",
+    "de": "400% Helix Blitz Sale",
+    "es": "400% Helix Blitz Sale",
+    "ru": "400% Helix Blitz Sale",
+    "tr": "400% Helix Blitz Sale"
+  },
+  "descriptions": {
+    "fr": "Obtenez un bonus de 400 % sur ces packs d'Uridium et d'huile-Indoctrine bonus. Sautez vite sur l'occasion !",
+    "en": "Get a 400% Bonus on these Uridium packages and Indoctrine Oil bonus — act while you can!",
+    "de": "Erhalte 400 % Bonus auf diese Uridium-Pakete und Indoctrine-Öl-Bonus. Greif schnell zu!",
+    "es": "¡Obtén un 400% de bonificación en estos packs de Uridium y aceite Indoctrine. ¡Actúa rápido!",
+    "ru": "Получите бонус 400% на эти пакеты Уридиума и масло Индоктрин. Действуйте пока можете!",
+    "tr": "Bu Uridyum paketlerinde ve Indoctrine Yağı bonusunda 400% bonus kazanın. Fırsatı kaçırmayın!"
+  },
+  "keywords": [
+    "400% helix blitz sale",
+    "helix blitz sale",
+    "helix blitz",
+    "400 % helix blitz sale",
+    "helix blitz sale 400",
+    "helix blitz solde",
+    "solde helix blitz",
+    "helix blitz vente",
+    "vente helix blitz",
+    "giga happy hour",
+    "giga happy hour event",
+    "happy hour giga",
+    "400% bonus uridium",
+    "mindfire cerebrum",
+    "rsb-75",
+    "Obtenez un bonus de 400%"
+  ],
+  "exclude_keywords": [
+    "honor day",
+    "xp day",
+    "bk + ld sale",
+    "uridium bank",
+    "super subscription"
+  ]
+}

@@ -2,11 +2,16 @@
 // AMÉLIORATIONS UI - PHASE 3
 // ==========================================
 
-console.log('🎨 Chargement de ui-improvements.js...');
-
 // ==========================================
 // 1. INDICATEURS DE CHARGEMENT (Bug #10)
 // ==========================================
+
+const UI_Z_INDEX = {
+  fab: 1000,
+  overlay: 10000,
+  modal: 10001,
+  tooltip: 10002
+};
 
 const LoadingIndicator = {
   // Créer un spinner
@@ -61,15 +66,18 @@ const LoadingIndicator = {
 };
 
 // Ajouter les styles CSS pour le loading
-const loadingStyles = document.createElement('style');
-loadingStyles.textContent = `
+const STYLE_ID_LOADING = 'ui-improvements-styles-1';
+if (!document.getElementById(STYLE_ID_LOADING)) {
+  const loadingStyles = document.createElement('style');
+  loadingStyles.id = STYLE_ID_LOADING;
+  loadingStyles.textContent = `
   #globalLoadingIndicator {
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    z-index: 10000;
+    z-index: ${UI_Z_INDEX.overlay};
   }
   
   .loading-overlay {
@@ -111,12 +119,9 @@ loadingStyles.textContent = `
     to { transform: rotate(360deg); }
   }
   
-  @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
 `;
-document.head.appendChild(loadingStyles);
+  document.head.appendChild(loadingStyles);
+}
 
 // ==========================================
 // 2. MODAL DE CONFIRMATION MODERNE (Bug #13)
@@ -218,15 +223,18 @@ const ModernConfirm = {
 };
 
 // Ajouter les styles pour la modal
-const confirmStyles = document.createElement('style');
-confirmStyles.textContent = `
+const STYLE_ID_CONFIRM = 'ui-improvements-styles-2';
+if (!document.getElementById(STYLE_ID_CONFIRM)) {
+  const confirmStyles = document.createElement('style');
+  confirmStyles.id = STYLE_ID_CONFIRM;
+  confirmStyles.textContent = `
   #modernConfirmModal {
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    z-index: 10001;
+    z-index: ${UI_Z_INDEX.modal};
   }
   
   .modern-confirm-overlay {
@@ -324,7 +332,8 @@ confirmStyles.textContent = `
     transform: translateY(-1px);
   }
 `;
-document.head.appendChild(confirmStyles);
+  document.head.appendChild(confirmStyles);
+}
 
 // ==========================================
 // 3. BOUTON AIDE RACCOURCIS (Bug #12)
@@ -333,7 +342,6 @@ document.head.appendChild(confirmStyles);
 function createShortcutsHelpButton() {
   // Vérifier si le bouton existe déjà
   if (document.getElementById('shortcutsHelpBtn')) {
-    console.log('⌨️ Bouton raccourcis déjà présent');
     return;
   }
   
@@ -353,12 +361,14 @@ function createShortcutsHelpButton() {
   });
   
   document.body.appendChild(button);
-  console.log('✅ Bouton raccourcis créé');
 }
 
 // Styles pour le bouton
-const shortcutsButtonStyles = document.createElement('style');
-shortcutsButtonStyles.textContent = `
+const STYLE_ID_SHORTCUTS = 'ui-improvements-styles-3';
+if (!document.getElementById(STYLE_ID_SHORTCUTS)) {
+  const shortcutsButtonStyles = document.createElement('style');
+  shortcutsButtonStyles.id = STYLE_ID_SHORTCUTS;
+  shortcutsButtonStyles.textContent = `
   .shortcuts-help-btn {
     position: fixed;
     bottom: 20px;
@@ -373,7 +383,7 @@ shortcutsButtonStyles.textContent = `
     cursor: pointer;
     box-shadow: 0 4px 12px rgba(56, 189, 248, 0.3);
     transition: all 0.3s ease;
-    z-index: 1000;
+    z-index: ${UI_Z_INDEX.fab};
     display: flex;
     align-items: center;
     justify-content: center;
@@ -388,7 +398,8 @@ shortcutsButtonStyles.textContent = `
     transform: translateY(0) scale(0.98);
   }
 `;
-document.head.appendChild(shortcutsButtonStyles);
+  document.head.appendChild(shortcutsButtonStyles);
+}
 
 // ==========================================
 // INITIALISATION
@@ -398,12 +409,9 @@ document.head.appendChild(shortcutsButtonStyles);
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
     createShortcutsHelpButton();
-    console.log('🎨 Améliorations UI chargées : Loading, Modal moderne, Bouton raccourcis');
   });
 } else {
-  // DOM déjà prêt
   createShortcutsHelpButton();
-  console.log('🎨 Améliorations UI chargées : Loading, Modal moderne, Bouton raccourcis');
 }
 
 // Export pour utilisation externe

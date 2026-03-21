@@ -4,6 +4,8 @@
 // ==========================================
 
 const AutoTheme = {
+   _mediaCallback: null,
+   _watchingSystemChanges: false,
 
    /**
     * Initialiser la détection auto du thème
@@ -32,42 +34,48 @@ const AutoTheme = {
       // Appliquer le thème
       document.documentElement.setAttribute('data-theme', theme);
 
-      console.log(`🎨 Thème auto détecté : ${theme}`);
    },
 
    /**
-    * Écouter les changements de préférence système
+    * Écouter les changements de préférence système (un seul listener actif).
     */
    watchSystemChanges() {
+      if (this._watchingSystemChanges) return;
+
       const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-
-      // Utiliser addEventListener si disponible
       var autoKey = (typeof CONFIG !== 'undefined' && CONFIG.STORAGE_KEYS && CONFIG.STORAGE_KEYS.THEME_AUTO) ? CONFIG.STORAGE_KEYS.THEME_AUTO : 'darkOrbitThemeAuto';
-      if (mediaQuery.addEventListener) {
-         mediaQuery.addEventListener('change', (e) => {
-            const userPreference = localStorage.getItem(autoKey);
 
-            // Appliquer seulement si le mode auto est activé
-            if (userPreference === 'true' || !userPreference) {
-               const newTheme = e.matches ? 'dark' : 'light';
-               document.documentElement.setAttribute('data-theme', newTheme);
-
-               // Utiliser showToast seulement si disponible
-               if (typeof window.showToast === 'function') {
-                  window.showToast(`🎨 Thème changé : ${newTheme === 'dark' ? 'Sombre' : 'Clair'}`, 'info');
-               }
-               console.log(`🎨 Thème système changé : ${newTheme}`);
-            }
-         });
-      } else if (mediaQuery.addListener) {
-         mediaQuery.addListener((e) => {
-            const userPreference = localStorage.getItem(autoKey);
-            if (userPreference === 'true' || !userPreference) {
-               const newTheme = e.matches ? 'dark' : 'light';
-               document.documentElement.setAttribute('data-theme', newTheme);
-            }
-         });
+      if (this._mediaCallback) {
+         if (mediaQuery.removeEventListener) mediaQuery.removeEventListener('change', this._mediaCallback);
+         if (mediaQuery.removeListener) mediaQuery.removeListener(this._mediaCallback);
       }
+
+      this._mediaCallback = (e) => {
+         const userPreference = localStorage.getItem(autoKey);
+         if (userPreference === 'true' || !userPreference) {
+            const newTheme = e.matches ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', newTheme);
+            if (typeof window.showToast === 'function') {
+               window.showToast('🎨 Thème changé : ' + (newTheme === 'dark' ? 'Sombre' : 'Clair'), 'info');
+            }
+         }
+      };
+
+      if (mediaQuery.addEventListener) {
+         mediaQuery.addEventListener('change', this._mediaCallback);
+      } else if (mediaQuery.addListener) {
+         mediaQuery.addListener(this._mediaCallback);
+      }
+      this._watchingSystemChanges = true;
+   },
+
+   _stopWatchingSystemChanges() {
+      if (!this._mediaCallback) return;
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      if (mediaQuery.removeEventListener) mediaQuery.removeEventListener('change', this._mediaCallback);
+      if (mediaQuery.removeListener) mediaQuery.removeListener(this._mediaCallback);
+      this._mediaCallback = null;
+      this._watchingSystemChanges = false;
    },
 
    /**
@@ -75,14 +83,12 @@ const AutoTheme = {
     */
    enableAuto() {
       var k = (typeof CONFIG !== 'undefined' && CONFIG.STORAGE_KEYS && CONFIG.STORAGE_KEYS.THEME_AUTO) ? CONFIG.STORAGE_KEYS.THEME_AUTO : 'darkOrbitThemeAuto';
-      localStorage.setItem(k, 'true');
+      try { localStorage.setItem(k, 'true'); if (typeof DataSync !== 'undefined' && DataSync.syncSettingsOnly) DataSync.syncSettingsOnly().catch(() => {}); } catch (_e) { /* quota ou mode privé */ }
       this.applySystemTheme();
       this.watchSystemChanges();
 
       if (typeof window.showToast === 'function') {
          window.showToast('✅ Mode automatique activé', 'success');
-      } else {
-         console.log('✅ Mode automatique activé');
       }
    },
 
@@ -92,12 +98,12 @@ const AutoTheme = {
    disableAuto() {
       if (typeof localStorage !== 'undefined' && localStorage.getItem('pendingReloadToast')) return;
       var k = (typeof CONFIG !== 'undefined' && CONFIG.STORAGE_KEYS && CONFIG.STORAGE_KEYS.THEME_AUTO) ? CONFIG.STORAGE_KEYS.THEME_AUTO : 'darkOrbitThemeAuto';
-      localStorage.setItem(k, 'false');
+      try { localStorage.setItem(k, 'false'); if (typeof DataSync !== 'undefined' && DataSync.syncSettingsOnly) DataSync.syncSettingsOnly().catch(() => {}); } catch (_e) { /* quota ou mode privé */ }
+
+      this._stopWatchingSystemChanges();
 
       if (typeof window.showToast === 'function') {
          window.showToast('✅ Mode manuel activé', 'success');
-      } else {
-         console.log('✅ Mode manuel activé');
       }
    },
 
@@ -139,13 +145,13 @@ window.setTheme = function (theme) {
       return;
    }
 
-   // Désactiver le mode auto si on change manuellement
+   // Désactiver le mode auto (retire le listener système dans disableAuto)
    AutoTheme.disableAuto();
 
    // Appliquer le thème
    document.documentElement.setAttribute('data-theme', theme);
    var themeKey = (typeof CONFIG !== 'undefined' && CONFIG.STORAGE_KEYS && CONFIG.STORAGE_KEYS.THEME) ? CONFIG.STORAGE_KEYS.THEME : 'darkOrbitTheme';
-   localStorage.setItem(themeKey, theme);
+   try { localStorage.setItem(themeKey, theme); } catch (_e) { /* quota ou mode privé */ }
 
    // Appeler la fonction originale si elle existe
    if (typeof window._originalSetTheme === 'function') {
@@ -161,8 +167,6 @@ window.setTheme = function (theme) {
 AutoTheme.init();
 
 document.addEventListener('DOMContentLoaded', () => {
-   console.log('🌓 Système de thème automatique chargé');
-
    // Ajouter un bouton "Auto" dans les paramètres si possible
    const themeButtons = document.querySelector('.settings-control');
    if (themeButtons && !document.querySelector('[data-theme="auto"]')) {

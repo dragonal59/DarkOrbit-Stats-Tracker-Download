@@ -1,0 +1,22 @@
+{
+  "id": "battle_pass",
+  "visible": true,
+  "image": "img/events/battle_pass.jpg",
+  "names": {
+    "fr": "Pass Bataille",
+    "en": "Battle Pass",
+    "de": "Battle Pass",
+    "es": "Pase de Batalla",
+    "ru": "Боевой Пропуск",
+    "tr": "Savaş Paketi"
+  },
+  "descriptions": {
+    "fr": "Obtenez des récompenses supplémentaires en atteignant des objectifs ! Achetez le Pass bataille pour récupérer des clés de Pass bataille, puis échangez-les contre les récompenses de votre choix, comme des munitions, des matériaux d'amélioration, des modules instables, et bien plus encore !",
+    "en": "Get additional rewards from completing objectives! Purchase the battle pass to get additional Battle Pass Keys and use them to exchange for rewards of your choice, such as ammunition, upgrade materials, unstable modules and more!",
+    "de": "Erhalte zusätzliche Belohnungen durch das Erfüllen von Zielen! Kaufe den Battle Pass, um zusätzliche Battle-Pass-Schlüssel zu erhalten, und tausche sie gegen Belohnungen deiner Wahl ein, wie Munition, Upgrade-Materialien, instabile Module und mehr!",
+    "es": "¡Obtén recompensas adicionales completando objetivos! Compra el Pase de Batalla para obtener Llaves de Pase de Batalla adicionales y úsalas para canjear recompensas de tu elección, como munición, materiales de mejora, módulos inestables y más.",
+    "ru": "Получайте дополнительные награды, выполняя задания! Купите Боевой пропуск, чтобы получить дополнительные ключи и обменять их на награды по вашему выбору: боеприпасы, материалы для улучшений, нестабильные модули и многое другое!",
+    "tr": "Görevleri tamamlayarak ek ödüller kazan! Savaş Paketini satın alarak ek Savaş Paketi Anahtarları edin ve bunları cephane, yükseltme malzemeleri, kararsız modüller ve daha fazlası gibi seçtiğin ödüllerle değiştir!"
+  },
+  "keywords": ["battle pass", "pass bataille", "pase de batalla", "боевой пропуск", "savaş paketi"],"exclude_keywords":["season pass","pass de saison","pase de temporada"]
+}

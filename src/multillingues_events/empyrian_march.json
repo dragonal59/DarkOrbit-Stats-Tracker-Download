@@ -1,0 +1,40 @@
+{
+  "id": "empyrian_march",
+  "visible": true,
+  "image": "img/events/empyrian_march.jpg",
+  "image_urls": ["empyrian_202603", "breaking_news_empyrian"],
+  "names": {
+    "fr": "Marche de l'Empyrian",
+    "en": "Empyrian March",
+    "de": "",
+    "es": "",
+    "ru": "",
+    "tr": ""
+  },
+  "descriptions": {
+    "fr": "Rejoignez la marche pour vaincre les extraterrestres et récupérer le précieux Luminium ! Utilisez le Luminium pour créer une grande variété de ressources utiles et découvrir le design de vaisseau Empyrian Goliath Plus, ainsi que le design de drone Cerberus dans la boîte de butin d'Empyrian !",
+    "en": "Join the march in defeating aliens and retrieve the precious Luminium! Use Luminium to craft a variety of useful resources, and uncover the Empyrian Goliath Plus Ship Design and Cerberus Drone Design in the Empyrian Booty Box!",
+    "de": "",
+    "es": "",
+    "ru": "",
+    "tr": ""
+  },
+  "keywords": [
+    "empyrian march",
+    "marche de l'empyrian",
+    "empyrian marsch",
+    "marcha empyrian",
+    "поход эмпириан",
+    "empyrian yürüyüşü",
+    "luminium",
+    "empyrian goliath plus",
+    "cerberus",
+    "booty box",
+    "boîte de butin"
+  ],
+  "exclude_keywords": [
+    "galaxy gate weekend",
+    "double gain",
+    "enhanced lf4"
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "id": "monthly_deluxe_calendar",
+  "visible": true,
+  "image": "img/events/monthly_deluxe_calendar.jpg",
+  "names": {
+    "fr": "Calendrier Deluxe mensuel",
+    "en": "Monthly Deluxe Calendar",
+    "de": "Monatlicher Deluxe-Kalender",
+    "es": "Calendario Deluxe Mensual",
+    "ru": "Ежемесячный Делюкс Календарь",
+    "tr": "Aylık Deluxe Takvim"
+  },
+  "descriptions": {
+    "fr": "Boostez votre progression avec le calendrier Deluxe mensuel ! Recevez de l'Uridium, des boosters, des munitions et des technologies grâce à ce sensationnel calendrier Deluxe de 28 jours de connexion !",
+    "en": "Supercharge your progress with the Monthly Deluxe Calendar! Get everything from Uridium and Boosters to Ammo and Tech in this awesome valued 28 day deluxe log-in calendar!",
+    "de": "Beschleunige deinen Fortschritt mit dem monatlichen Deluxe-Kalender! Erhalte alles von Uridium und Boostern bis hin zu Munition und Technologie in diesem großartigen 28-tägigen Deluxe-Einlogkalender!",
+    "es": "¡Potencia tu progreso con el Calendario Deluxe Mensual! ¡Obtén desde Uridium y Potenciadores hasta Munición y Tecnología en este increíble calendario de inicio de sesión Deluxe de 28 días!",
+    "ru": "Ускорьте свой прогресс с Ежемесячным Делюкс Календарём! Получайте всё — от Уридиума и бустеров до боеприпасов и технологий — в этом потрясающем 28-дневном делюкс календаре входа!",
+    "tr": "Aylık Deluxe Takvim ile ilerlemenizi hızlandırın! Bu harika 28 günlük deluxe giriş takviminde Uridium ve Güçlendiricilerden Mühimmata ve Teknolojiye kadar her şeyi kazanın!"
+  },
+  "keywords": [
+    "monthly deluxe calendar",
+    "calendrier deluxe mensuel",
+    "monatlicher deluxe-kalender",
+    "calendario deluxe mensual",
+    "calendario mensual deluxe",
+    "ежемесячный делюкс календарь",
+    "aylık deluxe takvim",
+    "deluxe calendar"
+  ],
+  "exclude_keywords": [
+    "season pass",
+    "pass de saison",
+    "pase de temporada",
+    "uridium bank",
+    "banque d'uridium"
+  ]
+}

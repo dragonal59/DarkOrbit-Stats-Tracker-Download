@@ -3,10 +3,16 @@
 // Phase 4 : garde les routes selon permissions
 // ==========================================
 
+var _activeTab = null;
+
+function getCurrentTab() {
+  return _activeTab;
+}
+
 function switchTab(tabName) {
   if (typeof guardRoute === 'function' && !guardRoute(tabName, () => {
     if (typeof currentCanAccessTab === 'function') {
-      const first = ['stats', 'progression', 'history', 'events', 'classement', 'settings', 'superadmin'].find(t => currentCanAccessTab(t));
+      const first = ['stats', 'progression', 'history', 'events', 'classement', 'coupons', 'settings', 'superadmin'].find(t => (t === 'coupons' ? (typeof currentHasFeature === 'function' && currentHasFeature('couponsTab')) : currentCanAccessTab(t)));
       if (first && first !== tabName) switchTab(first);
     }
   })) return;
@@ -23,12 +29,34 @@ function switchTab(tabName) {
   
   if (activeBtn) activeBtn.classList.add('active');
   if (activeContent) activeContent.classList.add('active');
+  _activeTab = tabName;
+  window._activeTab = tabName;
+
+  var eventsSidebar = document.querySelector('.events-sidebar');
+  var boosterSidebar = document.querySelector('.booster-sidebar');
+  if (tabName === 'superadmin') {
+    if (eventsSidebar) eventsSidebar.style.display = 'none';
+    if (boosterSidebar) boosterSidebar.style.display = 'none';
+    if (typeof window.initDashboardSubTabs === 'function') window.initDashboardSubTabs();
+  } else {
+    if (typeof window.applyBoosterVisibility === 'function') window.applyBoosterVisibility();
+    if (typeof window.applySidebarVisibility === 'function') window.applySidebarVisibility();
+  }
 
   if (tabName === 'classement') {
     if (typeof window.refreshRanking !== 'function' && document.getElementById('ranking-table') && typeof initRankingTab === 'function') {
       initRankingTab();
     }
     if (typeof window.refreshRanking === 'function') window.refreshRanking();
+  }
+
+  if (tabName === 'coupons') {
+    if (typeof window.refreshCouponsUI === 'function') window.refreshCouponsUI();
+  }
+
+  if (tabName === 'stats') {
+    if (typeof window.initCollectStatsFromGameButton === 'function') window.initCollectStatsFromGameButton();
+    if (typeof window.refreshEventsFromSupabase === 'function') window.refreshEventsFromSupabase();
   }
 }
 
@@ -41,4 +69,4 @@ function initTabNavigation() {
   });
 }
 
-console.log('📑 Module Tabs chargé');
+window.getCurrentTab = getCurrentTab;

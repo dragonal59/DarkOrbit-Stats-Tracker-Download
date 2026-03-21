@@ -1,0 +1,41 @@
+{
+  "id": "super_booster_pack_dmg_shd_hp",
+  "visible": true,
+  "image": "img/events/super_booster_pack_dmg_shd_hp.jpg",
+  "names": {
+    "fr": "Super promo boosters",
+    "en": "Super Booster Deal",
+    "de": "Super Booster-Angebot",
+    "es": "Super Oferta de Boosters",
+    "ru": "Суперскидка на бустеры",
+    "tr": "Süper Booster Fırsatı",
+    "pl": "Super Okazja na Boostery"
+  },
+  "descriptions": {
+    "fr": "Profitez d'une remise incroyable sur le pack booster de 10 heures pour les dégâts/bouclier/points de vie ! Quoi de mieux que ces trois bonus en un ? Vous allez être ravis du résultat !",
+    "en": "Get a fabulous discount on the 10 Hour DMG/SHD/HP Booster Pack! What could be better than merging all three of these things under one Booster. We think you'll be delighted with the results!",
+    "de": "Sichert euch einen fantastischen Rabatt auf das 10-Stunden-Booster-Paket für Schaden/Schild/Lebenspunkte! Was könnte besser sein, als alle drei unter einem Booster zu vereinen? Wir sind sicher, ihr werdet begeistert sein!",
+    "es": "¡Consigue un descuento increíble en el Pack Booster de 10 Horas de DMG/SHD/HP! ¿Qué podría ser mejor que combinar los tres en un solo Booster? ¡Creemos que quedarás encantado con los resultados!",
+    "ru": "Воспользуйтесь невероятной скидкой на 10-часовой набор бустеров урона/щита/здоровья! Что может быть лучше, чем объединить все три в одном бустере? Уверены, результат вас порадует!",
+    "tr": "10 Saatlik DMG/KLK/HP Booster Paketi'nde inanılmaz bir indirim fırsatını kaçırmayın! Üçünü tek bir Booster'da birleştirmekten daha iyi ne olabilir ki? Sonuçtan memnun kalacağınızdan eminiz!",
+    "pl": "Skorzystaj z niesamowitej zniżki na 10-godzinny pakiet boosterów DMG/SHD/HP! Cóż może być lepszego niż połączenie wszystkich trzech w jednym Boosterze? Jesteśmy pewni, że będziesz zachwycony wynikami!"
+  },
+  "keywords": [
+    "super booster deal dmg shd hp",
+    "super promo boosters dégâts bouclier vie",
+    "super booster angebot schaden schild leben",
+    "super oferta boosters daño escudo vida",
+    "суперскидка бустеры урон щит здоровье",
+    "süper booster fırsatı hasar kalkan hp",
+    "super okazja boostery dmg shd hp"
+  ],
+  "exclude_keywords": [
+    "bonus rewards gate",
+    "galaxy gate weekend",
+    "double gain",
+    "dispatch day",
+    "jour de l'expédition",
+    "enhanced lf4",
+    "week-end portails"
+  ]
+}

@@ -33,8 +33,10 @@ function updateSessionTimer() {
   // Double sécurité: ne pas update si page invisible
   if (!isPageVisible) return;
   
-  const nowTs = Date.now();
   const timerElement = document.getElementById('sessionTimer');
+  if (!timerElement) return;
+
+  const nowTs = Date.now();
   const timerValue = document.getElementById('timerValue');
   const timerDetail = document.getElementById('timerDetail');
   
@@ -126,4 +128,3 @@ window.addEventListener('beforeunload', () => {
   stopSessionTimer();
 });
 
-console.log('⏱️ Module Timer chargé');

@@ -474,4 +474,3 @@ window.addEventListener('click', (e) => {
   }
 });
 
-console.log('🔗 Système de gestion des liens chargé');

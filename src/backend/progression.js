@@ -2,6 +2,10 @@
 // MODULE: PROGRESSION TAB
 // ==========================================
 
+function getSessionRankPoints(s) {
+  return Number(s?.rankPoints ?? s?.rank_points ?? 0) || 0;
+}
+
 function updateProgressionTab() {
   const sessions = typeof getSessions === 'function' ? (getSessions() || []) : [];
   const progressionContent = document.getElementById("progressionContent");
@@ -15,9 +19,10 @@ function updateProgressionTab() {
       progressionContent.innerHTML = `
         <div class="progression-section-card current-session-card empty">
           <div class="section-header">
-            <h3>⚡ Gains du jour</h3>
+            <h3>⚡ ${typeof window.i18nT === 'function' ? window.i18nT('progression_gains_title') : 'Gains du jour'}</h3>
+            <p class="progression-gains-legend">${typeof window.i18nT === 'function' ? window.i18nT('progression_gains_legend') : 'Gains par rapport à la dernière session d\'hier'}</p>
           </div>
-          <p class="empty-message">Sauvegardez une session pour voir vos gains</p>
+          <p class="empty-message">${typeof window.i18nT === 'function' ? window.i18nT('progression_save_one_session') : 'Sauvegardez une session pour voir vos gains'}</p>
         </div>
       `;
     }
@@ -33,29 +38,53 @@ function updateProgressionTab() {
   // Trier les sessions par date (plus ancien en premier)
   const sortedSessions = [...sessions].sort((a, b) => a.timestamp - b.timestamp);
 
-  // Gains du jour : référence = session précédente (baseline ou dernière enregistrée)
-  const getRef = (typeof window !== 'undefined' && window.getReferenceSession) || (typeof getReferenceSession === 'function' ? getReferenceSession : null);
-  const calcGains = (typeof window !== 'undefined' && window.calculateGains) || (typeof calculateGains === 'function' ? calculateGains : null);
-  const reference = getRef ? getRef(sessions) : { session: null, label: '-', isBaseline: false };
+  // Gains du jour : référence = dernière session d'hier (reference-session.js)
+  const getRefForComparison = (typeof window !== 'undefined' && window.getReferenceSessionForComparison) || (typeof getReferenceSessionForComparison === 'function' ? getReferenceSessionForComparison : null);
+  const calcDailyGains = (typeof window !== 'undefined' && window.calculateDailyGains) || (typeof calculateDailyGains === 'function' ? calculateDailyGains : null);
+  const reference = getRefForComparison ? getRefForComparison(sessions) : { session: null, label: '-', isFirstOfDay: false, isFirstEver: false };
   const latestSession = sortedSessions[sortedSessions.length - 1];
-  const gainsData = calcGains ? calcGains(latestSession, reference) : { honor: 0, xp: 0, rankPoints: 0, honorGain: 0, xpGain: 0, rankPointsGain: 0, comparedTo: '-' };
-  const isFirst = (reference && reference.isBaseline) || gainsData.comparedTo === 'Point de départ' || gainsData.comparedTo === 'Seuil enregistré';
-  const currentSessionData = { ...gainsData, isFirstSession: isFirst };
+  let emptyGainsMessage = null;
+  let currentSessionData = null;
+  if (reference && reference.session != null) {
+    const gainsData = calcDailyGains ? calcDailyGains(latestSession, reference) : { honor: 0, xp: 0, rankPoints: 0, honorGain: 0, xpGain: 0, rankPointsGain: 0, comparedTo: '-', isFirstSession: false };
+    currentSessionData = gainsData ? { ...gainsData, isFirstSession: gainsData.isFirstSession } : null;
+  } else if (sessions.length > 0) {
+    emptyGainsMessage = 'progression_no_session_yesterday';
+  }
 
   // Cas 1 seule session : afficher uniquement la carte Gains du jour
   if (sessions.length === 1) {
+    if (!currentSessionData) {
+      progressionContent.innerHTML = `
+        <div class="progression-section-card current-session-card empty">
+          <div class="section-header">
+            <h3>⚡ ${typeof window.i18nT === 'function' ? window.i18nT('progression_gains_title') : 'Gains du jour'}</h3>
+            <p class="progression-gains-legend">${typeof window.i18nT === 'function' ? window.i18nT('progression_gains_legend') : 'Gains par rapport à la dernière session d\'hier'}</p>
+          </div>
+          <p class="empty-message">${typeof window.i18nT === 'function' ? window.i18nT('progression_no_session_yesterday') : 'Pas de session hier'}</p>
+        </div>
+      `;
+      advancedStats.style.display = 'none';
+      comparisonSection.style.display = 'none';
+      predictionsSection.style.display = 'none';
+      timeComparisonSection.style.display = 'none';
+      const chartContainerHide = document.getElementById('chartContainer');
+      if (chartContainerHide) chartContainerHide.style.display = 'none';
+      return;
+    }
     const badgeLabel = currentSessionData.comparedTo;
     progressionContent.innerHTML = `
       <div class="progression-section-card current-session-card">
         <div class="section-header">
-          <h3>⚡ Gains du jour</h3>
+          <h3>⚡ ${typeof window.i18nT === 'function' ? window.i18nT('progression_gains_title') : 'Gains du jour'}</h3>
+          <p class="progression-gains-legend">${typeof window.i18nT === 'function' ? window.i18nT('progression_gains_legend') : 'Gains par rapport à la dernière session d\'hier'}</p>
           <span class="time-badge">${badgeLabel}</span>
         </div>
         <div class="current-session-stats">
           <div class="current-stat">
             <span class="current-stat-icon">🏆</span>
             <div class="current-stat-info">
-              <span class="current-stat-label">Honneur</span>
+              <span class="current-stat-label">${typeof window.i18nT === 'function' ? window.i18nT('honor') : 'Honneur'}</span>
               <span class="current-stat-value ${getGainClass(currentSessionData.honorGain)}">
                 ${formatSignedGain(currentSessionData.honorGain)}
               </span>
@@ -64,7 +93,7 @@ function updateProgressionTab() {
           <div class="current-stat">
             <span class="current-stat-icon">⭐</span>
             <div class="current-stat-info">
-              <span class="current-stat-label">XP</span>
+              <span class="current-stat-label">${typeof window.i18nT === 'function' ? window.i18nT('xp') : 'XP'}</span>
               <span class="current-stat-value ${getGainClass(currentSessionData.xpGain)}">
                 ${formatSignedGain(currentSessionData.xpGain)}
               </span>
@@ -73,7 +102,7 @@ function updateProgressionTab() {
           <div class="current-stat">
             <span class="current-stat-icon">📊</span>
             <div class="current-stat-info">
-              <span class="current-stat-label">Points grade</span>
+              <span class="current-stat-label">${typeof window.i18nT === 'function' ? window.i18nT('points_grade') : 'Points grade'}</span>
               <span class="current-stat-value ${getGainClass(currentSessionData.rankPointsGain)}">
                 ${formatSignedGain(currentSessionData.rankPointsGain)}
               </span>
@@ -82,7 +111,7 @@ function updateProgressionTab() {
         </div>
         ${currentSessionData.isFirstSession ? `
           <div class="current-session-tip">
-            🎉 Première session enregistrée ! C'est votre point de départ.
+            🎉 ${typeof window.i18nT === 'function' ? window.i18nT('progression_first_session_tip') : 'Première session enregistrée ! C\'est votre point de départ.'}
           </div>
         ` : ''}
       </div>
@@ -91,11 +120,13 @@ function updateProgressionTab() {
     comparisonSection.style.display = 'none';
     predictionsSection.style.display = 'none';
     timeComparisonSection.style.display = 'none';
-    document.getElementById('chartContainer').style.display = 'none';
+    const chartContainerHide = document.getElementById('chartContainer');
+    if (chartContainerHide) chartContainerHide.style.display = 'none';
     return;
   }
 
-  document.getElementById('chartContainer').style.display = 'block';
+  const chartContainerShow = document.getElementById('chartContainer');
+  if (chartContainerShow) chartContainerShow.style.display = 'block';
   advancedStats.style.display = 'block';
   comparisonSection.style.display = 'block';
   predictionsSection.style.display = 'block';
@@ -108,18 +139,19 @@ function updateProgressionTab() {
 
   const totalHonorGain = latest.honor - oldest.honor;
   const totalXpGain = latest.xp - oldest.xp;
-  const totalRankGain = latest.rankPoints - oldest.rankPoints;
+  const totalRankGain = getSessionRankPoints(latest) - getSessionRankPoints(oldest);
 
-  const refForPrevious = beforePrevious || (oldest.is_baseline ? oldest : null);
+  const refForPrevious = beforePrevious ?? oldest;
   const lastSessionHonorGain = previous && refForPrevious ? previous.honor - refForPrevious.honor : 0;
   const lastSessionXpGain = previous && refForPrevious ? previous.xp - refForPrevious.xp : 0;
-  const lastSessionRankGain = previous && refForPrevious ? previous.rankPoints - refForPrevious.rankPoints : 0;
+  const lastSessionRankGain = previous && refForPrevious ? getSessionRankPoints(previous) - getSessionRankPoints(refForPrevious) : 0;
   const lastSessionDate = previous ? previous.timestamp : null;
 
   const avgHonorPerSession = totalHonorGain / (sessions.length - 1);
   const avgXpPerSession = totalXpGain / (sessions.length - 1);
   const avgRankPerSession = totalRankGain / (sessions.length - 1);
   const daysDiff = Math.max(1, Math.ceil((latest.timestamp - oldest.timestamp) / (1000 * 60 * 60 * 24)));
+  const avgHonorPerDay = totalHonorGain / daysDiff;
   const avgXpPerDay = totalXpGain / daysDiff;
   const avgRankPerDay = totalRankGain / daysDiff;
   
@@ -129,9 +161,7 @@ function updateProgressionTab() {
   let bestGain = 0;
   
   for (let i = 1; i < sortedSessions.length; i++) {
-    const gain = (sortedSessions[i].honor - sortedSessions[i-1].honor) + 
-                 (sortedSessions[i].xp - sortedSessions[i-1].xp) +
-                 (sortedSessions[i].rankPoints - sortedSessions[i-1].rankPoints);
+    const gain = sortedSessions[i].xp - sortedSessions[i-1].xp;
     if (gain > bestGain) {
       bestGain = gain;
       bestSession = sortedSessions[i];
@@ -145,9 +175,9 @@ function updateProgressionTab() {
     const isNeg = val < 0;
     return { text: (isNeg ? '-' : '+') + compact, isNeg };
   }
-  const honorAvg = formatAvgStat(avgHonorPerSession);
-  const xpAvg = formatAvgStat(avgXpPerSession);
-  const rankAvg = formatAvgStat(avgRankPerSession);
+  const honorAvg = formatAvgStat(avgHonorPerDay);
+  const xpAvg = formatAvgStat(avgXpPerDay);
+  const rankAvg = formatAvgStat(avgRankPerDay);
   const avgHonorEl = document.getElementById('avgHonorPerDay');
   const avgXpEl = document.getElementById('avgXpPerDay');
   const avgRankEl = document.getElementById('avgRankPerDay');
@@ -157,7 +187,8 @@ function updateProgressionTab() {
   
   if (bestSession) {
     const bestDate = new Date(bestSession.timestamp).toLocaleDateString('fr-FR');
-    const bestRankData = RANKS_DATA.find(r => r.name === bestSession.currentRank);
+    const br = typeof bestSession.currentRank === 'string' && bestSession.currentRank.startsWith('rank_') ? (RANK_KEY_TO_RANK_NAME[bestSession.currentRank] || bestSession.currentRank) : bestSession.currentRank;
+    const bestRankData = RANKS_DATA.find(r => r.name === br || r.rank === br);
     
     const bestSessionElement = document.getElementById('bestSession');
     if (bestRankData) {
@@ -178,7 +209,7 @@ function updateProgressionTab() {
     // Calculer les gains de la meilleure session
     const bestHonorGain = bestSession.honor - bestSessionPrevious.honor;
     const bestXpGain = bestSession.xp - bestSessionPrevious.xp;
-    const bestRankGain = bestSession.rankPoints - bestSessionPrevious.rankPoints;
+    const bestRankGain = getSessionRankPoints(bestSession) - getSessionRankPoints(bestSessionPrevious);
     
     const bestSessionCard = document.getElementById('bestSessionCard');
     bestSessionCard.onclick = () => {
@@ -203,18 +234,19 @@ function updateProgressionTab() {
   // ==========================================
   
   // Section Session Actuelle (stats en cours de saisie)
-  const gainsBadge = currentSessionData.comparedTo;
+  const gainsBadge = currentSessionData ? currentSessionData.comparedTo : '';
   const currentSessionHtml = currentSessionData ? `
     <div class="progression-section-card current-session-card">
       <div class="section-header">
-        <h3>⚡ Gains du jour</h3>
+        <h3>⚡ ${typeof window.i18nT === 'function' ? window.i18nT('progression_gains_title') : 'Gains du jour'}</h3>
+        <p class="progression-gains-legend">${typeof window.i18nT === 'function' ? window.i18nT('progression_gains_legend') : 'Gains par rapport à la dernière session d\'hier'}</p>
         <span class="time-badge">${gainsBadge}</span>
       </div>
       <div class="current-session-stats">
         <div class="current-stat">
           <span class="current-stat-icon">🏆</span>
           <div class="current-stat-info">
-            <span class="current-stat-label">Honneur</span>
+            <span class="current-stat-label">${typeof window.i18nT === 'function' ? window.i18nT('honor') : 'Honneur'}</span>
             <span class="current-stat-value ${getGainClass(currentSessionData.honorGain)}">
               ${formatSignedGain(currentSessionData.honorGain)}
             </span>
@@ -223,7 +255,7 @@ function updateProgressionTab() {
         <div class="current-stat">
           <span class="current-stat-icon">⭐</span>
           <div class="current-stat-info">
-            <span class="current-stat-label">XP</span>
+            <span class="current-stat-label">${typeof window.i18nT === 'function' ? window.i18nT('xp') : 'XP'}</span>
             <span class="current-stat-value ${getGainClass(currentSessionData.xpGain)}">
               ${formatSignedGain(currentSessionData.xpGain)}
             </span>
@@ -232,7 +264,7 @@ function updateProgressionTab() {
         <div class="current-stat">
           <span class="current-stat-icon">📊</span>
           <div class="current-stat-info">
-            <span class="current-stat-label">Points grade</span>
+            <span class="current-stat-label">${typeof window.i18nT === 'function' ? window.i18nT('points_grade') : 'Points grade'}</span>
             <span class="current-stat-value ${getGainClass(currentSessionData.rankPointsGain)}">
               ${formatSignedGain(currentSessionData.rankPointsGain)}
             </span>
@@ -241,27 +273,31 @@ function updateProgressionTab() {
       </div>
       ${currentSessionData.isFirstSession ? `
         <div class="current-session-tip">
-          🎉 Première session enregistrée ! C'est votre point de départ.
+          🎉 ${typeof window.i18nT === 'function' ? window.i18nT('progression_first_session_tip') : 'Première session enregistrée ! C\'est votre point de départ.'}
         </div>
-      ` : (currentSessionData.honorGain > 0 || currentSessionData.xpGain > 0 ? `
+      ` : ((currentSessionData.honorGain > 0 || currentSessionData.xpGain > 0) && !shouldHideSaveReminder() ? `
         <div class="current-session-tip">
-          💡 N'oubliez pas de sauvegarder votre session !
+          💡 ${typeof window.i18nT === 'function' ? window.i18nT('progression_save_reminder') : 'N\'oubliez pas de sauvegarder votre session !'}
         </div>
       ` : '')}
     </div>
   ` : `
     <div class="progression-section-card current-session-card empty">
       <div class="section-header">
-        <h3>⚡ Gains du jour</h3>
+        <h3>⚡ ${typeof window.i18nT === 'function' ? window.i18nT('progression_gains_title') : 'Gains du jour'}</h3>
+        <p class="progression-gains-legend">${typeof window.i18nT === 'function' ? window.i18nT('progression_gains_legend') : 'Gains par rapport à la dernière session d\'hier'}</p>
       </div>
-      <p class="empty-message">Entrez vos stats actuelles pour voir vos gains</p>
+      <p class="empty-message">${typeof window.i18nT === 'function' ? window.i18nT(emptyGainsMessage || 'progression_enter_stats') : (emptyGainsMessage ? 'Pas de session hier' : 'Entrez vos stats actuelles pour voir vos gains')}</p>
     </div>
   `;
   
   // Données de grade pour les images
-  const latestRankData = RANKS_DATA.find(r => r.name === latest.currentRank);
-  const previousRankData = RANKS_DATA.find(r => r.name === previous.currentRank);
-  const oldestRankData = RANKS_DATA.find(r => r.name === oldest.currentRank);
+  const lr = typeof latest.currentRank === 'string' && latest.currentRank.startsWith('rank_') ? (RANK_KEY_TO_RANK_NAME[latest.currentRank] || latest.currentRank) : latest.currentRank;
+  const pr = typeof previous.currentRank === 'string' && previous.currentRank.startsWith('rank_') ? (RANK_KEY_TO_RANK_NAME[previous.currentRank] || previous.currentRank) : previous.currentRank;
+  const or = typeof oldest.currentRank === 'string' && oldest.currentRank.startsWith('rank_') ? (RANK_KEY_TO_RANK_NAME[oldest.currentRank] || oldest.currentRank) : oldest.currentRank;
+  const latestRankData = RANKS_DATA.find(r => r.name === lr || r.rank === lr);
+  const previousRankData = RANKS_DATA.find(r => r.name === pr || r.rank === pr);
+  const oldestRankData = RANKS_DATA.find(r => r.name === or || r.rank === or);
   
   progressionContent.innerHTML = `
     ${currentSessionHtml}
@@ -269,23 +305,23 @@ function updateProgressionTab() {
     <div class="progression-grid">
       <div class="progression-section-card">
         <div class="section-header">
-          <h3>📅 Session précédente</h3>
+          <h3>📅 ${typeof window.i18nT === 'function' ? window.i18nT('progression_previous_session') : 'Session précédente'}</h3>
           <span class="date-badge">${lastSessionDate ? new Date(lastSessionDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : '-'}</span>
         </div>
         <div class="stat-row">
-          <span class="stat-label">🏆 Honneur</span>
+          <span class="stat-label">🏆 ${typeof window.i18nT === 'function' ? window.i18nT('honor') : 'Honneur'}</span>
           <span class="stat-value ${getGainClass(lastSessionHonorGain)}">
             ${formatSignedGain(lastSessionHonorGain)}
           </span>
         </div>
         <div class="stat-row">
-          <span class="stat-label">⭐ XP</span>
+          <span class="stat-label">⭐ ${typeof window.i18nT === 'function' ? window.i18nT('xp') : 'XP'}</span>
           <span class="stat-value ${getGainClass(lastSessionXpGain)}">
             ${formatSignedGain(lastSessionXpGain)}
           </span>
         </div>
         <div class="stat-row">
-          <span class="stat-label">📊 Points grade</span>
+          <span class="stat-label">📊 ${typeof window.i18nT === 'function' ? window.i18nT('points_grade') : 'Points grade'}</span>
           <span class="stat-value ${getGainClass(lastSessionRankGain)}">
             ${formatSignedGain(lastSessionRankGain)}
           </span>
@@ -294,19 +330,19 @@ function updateProgressionTab() {
       
       <div class="progression-section-card">
         <div class="section-header">
-          <h3>📊 Moyennes / session</h3>
-          <span class="date-badge">${sessions.length} sessions</span>
+          <h3>📊 ${typeof window.i18nT === 'function' ? window.i18nT('progression_averages_session') : 'Moyennes / session'}</h3>
+          <span class="date-badge">${sessions.length} ${typeof window.i18nT === 'function' ? window.i18nT('sessions_count') : 'Sessions'}</span>
         </div>
         <div class="stat-row">
-          <span class="stat-label">🏆 Honneur</span>
+          <span class="stat-label">🏆 ${typeof window.i18nT === 'function' ? window.i18nT('honor') : 'Honneur'}</span>
           <span class="stat-value gain">+${formatNumberCompact(avgHonorPerSession)}</span>
         </div>
         <div class="stat-row">
-          <span class="stat-label">⭐ XP</span>
+          <span class="stat-label">⭐ ${typeof window.i18nT === 'function' ? window.i18nT('xp') : 'XP'}</span>
           <span class="stat-value gain">+${formatNumberCompact(avgXpPerSession)}</span>
         </div>
         <div class="stat-row">
-          <span class="stat-label">📊 Points grade</span>
+          <span class="stat-label">📊 ${typeof window.i18nT === 'function' ? window.i18nT('points_grade') : 'Points grade'}</span>
           <span class="stat-value gain">+${formatNumberCompact(avgRankPerSession)}</span>
         </div>
       </div>
@@ -314,25 +350,25 @@ function updateProgressionTab() {
     
     <div class="progression-section-card progression-total">
       <div class="section-header">
-        <h3>🎯 Progression totale</h3>
-        <span class="period-badge">${daysDiff} jour${daysDiff > 1 ? 's' : ''} • ${sessions.length} sessions</span>
+        <h3>🎯 ${typeof window.i18nT === 'function' ? window.i18nT('progression_total') : 'Progression totale'}</h3>
+        <span class="period-badge">${daysDiff} ${daysDiff > 1 ? (typeof window.i18nT === 'function' ? window.i18nT('progression_days') : 'jours') : (typeof window.i18nT === 'function' ? window.i18nT('progression_day') : 'jour')} • ${sessions.length} ${typeof window.i18nT === 'function' ? window.i18nT('sessions_count') : 'Sessions'}</span>
       </div>
       
       <div class="total-stats-grid">
         <div class="total-stat">
-          <span class="total-stat-label">🏆 Honneur gagné</span>
+          <span class="total-stat-label">🏆 ${typeof window.i18nT === 'function' ? window.i18nT('honor_gained') : 'Honneur gagné'}</span>
           <span class="total-stat-value ${totalHonorGain >= 0 ? 'gain' : 'loss'}">
             ${totalHonorGain >= 0 ? '+' : ''}${formatNumberDisplay(totalHonorGain)}
           </span>
         </div>
         <div class="total-stat">
-          <span class="total-stat-label">⭐ XP gagnée</span>
+          <span class="total-stat-label">⭐ ${typeof window.i18nT === 'function' ? window.i18nT('xp_gained') : 'XP gagnée'}</span>
           <span class="total-stat-value ${totalXpGain >= 0 ? 'gain' : 'loss'}">
             ${totalXpGain >= 0 ? '+' : ''}${formatNumberDisplay(totalXpGain)}
           </span>
         </div>
         <div class="total-stat">
-          <span class="total-stat-label">📊 Points grade</span>
+          <span class="total-stat-label">📊 ${typeof window.i18nT === 'function' ? window.i18nT('points_grade') : 'Points grade'}</span>
           <span class="total-stat-value ${totalRankGain >= 0 ? 'gain' : 'loss'}">
             ${totalRankGain >= 0 ? '+' : ''}${formatNumberDisplay(totalRankGain)}
           </span>
@@ -341,7 +377,7 @@ function updateProgressionTab() {
       
       <div class="grade-evolution">
         <div class="grade-item">
-          <span class="grade-label">Début</span>
+          <span class="grade-label">${typeof window.i18nT === 'function' ? window.i18nT('progression_grade_start') : 'Début'}</span>
           <div class="grade-block grade-block--compact">
             <div class="grade-block-name">${oldest.currentRank}</div>
             <div class="grade-block-icon">
@@ -352,7 +388,7 @@ function updateProgressionTab() {
         </div>
         <div class="grade-arrow">→</div>
         <div class="grade-item">
-          <span class="grade-label">Actuel</span>
+          <span class="grade-label">${typeof window.i18nT === 'function' ? window.i18nT('progression_grade_current') : 'Actuel'}</span>
           <div class="grade-block grade-block--compact">
             <div class="grade-block-name">${latest.currentRank}</div>
             <div class="grade-block-icon">
@@ -366,66 +402,6 @@ function updateProgressionTab() {
   `;
 }
 
-/**
- * Formater un nombre de façon compacte (1.5M, 250K, etc.)
- */
-function formatNumberCompact(num) {
-  const absNum = Math.abs(num);
-  if (absNum >= 1000000000) {
-    return (num / 1000000000).toFixed(1) + 'B';
-  }
-  if (absNum >= 1000000) {
-    return (num / 1000000).toFixed(1) + 'M';
-  }
-  if (absNum >= 1000) {
-    return (num / 1000).toFixed(1) + 'K';
-  }
-  return Math.round(num).toLocaleString("en-US");
-}
-
-/**
- * Formater un nombre avec séparateurs en virgules
- */
-function formatNumberDisplay(num) {
-  const value = Number(num);
-  if (!Number.isFinite(value)) return '-';
-  return Math.round(value).toLocaleString("en-US");
-}
-
-/**
- * Formater un gain avec signe (sans +0)
- */
-function formatSignedGain(num) {
-  if (num < 0) return `-${formatNumberDisplay(Math.abs(num))}`;
-  return `+${formatNumberDisplay(num)}`;
-}
-
-function getGainClass(num) {
-  if (num > 0) return 'gain';
-  if (num < 0) return 'loss';
-  return 'neutral';
-}
-
-/**
- * Formater le temps écoulé depuis une durée en ms
- */
-function formatTimeSince(ms) {
-  const minutes = Math.floor(ms / 60000);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-  
-  if (days > 0) {
-    return `il y a ${days}j ${hours % 24}h`;
-  }
-  if (hours > 0) {
-    return `il y a ${hours}h ${minutes % 60}min`;
-  }
-  if (minutes > 0) {
-    return `il y a ${minutes} min`;
-  }
-  return `à l'instant`;
-}
-
 function updatePredictions(latestSession, avgXpPerDay, avgRankPerDay) {
   // Prédiction pour le prochain niveau
   const currentLevel = getCurrentLevel(latestSession.xp);
@@ -435,27 +411,29 @@ function updatePredictions(latestSession, avgXpPerDay, avgRankPerDay) {
     const xpNeeded = nextLevelData.xp - latestSession.xp;
     const daysToNextLevel = Math.ceil(xpNeeded / avgXpPerDay);
     
-    document.getElementById('predictionNextLevel').textContent = `Niveau ${nextLevelData.level}`;
+    document.getElementById('predictionNextLevel').textContent = (typeof window.i18nT === 'function' ? window.i18nT('level') : 'Niveau') + ' ' + nextLevelData.level;
     document.getElementById('predictionNextLevelDays').textContent = 
       daysToNextLevel === 1 
-        ? `Dans environ 1 jour` 
-        : `Dans environ ${daysToNextLevel} jours`;
+        ? (typeof window.i18nT === 'function' ? window.i18nT('prediction_in_1_day') : 'Dans environ 1 jour') 
+        : (typeof window.i18nT === 'function' ? window.i18nT('prediction_in_n_days') : 'Dans environ %s jours').replace('%s', daysToNextLevel);
   } else if (!nextLevelData) {
-    document.getElementById('predictionNextLevel').textContent = 'Niveau max';
-    document.getElementById('predictionNextLevelDays').textContent = '🎉 Niveau maximum atteint !';
+    document.getElementById('predictionNextLevel').textContent = typeof window.i18nT === 'function' ? window.i18nT('prediction_level_max') : 'Niveau max';
+    document.getElementById('predictionNextLevelDays').textContent = '🎉 ' + (typeof window.i18nT === 'function' ? window.i18nT('prediction_level_max_reached') : 'Niveau maximum atteint !');
   } else {
     document.getElementById('predictionNextLevel').textContent = '-';
-    document.getElementById('predictionNextLevelDays').textContent = 'Pas assez de données';
+    document.getElementById('predictionNextLevelDays').textContent = typeof window.i18nT === 'function' ? window.i18nT('prediction_not_enough_data') : 'Pas assez de données';
   }
   
   // Prédiction pour le prochain grade - avec IMAGE PLUS GRANDE
-  const currentRankData = RANKS_DATA.find(r => r.name === latestSession.currentRank);
+  const lsr = typeof latestSession.currentRank === 'string' && latestSession.currentRank.startsWith('rank_') ? (RANK_KEY_TO_RANK_NAME[latestSession.currentRank] || latestSession.currentRank) : latestSession.currentRank;
+  const currentRankData = RANKS_DATA.find(r => r.name === lsr || r.rank === lsr);
   if (currentRankData) {
     const currentRankIndex = RANKS_DATA.indexOf(currentRankData);
-    
-    if (currentRankIndex < RANKS_DATA.length - 1 && avgRankPerDay > 0) {
-      const nextRankData = RANKS_DATA[currentRankIndex + 1];
-      const rankPointsNeeded = (latestSession.nextRankPoints || nextRankData.rankPoints) - latestSession.rankPoints;
+    const nextRankData = currentRankIndex >= 0 && currentRankIndex < RANKS_DATA.length - 1 ? RANKS_DATA[currentRankIndex + 1] : null;
+    const nextRankPointsTarget = latestSession.nextRankPoints ?? latestSession.next_rank_points ?? (nextRankData?.rankPoints);
+
+    if (nextRankData && avgRankPerDay > 0 && nextRankPointsTarget != null) {
+      const rankPointsNeeded = Number(nextRankPointsTarget) - getSessionRankPoints(latestSession);
       const daysToNextRank = Math.ceil(rankPointsNeeded / avgRankPerDay);
       
       // Image plus grande (32px au lieu de la taille par défaut)
@@ -469,33 +447,63 @@ function updatePredictions(latestSession, avgXpPerDay, avgRankPerDay) {
       `;
       document.getElementById('predictionNextRankDays').textContent = 
         daysToNextRank === 1 
-          ? `Dans environ 1 jour` 
-          : `Dans environ ${daysToNextRank} jours`;
+          ? (typeof window.i18nT === 'function' ? window.i18nT('prediction_in_1_day') : 'Dans environ 1 jour') 
+          : (typeof window.i18nT === 'function' ? window.i18nT('prediction_in_n_days') : 'Dans environ %s jours').replace('%s', daysToNextRank);
     } else if (currentRankIndex === RANKS_DATA.length - 1) {
-      document.getElementById('predictionNextRank').textContent = 'Grade max';
-      document.getElementById('predictionNextRankDays').textContent = '🎉 Grade maximum atteint !';
+      document.getElementById('predictionNextRank').textContent = typeof window.i18nT === 'function' ? window.i18nT('prediction_grade_max') : 'Grade max';
+      document.getElementById('predictionNextRankDays').textContent = '🎉 ' + (typeof window.i18nT === 'function' ? window.i18nT('prediction_grade_max_reached') : 'Grade maximum atteint !');
     } else {
       document.getElementById('predictionNextRank').textContent = '-';
-      document.getElementById('predictionNextRankDays').textContent = 'Pas assez de données';
+      document.getElementById('predictionNextRankDays').textContent = typeof window.i18nT === 'function' ? window.i18nT('prediction_not_enough_data') : 'Pas assez de données';
     }
   }
 }
 
+function shouldHideSaveReminder() {
+  var badge = typeof getCurrentBadge === 'function'
+    ? getCurrentBadge()
+    : (typeof BackendAPI !== 'undefined' && BackendAPI.getUserBadge ? BackendAPI.getUserBadge() : 'FREE');
+  var upper = (badge || 'FREE').toString().toUpperCase();
+  var isProOrHigher = upper === 'PRO' || upper === 'ADMIN' || upper === 'SUPERADMIN';
+  if (!isProOrHigher) return false;
+  if (typeof UserPreferencesAPI !== 'undefined' && typeof UserPreferencesAPI.getActivePlayerInfoSync === 'function') {
+    var info = UserPreferencesAPI.getActivePlayerInfoSync();
+    if (info && (info.player_id || info.player_server || info.player_pseudo)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+if (typeof window !== 'undefined' && window.addEventListener) {
+  window.addEventListener('darkorbitCredentialsChanged', function () {
+    try {
+      if (typeof updateProgressionTab === 'function') updateProgressionTab();
+    } catch (e) {}
+  });
+}
+
 function updateTimeComparison(sortedSessions) {
+  if (!sortedSessions || !sortedSessions.length) return;
+
   const now = new Date();
-  const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
-  
-  // Sessions de cette semaine
-  const thisWeekSessions = sortedSessions.filter(s => new Date(s.timestamp) >= oneWeekAgo);
-  
-  // Sessions de la semaine dernière
-  const lastWeekSessions = sortedSessions.filter(s => {
-    const sessionDate = new Date(s.timestamp);
-    return sessionDate >= twoWeeksAgo && sessionDate < oneWeekAgo;
+  const thisWeekStart = getWeekStart(now);
+  const lastWeekStart = new Date(thisWeekStart);
+  lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+
+  // Sessions de cette semaine (>= début de semaine en cours)
+  const thisWeekSessions = sortedSessions.filter(function (s) {
+    const d = new Date(s.timestamp);
+    return d >= thisWeekStart;
+  });
+
+  // Sessions de la semaine dernière (entre lastWeekStart et thisWeekStart)
+  const lastWeekSessions = sortedSessions.filter(function (s) {
+    const d = new Date(s.timestamp);
+    return d >= lastWeekStart && d < thisWeekStart;
   });
   
-  // Calculer les gains de cette semaine
+  // Calculer les gains de cette semaine (même logique que l'historique : dernière - première)
   let thisWeekHonor = 0;
   let thisWeekXp = 0;
   
@@ -504,7 +512,7 @@ function updateTimeComparison(sortedSessions) {
     thisWeekXp = thisWeekSessions[thisWeekSessions.length - 1].xp - thisWeekSessions[0].xp;
   }
   
-  // Calculer les gains de la semaine dernière
+  // Calculer les gains de la semaine dernière (dernière - première)
   let lastWeekHonor = 0;
   let lastWeekXp = 0;
   
@@ -512,15 +520,23 @@ function updateTimeComparison(sortedSessions) {
     lastWeekHonor = lastWeekSessions[lastWeekSessions.length - 1].honor - lastWeekSessions[0].honor;
     lastWeekXp = lastWeekSessions[lastWeekSessions.length - 1].xp - lastWeekSessions[0].xp;
   }
-  
+
+  function formatWeekValue(val, hasSessions) {
+    if (!hasSessions) return '—';
+    if (!val) return '0';
+    var sign = val > 0 ? '+' : '';
+    if (typeof formatNumberDisplay === 'function') return sign + formatNumberDisplay(val);
+    return sign + val.toLocaleString('en-US');
+  }
+
   // Afficher cette semaine
-  document.getElementById('thisWeekHonor').textContent = thisWeekHonor > 0 ? `+${thisWeekHonor.toLocaleString("en-US")}` : '-';
-  document.getElementById('thisWeekXp').textContent = thisWeekXp > 0 ? `+${thisWeekXp.toLocaleString("en-US")}` : '-';
+  document.getElementById('thisWeekHonor').textContent = formatWeekValue(thisWeekHonor, thisWeekSessions.length > 0);
+  document.getElementById('thisWeekXp').textContent = formatWeekValue(thisWeekXp, thisWeekSessions.length > 0);
   document.getElementById('thisWeekSessions').textContent = thisWeekSessions.length;
-  
+
   // Afficher semaine dernière
-  document.getElementById('lastWeekHonor').textContent = lastWeekHonor > 0 ? `+${lastWeekHonor.toLocaleString("en-US")}` : '-';
-  document.getElementById('lastWeekXp').textContent = lastWeekXp > 0 ? `+${lastWeekXp.toLocaleString("en-US")}` : '-';
+  document.getElementById('lastWeekHonor').textContent = formatWeekValue(lastWeekHonor, lastWeekSessions.length > 0);
+  document.getElementById('lastWeekXp').textContent = formatWeekValue(lastWeekXp, lastWeekSessions.length > 0);
   document.getElementById('lastWeekSessions').textContent = lastWeekSessions.length;
   
   // Calculer l'évolution
@@ -548,13 +564,13 @@ function updateTimeComparison(sortedSessions) {
   
   // Tendance générale
   if (thisWeekHonor > lastWeekHonor && thisWeekXp > lastWeekXp) {
-    evolutionTrendEl.textContent = '📈 En hausse';
+    evolutionTrendEl.textContent = '📈 ' + (typeof window.i18nT === 'function' ? window.i18nT('evolution_trend_up') : 'En hausse');
     evolutionTrendEl.className = 'time-stat-value evolution positive';
   } else if (thisWeekHonor < lastWeekHonor && thisWeekXp < lastWeekXp) {
-    evolutionTrendEl.textContent = '📉 En baisse';
+    evolutionTrendEl.textContent = '📉 ' + (typeof window.i18nT === 'function' ? window.i18nT('evolution_trend_down') : 'En baisse');
     evolutionTrendEl.className = 'time-stat-value evolution negative';
   } else {
-    evolutionTrendEl.textContent = '➡️ Stable';
+    evolutionTrendEl.textContent = '➡️ ' + (typeof window.i18nT === 'function' ? window.i18nT('evolution_trend_stable') : 'Stable');
     evolutionTrendEl.className = 'time-stat-value evolution neutral';
   }
 }
@@ -572,7 +588,8 @@ function showBestSessionDetails(session, previousSession, honorGain, xpGain, ran
     minute: '2-digit'
   });
   
-  const rankData = RANKS_DATA.find(r => r.name === session.currentRank);
+  const sr = typeof session.currentRank === 'string' && session.currentRank.startsWith('rank_') ? (RANK_KEY_TO_RANK_NAME[session.currentRank] || session.currentRank) : session.currentRank;
+  const rankData = RANKS_DATA.find(r => r.name === sr || r.rank === sr);
   
   // Créer le modal
   const existingModal = document.getElementById('bestSessionModal');
@@ -585,7 +602,7 @@ function showBestSessionDetails(session, previousSession, honorGain, xpGain, ran
   modal.innerHTML = `
     <div class="modal-content" style="max-width: 450px;">
       <div class="modal-header">
-        <h2>🏆 Meilleure session</h2>
+        <h2>🏆 ${typeof window.i18nT === 'function' ? window.i18nT('progression_best_session_title') : 'Meilleure session'}</h2>
         <button class="modal-close" onclick="document.getElementById('bestSessionModal').remove()">&times;</button>
       </div>
       <div class="modal-body">
@@ -601,33 +618,33 @@ function showBestSessionDetails(session, previousSession, honorGain, xpGain, ran
         
         <div class="progression-section-card" style="margin: 0;">
           <div class="section-header">
-            <h3>📊 Gains de cette session</h3>
+            <h3>📊 ${typeof window.i18nT === 'function' ? window.i18nT('progression_gains_this_session') : 'Gains de cette session'}</h3>
           </div>
           <div class="stat-row">
-            <span class="stat-label">🏆 Honneur</span>
+            <span class="stat-label">🏆 ${typeof window.i18nT === 'function' ? window.i18nT('honor') : 'Honneur'}</span>
             <span class="stat-value gain">+${formatNumberDisplay(honorGain)}</span>
           </div>
           <div class="stat-row">
-            <span class="stat-label">⭐ XP</span>
+            <span class="stat-label">⭐ ${typeof window.i18nT === 'function' ? window.i18nT('xp') : 'XP'}</span>
             <span class="stat-value gain">+${formatNumberDisplay(xpGain)}</span>
           </div>
           <div class="stat-row">
-            <span class="stat-label">📊 Points grade</span>
+            <span class="stat-label">📊 ${typeof window.i18nT === 'function' ? window.i18nT('points_grade') : 'Points grade'}</span>
             <span class="stat-value gain">+${formatNumberDisplay(rankGain)}</span>
           </div>
         </div>
         
         ${session.note ? `
           <div style="margin-top: 15px; padding: 12px; background: var(--bg-tertiary); border-radius: 8px;">
-            <strong>📝 Note :</strong>
+            <strong>📝 ${typeof window.i18nT === 'function' ? window.i18nT('progression_note_label') : 'Note :'}</strong>
             <p style="margin: 5px 0 0; color: var(--text-secondary);">${session.note}</p>
           </div>
         ` : ''}
       </div>
       <div class="modal-footer">
-        <button class="modal-btn cancel" onclick="document.getElementById('bestSessionModal').remove()">Fermer</button>
-        <button class="modal-btn submit" onclick="loadSession(${session.id}); document.getElementById('bestSessionModal').remove();">
-          📥 Charger cette session
+        <button class="modal-btn cancel" onclick="document.getElementById('bestSessionModal').remove()">${typeof window.i18nT === 'function' ? window.i18nT('close') : 'Fermer'}</button>
+        <button class="modal-btn submit" onclick="loadSession(${typeof attrSessionId === 'function' ? attrSessionId(session.id) : JSON.stringify(String(session.id))}); document.getElementById('bestSessionModal').remove();">
+          📥 ${typeof window.i18nT === 'function' ? window.i18nT('progression_load_session') : 'Charger cette session'}
         </button>
       </div>
     </div>
@@ -641,4 +658,3 @@ function showBestSessionDetails(session, previousSession, honorGain, xpGain, ran
   });
 }
 
-console.log('📈 Module Progression chargé');

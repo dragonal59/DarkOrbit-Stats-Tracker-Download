@@ -1,0 +1,40 @@
+{
+  "id": "agatus_breach",
+  "visible": true,
+  "image": "img/events/agatus_breach.jpg",
+  "names": {
+    "fr": "Brèche d'Agatus",
+    "en": "Agatus Breach",
+    "de": "Agatus-Bruch",
+    "es": "Brecha de Agatus",
+    "ru": "Вторжение Агатус",
+    "tr": "Agatus İhlali"
+  },
+  "descriptions": {
+    "fr": "Le plan de construction éclat d'agate Tyrannos Disruptor a été ajouté à l'Assemblage. Pourchassez des Agatus, récupérez des éclats d'agate et utilisez-les pour confectionner des recettes spéciales !",
+    "en": "The Tyrannos Disruptor Agate Splinter Blueprint has been added to the assembly. Hunt down some Agatus aliens, collect Agate Splinters and use them to craft special recipes!",
+    "de": "Der Tyrannos Disruptor Achat-Splitter-Bauplan wurde der Montage hinzugefügt. Jage Agatus-Aliens, sammle Achat-Splitter und nutze sie, um spezielle Rezepte herzustellen!",
+    "es": "¡El Plano de Astilla de Ágata Tyrannos Disruptor ha sido añadido al ensamblaje. ¡Caza alienígenas Agatus, recoge Astillas de Ágata y úsalas para crear recetas especiales!",
+    "ru": "Чертёж Осколка агата Тираннос Дисраптор добавлен в сборку. Охотьтесь на пришельцев Агатус, собирайте Осколки агата и используйте их для создания особых рецептов!",
+    "tr": "Tyrannos Disruptor Akik Kıymığı Planı montaja eklendi. Agatus uzaylılarını avlayın, Akik Kıymıkları toplayın ve özel tarifler oluşturmak için kullanın!"
+  },
+  "keywords": [
+    "agatus breach",
+    "brèche d'agatus",
+    "agatus-bruch",
+    "brecha de agatus",
+    "вторжение агатус",
+    "agatus ihlali",
+    "agatus",
+    "agate splinter",
+    "éclat d'agate",
+    "tyrannos disruptor"
+  ],
+  "exclude_keywords": [
+    "obsidian box",
+    "apocalypse box",
+    "r&b box",
+    "immortal union",
+    "trinity trials"
+  ]
+}

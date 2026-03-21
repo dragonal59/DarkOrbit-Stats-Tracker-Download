@@ -5,6 +5,7 @@
 function setTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
   SafeStorage.set(CONFIG.STORAGE_KEYS.THEME, theme);
+  if (typeof DataSync !== 'undefined' && DataSync.syncSettingsOnly) DataSync.syncSettingsOnly().catch(() => {});
   
   // Mettre à jour les boutons
   document.querySelectorAll('.theme-btn').forEach(btn => {
@@ -34,6 +35,7 @@ function loadTheme() {
 function setViewMode(mode) {
   document.documentElement.setAttribute('data-view-mode', mode);
   SafeStorage.set(CONFIG.STORAGE_KEYS.VIEW_MODE, mode);
+  if (typeof DataSync !== 'undefined' && DataSync.syncSettingsOnly) DataSync.syncSettingsOnly().catch(() => {});
   
   // Mettre à jour les boutons
   document.querySelectorAll('.view-mode-btn').forEach(btn => {
@@ -50,5 +52,3 @@ function loadViewMode() {
   const savedMode = SafeStorage.get(CONFIG.STORAGE_KEYS.VIEW_MODE, CONFIG.DEFAULTS.VIEW_MODE);
   setViewMode(savedMode);
 }
-
-console.log('🎨 Module Theme chargé');

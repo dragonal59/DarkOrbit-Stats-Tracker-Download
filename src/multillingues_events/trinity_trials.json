@@ -1,0 +1,36 @@
+{
+  "id": "trinity_trials",
+  "visible": true,
+  "image": "img/events/trinity_trials.jpg",
+  "names": {
+    "fr": "Épreuves de la Trinité",
+    "en": "Trinity Trials",
+    "de": "Trinity-Prüfungen",
+    "es": "Pruebas de la Trinidad",
+    "ru": "Испытания Троицы",
+    "tr": "Trinity Denemeleri"
+  },
+  "descriptions": {
+    "fr": "Bienvenue dans la nouvelle arène d'endurance pour pilotes ! Survivrez-vous assez longtemps pour décrocher les tout nouveaux canons à particules et réfracteurs de la Coalition humaine ? Il n'y a qu'un moyen de le savoir…",
+    "en": "Welcome to the brand-new pilot endurance arena! Will you survive long to unlock the Human Coalition's brand-new particle cannons and refractors? There's only one chance to find out…",
+    "de": "Willkommen in der brandneuen Ausdauerarena für Piloten! Wirst du lange genug überleben, um die brandneuen Partikelkanonen und Refraktoren der Menschlichen Koalition freizuschalten? Es gibt nur einen Weg, es herauszufinden…",
+    "es": "¡Bienvenido a la nueva arena de resistencia para pilotos! ¿Sobrevivirás el tiempo suficiente para desbloquear los nuevos cañones de partículas y refractores de la Coalición Humana? Solo hay una forma de averiguarlo…",
+    "ru": "Добро пожаловать на новую арену выносливости для пилотов! Выживете ли вы достаточно долго, чтобы разблокировать новые частичные пушки и рефракторы Человеческой Коалиции? Есть только один способ узнать…",
+    "tr": "Yepyeni pilot dayanıklılık arenasına hoş geldiniz! İnsan Koalisyonu'nun yeni parçacık toplarını ve refraktörlerini açmak için yeterince uzun süre hayatta kalabilecek misiniz? Bunu öğrenmenin tek bir yolu var…"
+  },
+  "keywords": [
+    "trinity trials",
+    "épreuves de la trinité",
+    "trinity-prüfungen",
+    "pruebas de la trinidad",
+    "pruebas de trinidad",
+    "испытания троицы",
+    "trinity denemeleri"
+  ],
+  "exclude_keywords": [
+    "immortal union",
+    "union immortelle",
+    "agatus breach",
+    "chinese new year"
+  ]
+}

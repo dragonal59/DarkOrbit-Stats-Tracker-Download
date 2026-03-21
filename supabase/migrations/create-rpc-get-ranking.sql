@@ -3,6 +3,8 @@
 -- Cohérent avec l'appel ranking.js : p_server, p_companies, p_type, p_limit
 -- ==========================================
 
+DROP FUNCTION IF EXISTS public.get_ranking(text, text[], text, integer);
+DROP FUNCTION IF EXISTS public.get_ranking(text, text[], text, int);
 CREATE OR REPLACE FUNCTION public.get_ranking(
   p_server TEXT DEFAULT NULL,
   p_companies TEXT[] DEFAULT NULL,

@@ -130,7 +130,7 @@ function calculateDailyGains(latestToday, reference) {
   };
 }
 
-window.getReferenceSessionForComparison = getReferenceSessionForComparison;
-window.calculateDailyGains = calculateDailyGains;
-window.getDayStart = getDayStart;
-console.log('📌 Module Reference Session chargé');
+// Exports retirés : aucune référence externe (grep projet entier).
+// Logique "Gain du jour" (réf = dernière session J-1 ou première du jour) reste dans ce module.
+// Si besoin ultérieur d’exposition, préférer reference-manager.js (getReferenceSession = session précédente chronologique).
+

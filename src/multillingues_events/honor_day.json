@@ -1,0 +1,49 @@
+{
+  "id": "honor_day",
+  "visible": true,
+  "image": "img/events/honor_day_2.jpg",
+  "names": {
+    "fr": "Journée double Honneur",
+    "en": "Honor Day",
+    "de": "Ehrentag",
+    "es": "Día del Honor",
+    "ru": "День Чести",
+    "tr": "Şeref Günü"
+  },
+  "descriptions": {
+    "fr": "Booster d'Honneur 50 % ! Achetez 5 000 Uridium et profitez d'un bonus de points d'Honneur pendant 24 heures !",
+    "en": "Grab a 50% honor booster! Order 5,000 Uridium today and benefit from extra honor for 24 hours!",
+    "de": "50% Ehren-Booster! Kaufe 5.000 Uridium und profitiere 24 Stunden lang von zusätzlichen Ehrenpunkten!",
+    "es": "¡Potenciador de Honor al 50%! ¡Compra 5.000 Uridium hoy y disfruta de puntos de Honor adicionales durante 24 horas!",
+    "ru": "Бустер Чести 50%! Купите 5 000 Уридиума и получайте бонусные очки Чести в течение 24 часов!",
+    "tr": "50% Şeref Güçlendirici! 5.000 Uridium satın alın ve 24 saat boyunca ekstra Şeref puanı kazanın!"
+  },
+  "keywords": [
+    "honor day",
+    "journée double honneur",
+    "ehrentag",
+    "día del honor",
+    "день чести",
+    "şeref günü",
+    "honor booster",
+    "booster honneur"
+  ],
+  "exclude_keywords": [
+    "xp day",
+    "journée double xp",
+    "día de la experiencia",
+    "experience day",
+    "experience tag",
+    "ascend",
+    "ascension",
+    "ascenso",
+    "aufstieg",
+    "восхождение",
+    "yükseliş",
+    "helix",
+    "blitz",
+    "new dawn",
+    "galaxy trek",
+    "stellar pathfinder"
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "id": "galaxy_gate_doubler",
+  "visible": true,
+  "image": "img/events/galaxy_gates_double_reward.jpg",
+  "names": {
+    "fr": "Double Gain aux Portails",
+    "en": "Galaxy Gate Doubler",
+    "de": "Doppelter Gewinn an den Portalen",
+    "es": "Doble: Puerta Galáctica",
+    "ru": "Двойной выигрыш у врат галактики",
+    "tr": "Galaktik Kapı İkiye Katlayıcı"
+  },
+  "descriptions": {
+    "fr": "En ce jour spécial, les portails intergalactiques offrent le double de récompenses. Êtes-vous le genre de pilote à vouloir récolter ces récompenses ? Nous pensons que oui !",
+    "en": "On this special day the Galaxy Gates are granting double the rewards. Are you the type of pilot to reap these rewards? We think you are!",
+    "de": "An diesem besonderen Tag gewähren die Galaxietore doppelte Belohnungen. Bist du der Typ Pilot, der diese Belohnungen ernten will? Wir denken schon!",
+    "es": "En este día especial, las puertas galácticas otorgan el doble de recompensas. ¿Eres el tipo de piloto que quiere cosechar estas recompensas? ¡Creemos que sí!",
+    "ru": "В этот особый день галактические врата дарят двойные награды. Вы тот пилот, который хочет их получить? Мы думаем, да!",
+    "tr": "Bu özel günde Galaktik Kapılar çift ödül veriyor. Bu ödülleri toplamak isteyen türden bir pilot musun? Biz öyle olduğunu düşünüyoruz!"
+  },
+  "keywords": [
+    "galaxy gate doubler",
+    "double gain aux portails",
+    "doble puerta galáctica",
+    "doppelter gewinn an den portalen",
+    "двойной выигрыш у врат галактики",
+    "galaktik kapı ikiye katlayıcı",
+    "double gain",
+    "doubler",
+    "doppelter",
+    "двойной",
+    "ikiye"
+  ],
+  "exclude_keywords": [
+    "galaxy gate weekend",
+    "week-end portails",
+    "weekend",
+    "wochenende",
+    "haftasonu",
+    "выходные",
+    "fin de semana",
+    "special rewards day",
+    "journée de récompenses spéciales",
+    "enhanced lf-4",
+    "lf-4 amélioré",
+    "g-champion",
+    "dispatch day",
+    "jour de l'expédition"
+  ]
+}

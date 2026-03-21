@@ -1,0 +1,14 @@
+-- Consolidation : permissions_config (src/backend/supabase-rpc-permissions.sql)
+-- Table référencée par get_user_permissions, security-step2, etc.
+CREATE TABLE IF NOT EXISTS public.permissions_config (
+  badge TEXT PRIMARY KEY,
+  features JSONB NOT NULL DEFAULT '{}',
+  tabs TEXT[] NOT NULL DEFAULT '{}'
+);
+
+INSERT INTO public.permissions_config (badge, features, tabs) VALUES
+('FREE', '{"statsPersonal":true,"progressionPersonal":true,"historyPersonal":true,"eventsSidebarReadOnly":true,"notificationsWindows":false,"boosterDisplay":false,"usefulLinks":false,"autoSave":false,"streakCounter":false,"eventsTab":false,"eventsCreateEdit":false,"eventsSidebarAddButton":false,"eventsSidebarViewAllButton":false,"dashboardTab":false,"dashboardAdmin":false,"dashboardBanUnban":false,"dashboardPromoteDemote":false,"dashboardViewAdminLogs":false,"advancedStats":false,"customThemes":false,"dataExport":false}'::jsonb, ARRAY['stats','progression','history','settings']),
+('PRO', '{"statsPersonal":true,"progressionPersonal":true,"historyPersonal":true,"eventsSidebarReadOnly":true,"notificationsWindows":true,"boosterDisplay":true,"usefulLinks":true,"autoSave":true,"streakCounter":true,"eventsTab":false,"eventsCreateEdit":false,"eventsSidebarAddButton":false,"eventsSidebarViewAllButton":false,"dashboardTab":false,"dashboardAdmin":false,"dashboardBanUnban":false,"dashboardPromoteDemote":false,"dashboardViewAdminLogs":false,"advancedStats":true,"customThemes":true,"dataExport":true}'::jsonb, ARRAY['stats','progression','history','settings']),
+('ADMIN', '{"statsPersonal":true,"progressionPersonal":true,"historyPersonal":true,"eventsSidebarReadOnly":true,"notificationsWindows":true,"boosterDisplay":true,"usefulLinks":true,"autoSave":true,"streakCounter":true,"eventsTab":true,"eventsCreateEdit":true,"eventsSidebarAddButton":true,"eventsSidebarViewAllButton":true,"dashboardTab":true,"dashboardAdmin":true,"dashboardBanUnban":true,"dashboardPromoteDemote":false,"dashboardViewAdminLogs":false,"advancedStats":true,"customThemes":true,"dataExport":true}'::jsonb, ARRAY['stats','progression','history','events','settings','superadmin']),
+('SUPERADMIN', '{"statsPersonal":true,"progressionPersonal":true,"historyPersonal":true,"eventsSidebarReadOnly":true,"notificationsWindows":true,"boosterDisplay":true,"usefulLinks":true,"autoSave":true,"streakCounter":true,"eventsTab":true,"eventsCreateEdit":true,"eventsSidebarAddButton":true,"eventsSidebarViewAllButton":true,"dashboardTab":true,"dashboardAdmin":true,"dashboardBanUnban":true,"dashboardPromoteDemote":true,"dashboardViewAdminLogs":true,"advancedStats":true,"customThemes":true,"dataExport":true}'::jsonb, ARRAY['stats','progression','history','events','settings','superadmin'])
+ON CONFLICT (badge) DO UPDATE SET features = EXCLUDED.features, tabs = EXCLUDED.tabs;

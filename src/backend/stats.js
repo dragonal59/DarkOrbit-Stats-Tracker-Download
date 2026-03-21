@@ -77,28 +77,29 @@ const debouncedUpdateDisplay = debounce(updateStatsDisplay, CONFIG.UI.DEBOUNCE_D
 // ==========================================
 
 function getCurrentStats() {
-  const selected = document.getElementById("selected");
-  const currentRankText = selected.innerText.trim();
-  const currentRank = currentRankText === "Sélectionner votre grade actuel" ? "" : currentRankText;
-  
-  const note = document.getElementById("sessionNote").value.trim();
-  
-  // Validate note length
-  if (note.length > CONFIG.LIMITS.MAX_NOTE_LENGTH) {
-    showToast(`⚠️ Note trop longue (max ${CONFIG.LIMITS.MAX_NOTE_LENGTH} caractères)`, "warning");
+  const honorEl = document.getElementById("honor");
+  if (!honorEl) {
+    const stored = SafeStorage.get(CONFIG.STORAGE_KEYS.CURRENT_STATS);
+    if (stored && (stored.currentRank || stored.honor != null || stored.xp != null))
+      return { ...stored, timestamp: Date.now() };
+    const last = getLastSessionStats();
+    if (last) return { ...last, timestamp: Date.now() };
+    return { honor: 0, xp: 0, rankPoints: 0, nextRankPoints: 0, currentRank: 'Inconnu', note: '', timestamp: Date.now() };
   }
-  
-  const rawHonor = parseFormattedNumber(document.getElementById("honor").value);
-  const rawXp = parseFormattedNumber(document.getElementById("xp").value);
-  const rawRankPoints = parseFormattedNumber(document.getElementById("rankPoints").value);
-  const rawNextRankPoints = parseFormattedNumber(document.getElementById("nextRankPoints").value);
+  const selected = document.getElementById("selected");
+  const currentRankText = selected ? selected.innerText.trim() : '';
+  const currentRank = currentRankText === "Sélectionner votre grade actuel" ? "" : currentRankText;
+  const rawHonor = parseFormattedNumber(honorEl.value || '');
+  const rawXp = parseFormattedNumber((document.getElementById("xp") || {}).value || '');
+  const rawRankPoints = parseFormattedNumber((document.getElementById("rankPoints") || {}).value || '');
+  const rawNextRankPoints = parseFormattedNumber((document.getElementById("nextRankPoints") || {}).value || '');
   return {
     honor: Math.max(0, rawHonor),
     xp: Math.max(0, rawXp),
     rankPoints: Math.max(0, rawRankPoints),
     nextRankPoints: Math.max(0, rawNextRankPoints),
     currentRank: sanitizeHTML(currentRank),
-    note: sanitizeHTML(note.substring(0, CONFIG.LIMITS.MAX_NOTE_LENGTH)),
+    note: '',
     timestamp: Date.now()
   };
 }
@@ -135,8 +136,8 @@ function getDisplayStats() {
 }
 
 function getLastSessionStats() {
-  const sessions = SafeStorage.get(CONFIG.STORAGE_KEYS.SESSIONS, []);
-  if (!sessions.length) return null;
+  var sessions = typeof getSessions === 'function' ? getSessions() : [];
+  if (!sessions || !sessions.length) return null;
   
   return sessions.reduce((latest, session) => {
     return session.timestamp > latest.timestamp ? session : latest;
@@ -190,7 +191,7 @@ function saveCurrentStats() {
   const result = SafeStorage.set(CONFIG.STORAGE_KEYS.CURRENT_STATS, stats);
   
   if (!result.success) {
-    console.error('Failed to save current stats');
+    Logger.error('Failed to save current stats');
   }
 }
 
@@ -199,14 +200,20 @@ function loadCurrentStats() {
   const selected = document.getElementById("selected");
   
   if (stats && (stats.honor != null || stats.xp != null || stats.currentRank)) {
-    document.getElementById("honor").value = stats.honor != null ? numFormat(stats.honor) : '';
-    document.getElementById("xp").value = stats.xp != null ? numFormat(stats.xp) : '';
-    document.getElementById("rankPoints").value = stats.rankPoints != null ? numFormat(stats.rankPoints) : '';
-    document.getElementById("nextRankPoints").value = stats.nextRankPoints != null ? numFormat(stats.nextRankPoints) : '';
-    document.getElementById("sessionNote").value = stats.note || '';
+    const honorEl = document.getElementById("honor");
+    const xpEl = document.getElementById("xp");
+    const rpEl = document.getElementById("rankPoints");
+    const nrpEl = document.getElementById("nextRankPoints");
+    const noteEl = document.getElementById("sessionNote");
+    if (honorEl) honorEl.value = stats.honor != null ? numFormat(stats.honor) : '';
+    if (xpEl) xpEl.value = stats.xp != null ? numFormat(stats.xp) : '';
+    if (rpEl) rpEl.value = stats.rankPoints != null ? numFormat(stats.rankPoints) : '';
+    if (nrpEl) nrpEl.value = stats.nextRankPoints != null ? numFormat(stats.nextRankPoints) : '';
+    if (noteEl) noteEl.value = stats.note || '';
     
     if (stats.currentRank && selected) {
-      const rankData = RANKS_DATA.find(r => r.name === stats.currentRank);
+      const cr = typeof stats.currentRank === 'string' && stats.currentRank.startsWith('rank_') ? (RANK_KEY_TO_RANK_NAME[stats.currentRank] || stats.currentRank) : stats.currentRank;
+      const rankData = RANKS_DATA.find(r => r.name === cr || r.rank === cr);
       if (rankData) {
         selected.innerHTML = `<div class="selected-rank">
           <div class="grade-block">
@@ -228,14 +235,13 @@ function loadCurrentStats() {
       const xpEl = document.getElementById("xp");
       const rankPointsEl = document.getElementById("rankPoints");
       const nextRankPointsEl = document.getElementById("nextRankPoints");
-      const sessionNoteEl = document.getElementById("sessionNote");
       if (honorEl) honorEl.value = lastSession.honor != null && lastSession.honor !== '' ? numFormat(lastSession.honor) : '';
       if (xpEl) xpEl.value = lastSession.xp != null && lastSession.xp !== '' ? numFormat(lastSession.xp) : '';
       if (rankPointsEl) rankPointsEl.value = lastSession.rankPoints != null && lastSession.rankPoints !== '' ? numFormat(lastSession.rankPoints) : '';
       if (nextRankPointsEl) nextRankPointsEl.value = lastSession.nextRankPoints != null && lastSession.nextRankPoints !== '' ? numFormat(lastSession.nextRankPoints) : '';
-      if (sessionNoteEl) sessionNoteEl.value = lastSession.note || '';
       if (lastSession.currentRank && selected) {
-        const rankData = RANKS_DATA.find(r => r.name === lastSession.currentRank);
+        const cr = typeof lastSession.currentRank === 'string' && lastSession.currentRank.startsWith('rank_') ? (RANK_KEY_TO_RANK_NAME[lastSession.currentRank] || lastSession.currentRank) : lastSession.currentRank;
+        const rankData = RANKS_DATA.find(r => r.name === cr || r.rank === cr);
         if (rankData) {
           selected.innerHTML = `<div class="selected-rank">
             <div class="grade-block">
@@ -271,8 +277,8 @@ function loadCurrentStats() {
 
 function updateStatsDisplay() {
   const headerStats = getHeaderStatsSource();
-  const sessions = SafeStorage.get(CONFIG.STORAGE_KEYS.SESSIONS, []);
-  const hasSessions = sessions && sessions.length > 0;
+  var sessions = typeof getSessions === 'function' ? getSessions() : [];
+  var hasSessions = sessions && sessions.length > 0;
   let stats = (headerStats && hasSessions) ? headerStats : getDisplayStats();
   if (stats) {
     stats = {
@@ -289,12 +295,16 @@ function updateStatsDisplay() {
   
   if (!stats || !stats.currentRank) {
     if (hasSessions) {
-      statsPanel.style.display = 'block';
-      document.getElementById("honorDisplay").textContent = "-";
-      document.getElementById("xpDisplay").textContent = "-";
-      document.getElementById("rankPointsDisplay").textContent = "-";
-      document.getElementById("levelDisplay").textContent = "-";
-      document.getElementById("currentLevel").value = '';
+      if (statsPanel) statsPanel.style.display = 'block';
+      const honorD = document.getElementById("honorDisplay");
+      const xpD = document.getElementById("xpDisplay");
+      const rpD = document.getElementById("rankPointsDisplay");
+      const lvlD = document.getElementById("levelDisplay");
+      if (honorD) honorD.textContent = "-";
+      if (xpD) xpD.textContent = "-";
+      if (rpD) rpD.textContent = "-";
+      if (lvlD) lvlD.textContent = "-";
+      var clEmpty = document.getElementById("currentLevel"); if (clEmpty) clEmpty.value = '';
       const rankImg = document.getElementById("currentRankImg");
       const rankName = document.getElementById("currentRankName");
       if (rankImg) {
@@ -311,26 +321,31 @@ function updateStatsDisplay() {
       if (nextRankText) {
         nextRankText.textContent = "-";
       }
-      document.getElementById("rankProgress").textContent = "0%";
-      document.getElementById("rankBar").style.width = "0%";
-      document.getElementById("rankDetails").textContent = "-";
-      document.getElementById("levelProgress").textContent = "0%";
-      document.getElementById("levelBar").style.width = "0%";
-      document.getElementById("levelDetails").textContent = "-";
+      const setT = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+      const setW = (id, v) => { const e = document.getElementById(id); if (e) e.style.width = v; };
+      setT("rankProgress", "0%"); setW("rankBar", "0%"); setT("rankDetails", "-");
+      setT("levelProgress", "0%"); setW("levelBar", "0%"); setT("levelDetails", "-");
+      var nk = document.getElementById('npcKillsDisplay');
+      var sk = document.getElementById('shipKillsDisplay');
+      var gg = document.getElementById('galaxyGatesDisplay');
+      if (nk) nk.textContent = '—';
+      if (sk) sk.textContent = '—';
+      if (gg) gg.textContent = '—';
     } else {
-      statsPanel.style.display = 'none';
+      if (statsPanel) statsPanel.style.display = 'none';
     }
     return;
   }
   
-  statsPanel.style.display = 'block';
+  if (statsPanel) statsPanel.style.display = 'block';
   
   // Update current stats display with image
-  const currentRankData = RANKS_DATA.find(r => r.name === stats.currentRank);
+  const cr = typeof stats.currentRank === 'string' && stats.currentRank.startsWith('rank_') ? (RANK_KEY_TO_RANK_NAME[stats.currentRank] || stats.currentRank) : stats.currentRank;
+  const currentRankData = RANKS_DATA.find(r => r.name === cr || r.rank === cr);
   if (currentRankData) {
     const rankImg = document.getElementById("currentRankImg");
     const rankName = document.getElementById("currentRankName");
-    rankImg.src = currentRankData.img;
+    if (rankImg) rankImg.src = currentRankData.img;
     rankImg.style.display = 'block';
     if (rankName) {
       rankName.textContent = currentRankData.name;
@@ -350,8 +365,10 @@ function updateStatsDisplay() {
   const currentLevel = getCurrentLevel(stats.xp);
   const nextLevelData = getNextLevel(stats.xp);
   
-  document.getElementById("currentLevel").value = `Niveau ${currentLevel}`;
-  document.getElementById("levelDisplay").textContent = `Niveau ${currentLevel}`;
+  const clEl = document.getElementById("currentLevel");
+  const ldEl = document.getElementById("levelDisplay");
+  if (clEl) clEl.value = `Niveau ${currentLevel}`;
+  if (ldEl) ldEl.textContent = `Niveau ${currentLevel}`;
   
   const honorVal = Number(stats.honor);
   const xpVal = Number(stats.xp);
@@ -360,6 +377,14 @@ function updateStatsDisplay() {
   document.getElementById("honorDisplay").textContent = formatNumberDisplay(honorVal);
   document.getElementById("xpDisplay").textContent = formatNumberDisplay(xpVal);
   document.getElementById("rankPointsDisplay").textContent = formatNumberDisplay(rankPointsVal);
+
+  if (typeof updateCurrentPlayerRankingCounters === 'function') {
+    Promise.resolve(updateCurrentPlayerRankingCounters()).catch(function (e) {
+      if (typeof window !== 'undefined' && window.DEBUG && typeof Logger !== 'undefined' && Logger.warn) {
+        Logger.warn('[Stats] updateCurrentPlayerRankingCounters:', e && e.message ? e.message : e);
+      }
+    });
+  }
   
   // Calculate progress to next rank
   const currentRankIndex = RANKS_DATA.indexOf(currentRankData);
@@ -441,15 +466,12 @@ function updateHeaderProgressBar(data) {
   
   if (!data || !data.currentRank) {
     progressBar.style.display = 'none';
-    if (typeof CONFIG !== 'undefined' && CONFIG.DEBUG?.progression) {
-      console.log('[Progression] updateHeaderProgressBar: masqué (pas de data ou currentRank)');
-    }
     return;
   }
-  
+  const cr = typeof data.currentRank === 'string' && data.currentRank.startsWith('rank_') ? (RANK_KEY_TO_RANK_NAME[data.currentRank] || data.currentRank) : data.currentRank;
   progressBar.style.display = 'block';
   
-  const currentRankData = RANKS_DATA.find(r => r.name === data.currentRank);
+  const currentRankData = RANKS_DATA.find(r => r.name === cr || r.rank === cr);
   const currentRankIndex = currentRankData ? RANKS_DATA.indexOf(currentRankData) : -1;
   const nextRankData = currentRankIndex >= 0 && currentRankIndex < RANKS_DATA.length - 1
     ? RANKS_DATA[currentRankIndex + 1]
@@ -480,7 +502,7 @@ function updateHeaderProgressBar(data) {
       currentName.textContent = data.currentRank;
     }
   }
-  
+
   if (nextRankData) {
     if (nextImg) {
       nextImg.src = nextRankData.img;
@@ -533,16 +555,127 @@ function updateHeaderProgressBar(data) {
     }
   }
   
-  if (typeof CONFIG !== 'undefined' && CONFIG.DEBUG?.progression) {
-    const pctEl = document.getElementById('headerProgressPercent');
-    const fillEl = document.getElementById('headerProgressFill');
-    console.log('[Progression] updateHeaderProgressBar:', {
-      rank: data.currentRank,
-      rankPoints: data.rankPoints,
-      nextRankPoints: data.nextRankPoints,
-      affiché: pctEl?.textContent || fillEl?.style?.width
-    });
+}
+
+/**
+ * Met à jour les compteurs aliens / vaisseaux / Galaxy Gates
+ * pour le joueur actif.
+ *
+ * Ordre de priorité pour la source de données :
+ *   1) Table player_profiles (profil DOStats du joueur actif : player_id + server)
+ *   2) Snapshots importés localement (getImportedRanking)
+ *   3) Dernier classement affiché en mémoire (_lastRankingData)
+ *   4) Appel loadRanking(server actif, type 'honor')
+ */
+async function updateCurrentPlayerRankingCounters() {
+  var npcEl = document.getElementById('npcKillsDisplay');
+  var shipEl = document.getElementById('shipKillsDisplay');
+  var ggEl = document.getElementById('galaxyGatesDisplay');
+  if (!npcEl || !shipEl || !ggEl) return;
+
+  var setAll = function (v) {
+    npcEl.textContent = v;
+    shipEl.textContent = v;
+    ggEl.textContent = v;
+  };
+
+  // 1) Récupérer un joueur actif fiable (cache sync, puis async si nécessaire)
+  var active = (typeof UserPreferencesAPI !== 'undefined' && typeof UserPreferencesAPI.getActivePlayerInfoSync === 'function')
+    ? UserPreferencesAPI.getActivePlayerInfoSync()
+    : null;
+  if (!active && typeof UserPreferencesAPI !== 'undefined' && typeof UserPreferencesAPI.getActivePlayerInfo === 'function') {
+    try {
+      active = await UserPreferencesAPI.getActivePlayerInfo();
+    } catch (e) {}
   }
+  if (!active) {
+    setAll('—');
+    return;
+  }
+
+  var pseudo = (active.player_pseudo || '').toString().trim();
+  var playerId = (active.player_id || '').toString().trim();
+  var serverCode = (active.player_server || '').toString().trim().toLowerCase();
+  if (!playerId || !serverCode) {
+    setAll('—');
+    return;
+  }
+  var pseudoNorm = pseudo.toLowerCase();
+
+  function findPlayerInList(list) {
+    if (!Array.isArray(list)) return null;
+    for (var i = 0; i < list.length; i++) {
+      var row = list[i];
+      if (!row) continue;
+      var pPseudo = (row.game_pseudo || row.name || '').toString().trim().toLowerCase();
+      var pServer = ((row._server || row.server) || '').toString().trim().toLowerCase();
+      if (pPseudo === pseudoNorm && pServer === serverCode) return row;
+    }
+    return null;
+  }
+
+  var row = null;
+
+  // 2) Priorité 1 : profil DOStats du joueur actif dans player_profiles (user_id DO + server)
+  var supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+  if (supabase) {
+    try {
+      var ppRes = await supabase
+        .from('player_profiles')
+        .select('npc_kills, ship_kills, galaxy_gates, server')
+        .eq('user_id', playerId)
+        .eq('server', serverCode)
+        .single();
+      var profileRow = ppRes && !ppRes.error ? ppRes.data : null;
+      if (profileRow) {
+        var npcP = profileRow.npc_kills != null ? Number(profileRow.npc_kills) : null;
+        var shipsP = profileRow.ship_kills != null ? Number(profileRow.ship_kills) : null;
+        var gatesP = profileRow.galaxy_gates != null ? Number(profileRow.galaxy_gates) : null;
+        if (npcP != null || shipsP != null || gatesP != null) {
+          npcEl.textContent = npcP != null ? formatNumberDisplay(npcP) : '—';
+          shipEl.textContent = shipsP != null ? formatNumberDisplay(shipsP) : '—';
+          ggEl.textContent = gatesP != null ? formatNumberDisplay(gatesP) : '—';
+          return;
+        }
+      }
+    } catch (e) {
+      // en cas d'erreur, on tombera en fallback sur les classements
+    }
+  }
+
+  // 3) Priorité 2 : données importées localement (snapshots complets)
+  if (typeof getImportedRanking === 'function') {
+    try {
+      var imported = getImportedRanking(serverCode, 'honor');
+      row = findPlayerInList(imported);
+    } catch (e) {}
+  }
+
+  // 4) Priorité 3 : dernier classement affiché (_lastRankingData)
+  if (!row && typeof _lastRankingData !== 'undefined' && Array.isArray(_lastRankingData) && _lastRankingData.length > 0) {
+    row = findPlayerInList(_lastRankingData);
+  }
+
+  // 5) Priorité 4 : loadRanking côté backend (type honor, pour ne pas restreindre aux top NPC)
+  if (!row && typeof loadRanking === 'function') {
+    try {
+      var rows = await loadRanking({ server: serverCode, type: 'honor', limit: 500 });
+      row = findPlayerInList(rows);
+    } catch (e) {}
+  }
+
+  if (!row) {
+    setAll('—');
+    return;
+  }
+
+  var npc = row.npc_kills != null ? Number(row.npc_kills) : null;
+  var ships = row.ship_kills != null ? Number(row.ship_kills) : null;
+  var gates = row.galaxy_gates != null ? Number(row.galaxy_gates) : null;
+
+  npcEl.textContent = npc != null ? formatNumberDisplay(npc) : '—';
+  shipEl.textContent = ships != null ? formatNumberDisplay(ships) : '—';
+  ggEl.textContent = gates != null ? formatNumberDisplay(gates) : '—';
 }
 
 // ==========================================
@@ -565,18 +698,10 @@ function getNextLevel(currentXp) {
 }
 
 function getNextRank(current) {
-  const currentIndex = RANKS_DATA.findIndex(r => r.name === current);
+  const c = typeof current === 'string' && current.startsWith('rank_') ? (RANK_KEY_TO_RANK_NAME[current] || current) : current;
+  const currentIndex = RANKS_DATA.findIndex(r => r.name === c || r.rank === c);
   if (currentIndex === -1 || currentIndex === RANKS_DATA.length - 1) return '';
   return RANKS_DATA[currentIndex + 1].name;
 }
 
-function formatNumberDisplay(num) {
-  const value = Number(num);
-  if (!Number.isFinite(value)) return '-';
-  if (value < 0) return '0';
-  return numFormat(value);
-}
-
 if (typeof window !== 'undefined') window.numFormat = numFormat;
-
-console.log('📊 Module Stats chargé');

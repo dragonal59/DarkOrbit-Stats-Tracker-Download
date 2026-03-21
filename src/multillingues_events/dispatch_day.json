@@ -1,0 +1,41 @@
+{
+  "id": "dispatch_day",
+  "visible": true,
+  "image": "img/events/dispatch_day.jpg",
+  "names": {
+    "fr": "Jour de l'expédition",
+    "en": "Dispatch Day",
+    "de": "Einsatztag",
+    "es": "Día de Despacho",
+    "ru": "День Отправки",
+    "tr": "Görev Günü"
+  },
+  "descriptions": {
+    "fr": "Les Rapporteurs profitent des conditions spatiales avantageuses pour travailler plus efficacement que jamais. Ainsi, les envois de Rapporteurs et les expéditions au Portail rapportent des récompenses supplémentaires. C'est le moment ou jamais de solliciter leurs services !",
+    "en": "In lieu of the good space conditions, we've seen that the Retrievers are able to work more efficiently than before. As such, both Gate and Retriever Dispatch are to yield extra rewards. Now's the best time to employ their services!",
+    "de": "Die günstigen Weltraumbedingungen ermöglichen es den Retrievern, effizienter als je zuvor zu arbeiten. Sowohl Gate- als auch Retriever-Einsätze bringen zusätzliche Belohnungen. Jetzt ist der beste Zeitpunkt, ihre Dienste in Anspruch zu nehmen!",
+    "es": "¡Las buenas condiciones espaciales permiten a los Recuperadores trabajar más eficientemente que nunca. Tanto los Despachos de Portales como los de Recuperadores ofrecen recompensas adicionales. ¡Es el mejor momento para emplear sus servicios!",
+    "ru": "Благоприятные космические условия позволяют Ретриверам работать эффективнее, чем когда-либо. Отправки через Врата и Ретриверы приносят дополнительные награды. Самое время воспользоваться их услугами!",
+    "tr": "İyi uzay koşulları sayesinde Alıcılar her zamankinden daha verimli çalışabiliyor. Hem Kapı hem de Alıcı Görevleri ekstra ödüller sunuyor. Şimdi onların hizmetlerinden yararlanmak için en iyi zaman!"
+  },
+  "keywords": [
+    "dispatch day",
+    "jour de l'expédition",
+    "einsatztag",
+    "día de despacho",
+    "день отправки",
+    "görev günü",
+    "retriever",
+    "rapporteur",
+    "gate dispatch",
+    "expédition"
+  ],
+  "exclude_keywords": [
+    "galaxy gate weekend",
+    "galaxy gate doubler",
+    "double gain",
+    "week-end portails",
+    "enhanced lf4",
+    "lf-4"
+  ]
+}

@@ -3,11 +3,8 @@
 // Amélioration de Bug #12
 // ==========================================
 
-console.log('⌨️ Chargement de shortcuts-help-modal.js...');
-
 // Override de la fonction showShortcutsHelp pour utiliser une belle modal
 window.showShortcutsHelp = function() {
-  console.log('📖 Affichage de la modal raccourcis...');
   
   const modal = document.createElement('div');
   modal.id = 'shortcutsHelpModal';
@@ -78,7 +75,14 @@ window.showShortcutsHelp = function() {
   
   document.body.appendChild(modal);
   
+  // Déclaration anticipée pour que closeModal() puisse référencer escHandler
+  // même si celui-ci est défini après (évite le problème de TDZ avec const).
+  let escHandler;
+
   const closeModal = () => {
+    // Retrait systématique du handler Escape quelle que soit la façon dont
+    // la modal est fermée (bouton, overlay, touche Escape).
+    document.removeEventListener('keydown', escHandler);
     const overlay = modal.querySelector('.shortcuts-help-overlay');
     const content = modal.querySelector('.shortcuts-help-content');
     overlay?.classList.add('closing');
@@ -94,16 +98,15 @@ window.showShortcutsHelp = function() {
     modal.querySelector('.shortcuts-help-content').style.transform = 'scale(1)';
     modal.querySelector('.shortcuts-help-content').style.opacity = '1';
   }, 10);
-  
+
   // Fermer avec Escape
-  const escHandler = (e) => {
+  escHandler = (e) => {
     if (e.key === 'Escape') {
       closeModal();
-      document.removeEventListener('keydown', escHandler);
     }
   };
   document.addEventListener('keydown', escHandler);
-  
+
   // Fermer en cliquant sur l'overlay
   modal.querySelector('.shortcuts-help-overlay').addEventListener('click', (e) => {
     if (e.target === e.currentTarget) {
@@ -112,8 +115,12 @@ window.showShortcutsHelp = function() {
   });
 };
 
-// Styles
+// Styles — injection unique grâce à l'id 'shortcuts-modal-styles'.
+// Évite l'accumulation d'une balise <style> à chaque appel de showShortcutsHelp()
+// si le module est rechargé ou si la fonction est appelée au niveau module.
+if (!document.getElementById('shortcuts-modal-styles')) {
 const styles = document.createElement('style');
+styles.id = 'shortcuts-modal-styles';
 styles.textContent = `
   #shortcutsHelpModal {
     position: fixed;
@@ -262,5 +269,4 @@ styles.textContent = `
   }
 `;
 document.head.appendChild(styles);
-
-console.log('⌨️ Modal d\'aide raccourcis améliorée');
+}
