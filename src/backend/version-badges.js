@@ -23,8 +23,8 @@ const BADGE_LEVEL = Object.freeze({
 // Onglets de l'application (identifiants data-tab)
 const TABS = Object.freeze({
   STATS: 'stats',
-  PROGRESSION: 'progression',
   HISTORY: 'history',
+  PROGRESSION: 'progression',
   EVENTS: 'events',
   CLASSEMENT: 'classement',
   SETTINGS: 'settings',
@@ -34,17 +34,16 @@ const TABS = Object.freeze({
 
 // Onglets visibles par badge (FREE sans Événements, PRO/ADMIN/SUPERADMIN avec Événements)
 const BADGE_TABS = Object.freeze({
-  [BADGES.FREE]: [TABS.STATS, TABS.PROGRESSION, TABS.HISTORY, TABS.CLASSEMENT, TABS.SETTINGS],
-  [BADGES.PRO]: [TABS.STATS, TABS.PROGRESSION, TABS.HISTORY, TABS.CLASSEMENT, TABS.SETTINGS, TABS.COUPONS],
-  [BADGES.ADMIN]: [TABS.STATS, TABS.PROGRESSION, TABS.HISTORY, TABS.CLASSEMENT, TABS.SETTINGS, TABS.COUPONS, TABS.DASHBOARD],
-  [BADGES.SUPERADMIN]: [TABS.STATS, TABS.PROGRESSION, TABS.HISTORY, TABS.CLASSEMENT, TABS.SETTINGS, TABS.COUPONS, TABS.DASHBOARD]
+  [BADGES.FREE]: [TABS.STATS, TABS.HISTORY, TABS.PROGRESSION, TABS.CLASSEMENT, TABS.SETTINGS],
+  [BADGES.PRO]: [TABS.STATS, TABS.HISTORY, TABS.PROGRESSION, TABS.CLASSEMENT, TABS.SETTINGS, TABS.COUPONS],
+  [BADGES.ADMIN]: [TABS.STATS, TABS.HISTORY, TABS.PROGRESSION, TABS.CLASSEMENT, TABS.SETTINGS, TABS.COUPONS, TABS.DASHBOARD],
+  [BADGES.SUPERADMIN]: [TABS.STATS, TABS.HISTORY, TABS.PROGRESSION, TABS.CLASSEMENT, TABS.SETTINGS, TABS.COUPONS, TABS.DASHBOARD]
 });
 
 // Fonctionnalités par badge
 const BADGE_FEATURES = Object.freeze({
   [BADGES.FREE]: Object.freeze({
     statsPersonal: true,
-    progressionPersonal: true,
     historyPersonal: true,
     eventsSidebarReadOnly: true,
     notificationsWindows: false,
@@ -65,7 +64,6 @@ const BADGE_FEATURES = Object.freeze({
   }),
   [BADGES.PRO]: Object.freeze({
     statsPersonal: true,
-    progressionPersonal: true,
     historyPersonal: true,
     eventsSidebarReadOnly: true,
     notificationsWindows: true,
@@ -86,7 +84,6 @@ const BADGE_FEATURES = Object.freeze({
   }),
   [BADGES.ADMIN]: Object.freeze({
     statsPersonal: true,
-    progressionPersonal: true,
     historyPersonal: true,
     eventsSidebarReadOnly: true,
     notificationsWindows: true,
@@ -119,7 +116,6 @@ const BADGE_FEATURES = Object.freeze({
   }),
   [BADGES.SUPERADMIN]: Object.freeze({
     statsPersonal: true,
-    progressionPersonal: true,
     historyPersonal: true,
     eventsSidebarReadOnly: true,
     notificationsWindows: true,

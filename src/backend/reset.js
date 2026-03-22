@@ -54,8 +54,8 @@ async function hardReset() {
     if (selected) selected.innerHTML = "<span>Sélectionner votre grade actuel</span>";
 
     renderHistory();
+    if (typeof window.maybeRefreshProgression === 'function') window.maybeRefreshProgression();
     updateStatsDisplay();
-    updateProgressionTab();
     stopSessionTimer();
 
     setTheme(CONFIG.DEFAULTS.THEME);

@@ -90,8 +90,26 @@ function sanitizeAccount(input) {
 
 function withoutPassword(acc) {
   if (!acc) return null;
+  const has_password = !!acc.passwordEncrypted;
   const { passwordEncrypted, ...rest } = acc;
-  return rest;
+  return { ...rest, has_password };
+}
+
+/**
+ * Mot de passe d’un compte (pour affichage masqué dans Mon compte — même appareil que getActiveWithPassword).
+ */
+function getByIdWithPassword(id) {
+  if (!id || typeof id !== 'string') return { ok: false, error: 'id requis' };
+  const data = load();
+  const acc = (data.accounts || []).find(a => a.id === id);
+  if (!acc || !acc.passwordEncrypted) return { ok: true, password: null };
+  try {
+    const buf = Buffer.from(acc.passwordEncrypted, 'base64');
+    const password = safeStorage.decryptString(buf);
+    return { ok: true, password };
+  } catch (e) {
+    return { ok: false, error: e && e.message ? e.message : 'decrypt' };
+  }
 }
 
 function getAll() {
@@ -237,6 +255,7 @@ module.exports = {
   getAll,
   getActive,
   getActiveWithPassword,
+  getByIdWithPassword,
   add,
   setActive,
   remove,

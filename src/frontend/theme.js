@@ -17,10 +17,6 @@ function setTheme(theme) {
     themeBtn.classList.add('active');
   }
   
-  // Recréer le graphique avec les nouvelles couleurs
-  if (typeof refreshChartColors === 'function') {
-    refreshChartColors();
-  }
 }
 
 function loadTheme() {

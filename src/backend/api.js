@@ -216,7 +216,7 @@ const BackendAPI = {
         role: p?.role || 'USER',
         status: p?.status || 'active',
         features: features || {},
-        tabs: tabs || ['stats', 'progression', 'history', 'settings'],
+        tabs: tabs || ['stats', 'history', 'settings'],
         limits,
         source: 'fallback'
       };
@@ -226,7 +226,7 @@ const BackendAPI = {
       role: 'USER',
       status: 'active',
       features: {},
-      tabs: ['stats', 'progression', 'history', 'settings'],
+      tabs: ['stats', 'history', 'settings'],
       limits: { maxSessions: -1, exportFormats: ['json'] },
       source: 'default'
     };

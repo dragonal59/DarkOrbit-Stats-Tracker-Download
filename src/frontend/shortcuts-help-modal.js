@@ -36,10 +36,6 @@ window.showShortcutsHelp = function() {
               <span>Onglet Historique</span>
             </div>
             <div class="shortcut-item">
-              <kbd>Ctrl</kbd> + <kbd>P</kbd>
-              <span>Onglet Progression</span>
-            </div>
-            <div class="shortcut-item">
               <kbd>Ctrl</kbd> + <kbd>1</kbd>
               <span>Onglet Statistiques</span>
             </div>

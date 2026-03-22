@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="frontend/style.css">
   <link rel="stylesheet" href="frontend/events-style.css">
   <link rel="stylesheet" href="frontend/ranking-style.css">
+  <link rel="stylesheet" href="frontend/progression.css">
   <link rel="stylesheet" href="frontend/super-admin.css">
   <link rel="stylesheet" href="frontend/legal.css">
   <link rel="stylesheet" href="frontend/loading-screen.css">
@@ -70,7 +71,7 @@
           <li class="upgrade-pro-feature upgrade-pro-feature--strike">Stats de base</li>
           <li class="upgrade-pro-feature upgrade-pro-feature--strike">1 compte</li>
           <li class="upgrade-pro-feature upgrade-pro-feature--strike">Pas d'alertes boosters</li>
-          <li class="upgrade-pro-feature upgrade-pro-feature--strike">Pas d'events sidebar</li>
+          <li class="upgrade-pro-feature upgrade-pro-feature--strike">Sidebar événements (aperçu seulement)</li>
           <li class="upgrade-pro-feature upgrade-pro-feature--strike">Pas d'export</li>
         </ul>
       </div>
@@ -80,7 +81,7 @@
           <li class="upgrade-pro-feature"><span class="upgrade-pro-check">✅</span> Toutes les stats</li>
           <li class="upgrade-pro-feature"><span class="upgrade-pro-check">✅</span> Multi-comptes</li>
           <li class="upgrade-pro-feature"><span class="upgrade-pro-check">✅</span> Alertes boosters</li>
-          <li class="upgrade-pro-feature"><span class="upgrade-pro-check">✅</span> Events sidebar</li>
+          <li class="upgrade-pro-feature"><span class="upgrade-pro-check">✅</span> Sidebar événements + suivi joueurs (complet)</li>
           <li class="upgrade-pro-feature"><span class="upgrade-pro-check">✅</span> Export JSON/CSV</li>
           <li class="upgrade-pro-feature"><span class="upgrade-pro-check">✅</span> Support prioritaire</li>
         </ul>
@@ -176,9 +177,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <!-- 2. Config et client Supabase -->
 <script src="backend/supabase-config.js"></script>
-<script src="backend/supabase-client.js"></script>
-<!-- 2b. Clés centralisées (avant storage et sync) -->
 <script src="config/keys.js"></script>
+<script src="backend/supabase-client.js"></script>
 <script src="backend/translations.js"></script>
 <script src="backend/i18n.js"></script>
 <!-- 3. UnifiedStorage, auth, sync -->
@@ -348,9 +348,9 @@
   });
 })();
 </script>
-<!-- Librairies externes (Chart.js et Confetti) -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<!-- Librairies externes (Confetti) -->
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
 <div class="app-layout">
   <!-- PANNEAU LATÉRAL GAUCHE - BOOSTER (masqué par défaut, affiché uniquement si boosterDisplay) -->
@@ -447,8 +447,8 @@
   <!-- Onglets de navigation -->
   <div class="tabs">
     <button class="tab-btn active" data-tab="stats">📊 <span data-i18n="nav_stats">Statistiques</span></button>
-    <button class="tab-btn" data-tab="progression">📈 <span data-i18n="nav_progression">Progression</span></button>
     <button class="tab-btn" data-tab="history">📚 <span data-i18n="nav_history">Historique</span></button>
+    <button class="tab-btn" data-tab="progression">📈 <span data-i18n="nav_progression">Progression</span></button>
     <button class="tab-btn" data-tab="classement">🏆 <span data-i18n="nav_ranking">Classement</span></button>
     <button class="tab-btn" data-tab="coupons">🎫 <span data-i18n="nav_coupons">Coupons</span></button>
     <button class="tab-btn" data-tab="settings">⚙️ <span data-i18n="nav_settings">Paramètres</span></button>
@@ -458,8 +458,8 @@
   <!-- TAB 1: STATISTIQUES -->
   <div class="tab-content active" id="tab-stats">
 
-    <!-- Saisie manuelle (FREE uniquement) -->
-    <div class="stats-section" id="statsManualSection" style="display: none;">
+    <!-- Saisie manuelle : désactivée (tous badges utilisent la récupération auto ; champs conservés pour compat. scripts) -->
+    <div class="stats-section" id="statsManualSection" style="display: none;" aria-hidden="true">
       <h2>📝 <span data-i18n="add_session_manual">Ajouter une session (saisie manuelle)</span></h2>
       <p class="settings-description" style="margin-bottom: 16px;">Entrez vos statistiques actuelles pour enregistrer une session.</p>
       <div class="form-group" style="margin-bottom: 12px;">
@@ -489,10 +489,10 @@
     </div>
     
     <div class="stats-section" id="statsCollectAutoSection" style="display: none;">
-      <h2 style="margin: 0;">🎮 Récupérer mes stats</h2>
+      <h2 style="margin: 0;">🎮 <span data-i18n="stats_retrieve_my_stats_heading">Récupérer mes statistiques</span></h2>
       <p class="settings-description" style="margin: 8px 0 12px;"><span id="statsCollectHelpText"></span></p>
-      <button type="button" id="collectStatsFromGameBtn" class="btn-primary btn-compact">Récupérer mes stats</button>
-      <span id="collectStatsCooldownText" class="settings-description" style="margin-left: 8px;"></span>
+      <button type="button" id="collectStatsFromGameBtn" class="btn-primary btn-compact"><span data-i18n="stats_retrieve_my_stats_button">Récupérer mes statistiques</span></button>
+      <p id="collectStatsCooldownText" class="settings-description" style="margin: 10px 0 0; font-weight: 500;"></p>
       <div id="collectStatsProgressWrap" style="display: none; margin-top: 8px;">
         <div class="collect-stats-progress-bar" style="height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden;">
           <div id="collectStatsProgressFill" style="height: 100%; width: 0%; background: var(--accent); transition: width 0.3s;"></div>
@@ -525,19 +525,67 @@
       </div>
     </div>
 
-    <!-- Récap récolte (rempli après "Récupérer mes stats") -->
-    <div class="stats-section" id="statsRecapSection" style="display: none;">
-      <h2>📋 Vos statistiques</h2>
-      <div class="stats-recap" id="statsRecapContent">
-        <p><strong>Serveur</strong> : <span id="recapServer">—</span></p>
-        <p><strong>Pseudo</strong> : <span id="recapPseudo">—</span></p>
-        <p><strong>ID Joueur</strong> : <span id="recapPlayerId">—</span></p>
-        <p><strong>Firme</strong> : <span id="recapCompany">—</span></p>
-        <p><strong>Grade</strong> : <span id="recapGrade"></span></p>
-        <p><strong>Points d'expérience</strong> : <span id="recapXp">—</span></p>
-        <p><strong>Points d'honneur</strong> : <span id="recapHonor">—</span></p>
-        <p><strong>Points de grade</strong> : <span id="recapRankPoints">—</span></p>
-        <p><strong>Points avant prochain grade</strong> : <span id="recapNextRankPoints">—</span></p>
+    <!-- Récap récolte (overlay, auto-fermeture 30s — rempli après "Récupérer mes stats") -->
+    <div id="statsRecapOverlay" class="stats-recap-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="statsRecapTitle">
+      <div class="stats-recap-modal">
+        <button type="button" class="stats-recap-close" id="statsRecapCloseBtn" data-i18n-aria-label="stats_recap_close_aria" aria-label="Fermer">×</button>
+        <h2 id="statsRecapTitle" class="stats-recap-title">📋 <span data-i18n="stats_recap_title">Vos Statistiques</span></h2>
+
+        <div class="stats-recap-header">
+          <div class="stats-recap-header-block stats-recap-header-firm">
+            <span class="stats-recap-prefix" data-i18n="stats_recap_firm">Firme :</span>
+            <span id="recapCompanySlot" class="stats-recap-company-slot"></span>
+          </div>
+          <div class="stats-recap-header-block stats-recap-header-grade">
+            <span class="stats-recap-prefix" data-i18n="stats_recap_grade_colon">Grade :</span>
+            <span class="stats-recap-grade-slot">
+              <img id="recapGradeImg" class="stats-recap-grade-img" src="" alt="" title="" width="26" height="26" style="display: none;" />
+            </span>
+          </div>
+        </div>
+
+        <div class="stats-recap-mid" id="statsRecapContent">
+          <div class="stats-recap-mid-row">
+            <div class="stats-recap-cell stats-recap-cell--left">
+              <span class="stats-recap-label" data-i18n="stats_recap_server">Serveur</span>
+              <span class="stats-recap-value" id="recapServer">—</span>
+            </div>
+            <div class="stats-recap-cell stats-recap-cell--right">
+              <span class="stats-recap-label" data-i18n="points_xp">Points d'expérience</span>
+              <span class="stats-recap-value stats-recap-num" id="recapXp">—</span>
+            </div>
+          </div>
+          <div class="stats-recap-mid-row">
+            <div class="stats-recap-cell stats-recap-cell--left">
+              <span class="stats-recap-label" data-i18n="pseudo">Pseudo</span>
+              <span class="stats-recap-value" id="recapPseudo">—</span>
+            </div>
+            <div class="stats-recap-cell stats-recap-cell--right">
+              <span class="stats-recap-label" data-i18n="points_honor">Points d'honneur</span>
+              <span class="stats-recap-value stats-recap-num" id="recapHonor">—</span>
+            </div>
+          </div>
+          <div class="stats-recap-mid-row">
+            <div class="stats-recap-cell stats-recap-cell--left">
+              <span class="stats-recap-label" data-i18n="stats_recap_player_id">ID joueur</span>
+              <span class="stats-recap-value" id="recapPlayerId">—</span>
+            </div>
+            <div class="stats-recap-cell stats-recap-cell--right">
+              <span class="stats-recap-label" data-i18n="points_rank">Points de grade</span>
+              <span class="stats-recap-value stats-recap-num" id="recapRankPoints">—</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="stats-recap-sep" role="presentation"></div>
+
+        <div class="stats-recap-bottom">
+          <span class="stats-recap-label stats-recap-bottom-label" data-i18n="points_next_grade">Points avant le prochain grade</span>
+          <div class="stats-recap-bottom-line">
+            <span class="stats-recap-value stats-recap-num" id="recapNextRankPoints">—</span>
+            <img id="recapNextGradeImg" class="stats-recap-grade-img" src="" alt="" width="26" height="26" style="display: none;" />
+          </div>
+        </div>
       </div>
     </div>
 
@@ -620,6 +668,17 @@
           <div class="progress-details" id="rankDetails">-</div>
         </div>
 
+        <div class="progress-item progress-item--below-rank" id="belowRankProgressWrap" style="display: none;">
+          <div class="progress-header">
+            <span data-i18n="stats_below_rank_section">Progression du grade juste au dessous de vous</span>
+            <span id="belowRankProgressPct">0%</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill stats-below-rank-fill" id="belowRankBar"></div>
+          </div>
+          <div class="progress-details stats-below-rank-details" id="belowRankDetails"></div>
+        </div>
+
         <div class="progress-item">
           <div class="progress-header">
             <span data-i18n="xp_next_level">XP pour le prochain niveau</span>
@@ -635,179 +694,7 @@
 
   </div>
 
-  <!-- TAB 2: PROGRESSION -->
-  <div class="tab-content" id="tab-progression">
-    <div class="progression-section">
-      <h2>📈 <span data-i18n="progression_analysis">Analyse de progression</span></h2>
-      
-      <!-- Graphiques de progression -->
-      <div class="chart-container" id="chartContainer">
-        <div class="charts-grid">
-          <div class="chart-card">
-            <h3>🏆 Honneur</h3>
-            <canvas id="honorChart"></canvas>
-          </div>
-          <div class="chart-card">
-            <h3>⭐ XP</h3>
-            <canvas id="xpChart"></canvas>
-          </div>
-          <div class="chart-card">
-            <h3><img src="img/icon_btn/rp_icon.png" alt="" class="chart-title-icon"> Points de grade</h3>
-            <canvas id="rankChart"></canvas>
-          </div>
-        </div>
-      </div>
-      
-      <div id="progressionContent">
-        <div class="empty-state">
-          <div class="empty-icon">📊</div>
-          <p data-i18n="save_two_sessions">Sauvegardez au moins 2 sessions pour voir votre progression</p>
-        </div>
-      </div>
-
-      <!-- Statistiques avancées -->
-      <div id="advancedStats" style="display:none;">
-        <h3>📊 Statistiques détaillées</h3>
-        <div class="advanced-stats-grid">
-          <div class="advanced-stat-card">
-            <div class="advanced-stat-icon">📈</div>
-            <div class="advanced-stat-info">
-              <div class="advanced-stat-label">Moyenne honneur/jour</div>
-              <div class="advanced-stat-value" id="avgHonorPerDay">-</div>
-            </div>
-          </div>
-          <div class="advanced-stat-card">
-            <div class="advanced-stat-icon">⭐</div>
-            <div class="advanced-stat-info">
-              <div class="advanced-stat-label">Moyenne XP/jour</div>
-              <div class="advanced-stat-value" id="avgXpPerDay">-</div>
-            </div>
-          </div>
-          <div class="advanced-stat-card">
-            <div class="advanced-stat-icon"><img src="img/icon_btn/rp_icon.png" alt="" class="advanced-stat-icon-img"></div>
-            <div class="advanced-stat-info">
-              <div class="advanced-stat-label">Moyenne points de grade/jour</div>
-              <div class="advanced-stat-value" id="avgRankPerDay">-</div>
-            </div>
-          </div>
-          <div class="advanced-stat-card highlight clickable-session" id="bestSessionCard" style="cursor: pointer;" title="Cliquez pour voir les détails de cette session">
-            <div class="advanced-stat-icon">🏆</div>
-            <div class="advanced-stat-info">
-              <div class="advanced-stat-label">Meilleure session</div>
-              <div class="advanced-stat-value" id="bestSession">-</div>
-              <div class="advanced-stat-detail" id="bestSessionDate">-</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Prédictions -->
-      <div id="predictionsSection" style="display:none;">
-        <h3>🔮 Prédictions</h3>
-        <div class="predictions-grid">
-          <div class="prediction-card">
-            <div class="prediction-icon">🎯</div>
-            <div class="prediction-info">
-              <div class="prediction-label">Prochain grade</div>
-              <div class="prediction-value" id="predictionNextRank">-</div>
-              <div class="prediction-detail" id="predictionNextRankDays">-</div>
-            </div>
-          </div>
-          <div class="prediction-card">
-            <div class="prediction-icon">⬆️</div>
-            <div class="prediction-info">
-              <div class="prediction-label">Prochain niveau</div>
-              <div class="prediction-value" id="predictionNextLevel">-</div>
-              <div class="prediction-detail" id="predictionNextLevelDays">-</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Comparaison temporelle -->
-      <div id="timeComparisonSection" class="compact-hide" style="display:none;">
-        <h3>📅 Comparaison temporelle</h3>
-        <div class="time-comparison-grid">
-          <div class="time-comparison-card">
-            <div class="time-comparison-header">Cette semaine</div>
-            <div class="time-comparison-stats">
-              <div class="time-stat">
-                <span class="time-stat-label">Honneur gagné</span>
-                <span class="time-stat-value" id="thisWeekHonor">-</span>
-              </div>
-              <div class="time-stat">
-                <span class="time-stat-label">XP gagnée</span>
-                <span class="time-stat-value" id="thisWeekXp">-</span>
-              </div>
-              <div class="time-stat">
-                <span class="time-stat-label">Sessions</span>
-                <span class="time-stat-value" id="thisWeekSessions">-</span>
-              </div>
-            </div>
-          </div>
-          
-          <div class="time-comparison-card">
-            <div class="time-comparison-header">Semaine dernière</div>
-            <div class="time-comparison-stats">
-              <div class="time-stat">
-                <span class="time-stat-label">Honneur gagné</span>
-                <span class="time-stat-value" id="lastWeekHonor">-</span>
-              </div>
-              <div class="time-stat">
-                <span class="time-stat-label">XP gagnée</span>
-                <span class="time-stat-value" id="lastWeekXp">-</span>
-              </div>
-              <div class="time-stat">
-                <span class="time-stat-label">Sessions</span>
-                <span class="time-stat-value" id="lastWeekSessions">-</span>
-              </div>
-            </div>
-          </div>
-          
-          <div class="time-comparison-diff">
-            <div class="time-comparison-header">📊 Évolution</div>
-            <div class="time-comparison-stats">
-              <div class="time-stat">
-                <span class="time-stat-label">Honneur</span>
-                <span class="time-stat-value evolution" id="evolutionHonor">-</span>
-              </div>
-              <div class="time-stat">
-                <span class="time-stat-label">XP</span>
-                <span class="time-stat-value evolution" id="evolutionXp">-</span>
-              </div>
-              <div class="time-stat">
-                <span class="time-stat-label">Tendance</span>
-                <span class="time-stat-value evolution" id="evolutionTrend">-</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Comparaison de 2 sessions -->
-      <div id="comparisonSection" class="compact-hide" style="display:none;">
-        <h3>🔄 Comparer deux sessions</h3>
-        <div class="comparison-selectors">
-          <div class="field">
-            <label for="compareSession1">Session 1</label>
-            <select id="compareSession1" class="session-select">
-              <option value="">Sélectionner une session...</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="compareSession2">Session 2</label>
-            <select id="compareSession2" class="session-select">
-              <option value="">Sélectionner une session...</option>
-            </select>
-          </div>
-          <button id="compareBtn" class="btn-primary">🔍 Comparer</button>
-        </div>
-        <div id="comparisonResult"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- TAB 3: HISTORIQUE -->
+  <!-- TAB 2: HISTORIQUE -->
   <div class="tab-content" id="tab-history">
     <div class="history-section">
       <h2>📚 <span data-i18n="history_sessions">Historique des sessions</span></h2>
@@ -821,6 +708,38 @@
     </div>
   </div>
 
+  <!-- TAB PROGRESSION -->
+  <div class="tab-content" id="tab-progression">
+    <div class="progression-wrap">
+      <header class="progression-header">
+        <h2 class="progression-title">📈 <span data-i18n="progression_title">Progression</span></h2>
+        <p class="progression-subtitle" data-i18n="progression_subtitle">Synthèse nette sur la période (sessions enregistrées, hors seuil de départ).</p>
+        <div class="progression-period" role="group" aria-label="Période">
+          <button type="button" class="progression-period-btn" data-period="24h" data-i18n="progression_period_24h">24 h</button>
+          <button type="button" class="progression-period-btn" data-period="7d" data-i18n="progression_period_7d">7 jours</button>
+          <button type="button" class="progression-period-btn is-active" data-period="30d" data-i18n="progression_period_30d">30 jours</button>
+        </div>
+      </header>
+      <div id="progression-free-hint" class="progression-free-hint" style="display:none" data-i18n="progression_free_hint"></div>
+      <div id="progression-main" class="progression-main">
+        <div class="progression-tiles" id="progressionTiles"> </div>
+        <p class="progression-avg" id="progressionAvg"></p>
+        <div class="progression-chart-wrap">
+          <div class="progression-chart-toggles">
+            <label><input type="checkbox" id="progToggleHonor" checked> <span data-i18n="progression_toggle_honor">Honneur</span></label>
+            <label><input type="checkbox" id="progToggleXp" checked> <span data-i18n="progression_toggle_xp">XP</span></label>
+          </div>
+          <div class="progression-chart-canvas-box">
+            <canvas id="progressionChartCanvas" aria-label="Graphique"></canvas>
+          </div>
+        </div>
+        <p class="progression-projection" id="progressionProjection"></p>
+        <div class="progression-best" id="progressionBest"></div>
+        <p class="progression-vs" id="progressionVs"></p>
+      </div>
+      <div id="progression-empty" class="progression-empty" style="display:none"></div>
+    </div>
+  </div>
 
   <!-- TAB CLASSEMENT -->
   <div class="tab-content" id="tab-classement">
@@ -1559,90 +1478,50 @@
       </div>
       <div class="account-panel-tabs">
         <button type="button" class="account-panel-tab active" data-tab="info"><span data-i18n="account_info">Informations du compte</span></button>
-        <button type="button" class="account-panel-tab" data-tab="do">Compte DarkOrbit</button>
+        <button type="button" class="account-panel-tab" data-tab="do"><span data-i18n="account_tab_darkorbit">Compte DarkOrbit</span></button>
         <button type="button" class="account-panel-tab" data-tab="security"><span data-i18n="security">Sécurité</span></button>
         <button type="button" class="account-panel-tab" data-tab="about"><span data-i18n="about_tab">À propos</span></button>
       </div>
       <div class="sa-modal-body account-panel-body">
-        <div id="accountTabInfo" class="account-tab-content">
-        <!-- 1. Informations du compte -->
-        <section class="account-section">
+        <div id="accountTabInfo" class="account-tab-content account-tab-content--info">
+        <div class="account-info-stack">
+        <!-- Informations du compte (email indicatif ; modification via onglet Sécurité) -->
+        <section class="account-section account-section--info-card">
           <h4 class="account-section-title" data-i18n="account_info">Informations du compte</h4>
-          <div class="account-profile-row">
-            <div class="account-avatar-wrap">
-              <img id="accountAvatarImg" src="" alt="" class="account-avatar" style="display:none;">
-              <div class="account-avatar-placeholder" aria-hidden="true">?</div>
-              <button type="button" id="accountAvatarChangeBtn" class="account-avatar-change" data-i18n="change_avatar">Changer</button>
-              <div id="accountAvatarError" class="account-avatar-error" style="display:none;" role="alert"></div>
+          <div class="account-info-fields">
+            <div class="account-field">
+              <label data-i18n="username">Nom d'utilisateur</label>
+              <span id="accountUsername" class="account-value">—</span>
             </div>
-            <div class="account-profile-fields">
-              <div class="account-field">
-                <label data-i18n="username">Nom d'utilisateur</label>
-                <span id="accountUsername" class="account-value">—</span>
-              </div>
-              <div class="account-field">
-                <label data-i18n="email">Email</label>
-                <input type="email" id="accountEmailInput" class="account-input" placeholder="email@exemple.com">
-              </div>
-              <div class="account-field">
-                <label data-i18n="badge">Badge</label>
-                <span id="accountBadge" class="account-badge account-badge--free">FREE</span>
-              </div>
-              <div class="account-field">
-                <label data-i18n="account_joined">Date d'inscription</label>
-                <span id="accountJoinedAt" class="account-value">—</span>
-              </div>
+            <div class="account-field">
+              <label data-i18n="email">Email</label>
+              <span id="accountEmailDisplay" class="account-value account-email-display">—</span>
+              <p class="account-hint account-email-hint" data-i18n="account_email_readonly_hint">Pour modifier l’adresse email, utilisez l’onglet Sécurité.</p>
             </div>
-          </div>
-          <div class="account-form-actions">
-            <button type="button" id="accountSaveProfileBtn" class="sa-btn sa-btn--primary">✅ <span data-i18n="save">Sauvegarder</span></button>
-          </div>
-        </section>
-
-        <!-- 3. Statistiques actuelles (lecture seule) -->
-        <section class="account-section">
-          <h4 class="account-section-title" data-i18n="your_stats">Vos statistiques actuelles</h4>
-          <div class="account-stats-grid">
-            <div class="account-stat-item">
-              <span class="account-stat-label" data-i18n="points_xp">Points d'expérience</span>
-              <span id="accountStatXp" class="account-stat-value">0</span>
+            <div class="account-field">
+              <label data-i18n="badge">Badge</label>
+              <span id="accountBadge" class="account-badge account-badge--free">FREE</span>
             </div>
-            <div class="account-stat-item">
-              <span class="account-stat-label" data-i18n="points_honor">Points d'honneur</span>
-              <span id="accountStatHonor" class="account-stat-value">0</span>
-            </div>
-            <div class="account-stat-item">
-              <span class="account-stat-label" data-i18n="points_rank">Points de grade</span>
-              <span id="accountStatRankPoints" class="account-stat-value">0</span>
-            </div>
-          </div>
-          <div class="account-grade-row">
-            <span class="account-stat-label" data-i18n="current_grade">Grade actuel</span>
-            <div class="account-grade-block">
-              <img id="accountGradeImg" src="" alt="" class="account-grade-img">
-              <span id="accountGradeName" class="account-grade-name">—</span>
+            <div class="account-field">
+              <label data-i18n="account_joined">Date d'inscription</label>
+              <span id="accountJoinedAt" class="account-value">—</span>
             </div>
           </div>
         </section>
 
-        <!-- 4. Sessions actives -->
-        <section class="account-section">
-          <h4 class="account-section-title" data-i18n="active_sessions">Sessions actives</h4>
-          <div id="accountSessionsList" class="account-sessions-list"></div>
-        </section>
-
-        <!-- 5. Historique des connexions -->
+        <!-- Historique des connexions -->
         <section class="account-section">
           <h4 class="account-section-title" data-i18n="login_history">Historique des connexions</h4>
           <div id="accountLoginHistoryList" class="account-login-list"></div>
         </section>
 
-        <!-- 6. Danger Zone -->
+        <!-- Zone de danger -->
         <section class="account-section account-section--danger">
           <h4 class="account-section-title account-section-title--danger" data-i18n="danger_zone">Zone de danger</h4>
           <p class="account-danger-desc" data-i18n="delete_account_desc">La suppression de votre compte est définitive. Toutes vos données seront perdues.</p>
           <button type="button" id="accountDeleteAccountBtn" class="sa-btn sa-btn--danger">🗑️ <span data-i18n="delete_my_account">Supprimer mon compte</span></button>
         </section>
+        </div>
         </div>
         <div id="accountTabSecurity" class="account-tab-content" style="display: none;">
         <!-- 2. Sécurité -->
@@ -1675,91 +1554,96 @@
           </div>
         </section>
         </div>
-        <div id="accountTabAbout" class="account-tab-content" style="display: none;">
-        <!-- 3. À propos -->
-        <section class="account-section">
-          <h4 class="account-section-title" data-i18n="about_application">Application</h4>
-          <div class="account-about-app-header">
-            <div class="account-about-app-name">DO Stats Tracker</div>
-            <div class="account-about-version-row">
-              <span class="account-stat-label" data-i18n="app_version">Version</span>
-              <span id="accountAppVersion" class="account-stat-value">—</span>
+        <div id="accountTabAbout" class="account-tab-content account-tab-content--about" style="display: none;">
+        <div class="account-about-stack">
+        <section class="account-section account-about-block">
+          <h4 class="account-section-title account-about-heading" data-i18n="about_application">Application</h4>
+          <p class="account-about-app-title">DO Stats Tracker <span id="accountAppVersionInline" class="account-about-version-tag">v—</span></p>
+          <div class="account-about-update-row">
+            <button type="button" id="accountCheckUpdatesBtn" class="account-about-btn-update">
+              <span class="account-about-btn-update-icon" aria-hidden="true">🔄</span>
+              <span data-i18n="about_btn_update">Mettre à jour</span>
+            </button>
+            <span id="accountUpdateStatus" class="account-about-update-status"></span>
+          </div>
+          <div class="account-about-secondary-row">
+            <button type="button" id="accountDownloadUpdateBtn" class="account-about-btn-secondary" style="display:none;">⬇️ <span data-i18n="download_update">Télécharger</span></button>
+            <button type="button" id="accountChangelogLink" class="account-about-btn-changelog">
+              <span class="account-about-btn-changelog-icon" aria-hidden="true">📋</span>
+              <span data-i18n="open_changelog">Voir le changelog</span>
+            </button>
+          </div>
+        </section>
+
+        <section class="account-section account-about-block">
+          <h4 class="account-section-title account-about-heading" data-i18n="about_status">Statut</h4>
+          <p class="account-about-sub-heading" data-i18n="about_subscription_heading">Abonnement</p>
+          <div class="account-about-sub-grid">
+            <div class="account-about-sub-row">
+              <span class="account-about-sub-label" data-i18n="about_sub_status_short">Offre</span>
+              <span id="accountAboutSubStatus" class="account-about-sub-value">—</span>
+            </div>
+            <div class="account-about-sub-row">
+              <span class="account-about-sub-label" data-i18n="about_sub_price_label">Prix</span>
+              <span id="accountAboutSubPrice" class="account-about-sub-value">—</span>
+            </div>
+            <div class="account-about-sub-row">
+              <span class="account-about-sub-label" data-i18n="about_sub_last_tx_label">Dernière transaction</span>
+              <span id="accountAboutSubLastTx" class="account-about-sub-value">—</span>
+            </div>
+            <div class="account-about-sub-row">
+              <span class="account-about-sub-label" data-i18n="about_sub_renewal_label">Renouvellement</span>
+              <span id="accountAboutSubRenewal" class="account-about-sub-value">—</span>
             </div>
           </div>
-          <div class="account-about-row">
-            <button type="button" id="accountCheckUpdatesBtn" class="sa-btn sa-btn--primary">🔄 <span data-i18n="check_updates">Vérifier les mises à jour</span></button>
-            <span id="accountUpdateStatus" class="account-about-status"></span>
-          </div>
-          <div class="account-about-row account-about-row--compact">
-            <button type="button" id="accountDownloadUpdateBtn" class="sa-btn sa-btn--alt" style="display:none;">⬇️ <span data-i18n="download_update">Télécharger</span></button>
-            <button type="button" id="accountChangelogLink" class="sa-btn sa-btn--alt">📋 <span data-i18n="open_changelog">Voir le changelog</span></button>
-          </div>
         </section>
 
-        <section class="account-section">
-          <h4 class="account-section-title" data-i18n="about_status">Statut</h4>
-          <div class="account-field">
-            <label data-i18n="supabase_status">Connexion Supabase</label>
-            <span id="accountSupabaseStatus" class="account-status-chip account-status-chip--unknown">—</span>
-          </div>
-          <div class="account-field">
-            <label data-i18n="subscription_status_label">Abonnement</label>
-            <span id="accountSubscriptionStatus" class="account-value">—</span>
-          </div>
-          <div class="account-field">
-            <label data-i18n="subscription_expires_at">Expiration</label>
-            <span id="accountSubscriptionExpiry" class="account-value">—</span>
-          </div>
-        </section>
-
-        <section class="account-section">
-          <h4 class="account-section-title" data-i18n="about_links">Liens</h4>
-          <div class="account-about-links">
-            <button type="button" id="accountWebsiteLink" class="sa-btn sa-btn--alt">🌐 <span data-i18n="about_website">Site vitrine</span></button>
-            <button type="button" id="accountSupportLink" class="sa-btn sa-btn--alt">💬 <span data-i18n="about_support">Support</span></button>
-          </div>
-        </section>
-
-        <section class="account-section">
-          <h4 class="account-section-title" data-i18n="about_legal">Légal</h4>
-          <p class="account-about-legal" data-i18n="legal_disclaimer">DO Stats Tracker n'est pas affilié à DarkOrbit ni à Bigpoint. DarkOrbit est une marque de Bigpoint GmbH.</p>
-          <p class="account-about-legal" data-i18n="legal_created_by">Créé par Dragonal59</p>
+        <section class="account-section account-about-block">
+          <h4 class="account-section-title account-about-heading" data-i18n="about_expiry_section_title">Expiration</h4>
+          <p class="account-about-expiry-hint" data-i18n="about_expiry_cancel_hint">Date de fin d’accès si vous annulez votre abonnement (ou fin d’essai).</p>
+          <p id="accountAboutExpiryCancel" class="account-about-expiry-value">—</p>
         </section>
         </div>
-        <div id="accountTabDo" class="account-tab-content" style="display: none;">
-          <section class="account-section" id="accountDoListSection">
-            <h4 class="account-section-title">Mes comptes DarkOrbit</h4>
-            <p class="account-hint">Utilisés pour « Récupérer mes stats ». Stockés localement (chiffré).</p>
+        </div>
+        <div id="accountTabDo" class="account-tab-content account-tab-content--do" style="display: none;">
+          <section class="account-section account-section--do-list" id="accountDoListSection">
+            <div class="account-do-intro">
+              <h4 class="account-section-title account-do-title" data-i18n="do_accounts_title">Mes comptes DarkOrbit</h4>
+              <p class="account-hint account-do-hint" data-i18n="do_accounts_hint">Utilisés pour « Récupérer mes stats ». Stockés localement (chiffré).</p>
+            </div>
             <div id="accountDoCardsList" class="account-do-cards"></div>
-            <div id="accountDoAddWrap">
-              <button type="button" id="accountDoAddBtn" class="sa-btn sa-btn--primary">➕ Ajouter un compte</button>
-              <p id="accountDoAddLimitMsg" class="account-hint" style="display: none; color: var(--warning, #f59e0b);">Passez en PRO pour ajouter plusieurs comptes</p>
+            <div id="accountDoAddWrap" class="account-do-add-wrap">
+              <button type="button" id="accountDoAddBtn" class="account-do-btn account-do-btn--primary account-do-btn--wide" data-i18n="do_add_btn">➕ Ajouter un compte</button>
+              <p id="accountDoAddLimitMsg" class="account-hint account-do-hint" style="display: none; color: var(--warning, #f59e0b);" data-i18n="do_pro_limit_hint">Passez en PRO pour ajouter plusieurs comptes</p>
             </div>
           </section>
-          <section class="account-section" id="accountDoAddSection" style="display: none;">
-            <h4 class="account-section-title">Ajouter un compte</h4>
+          <section class="account-section account-section--do-add" id="accountDoAddSection" style="display: none;">
+            <h4 class="account-section-title account-do-title" data-i18n="do_add_title">Ajouter un compte</h4>
+            <div class="account-do-add-form">
             <div class="account-form-group">
-              <label for="accountDoAddPseudo">Pseudo</label>
-              <input type="text" id="accountDoAddPseudo" class="account-input" placeholder="Pseudo">
+              <label for="accountDoAddPseudo" data-i18n="do_login_pseudo_label">Pseudo DarkOrbit (connexion)</label>
+              <input type="text" id="accountDoAddPseudo" class="account-input" data-i18n-placeholder="do_pseudo_placeholder" placeholder="Pseudo">
             </div>
             <div class="account-form-group account-do-pwd-wrap">
-              <label for="accountDoAddPassword">Mot de passe</label>
+              <label for="accountDoAddPassword" data-i18n="do_password_darkorbit_label">Mot de passe DarkOrbit</label>
               <div class="account-input-password-wrap">
-                <input type="password" id="accountDoAddPassword" class="account-input" placeholder="Mot de passe">
-                <button type="button" id="accountDoAddPasswordToggle" class="account-password-toggle" title="Afficher / masquer" aria-label="Afficher le mot de passe">👁</button>
+                <input type="password" id="accountDoAddPassword" class="account-input" data-i18n-placeholder="do_password_placeholder" placeholder="Mot de passe">
+                <button type="button" id="accountDoAddPasswordToggle" class="account-password-toggle" data-i18n-title="toggle_password_visibility" title="Afficher / masquer" data-i18n-aria-label="toggle_password_visibility" aria-label="Afficher le mot de passe">👁</button>
+                <button type="button" id="accountDoAddPasswordLock" class="account-password-toggle account-do-cred-lock account-do-cred-lock--unlocked" aria-pressed="false" title="Déverrouillé">🔓</button>
               </div>
             </div>
             <div class="account-form-group">
-              <label for="accountDoAddServer">Serveur</label>
+              <label for="accountDoAddServer" data-i18n="do_server_label">Serveur</label>
               <select id="accountDoAddServer" class="account-input"></select>
             </div>
             <div class="account-form-group auth-toggle-wrap">
               <div id="accountDoAddManualToggle" class="auth-toggle" role="switch" aria-checked="false" tabindex="0"></div>
-              <span class="auth-toggle-label">Connexion manuelle</span>
+              <span class="auth-toggle-label" data-i18n="do_manual_toggle">Connexion manuelle</span>
             </div>
-            <div class="account-form-actions">
-              <button type="button" id="accountDoAddCancel" class="sa-btn sa-btn--alt">Annuler</button>
-              <button type="button" id="accountDoAddSubmit" class="sa-btn sa-btn--primary">Scanner et ajouter</button>
+            <div class="account-form-actions account-do-form-actions">
+              <button type="button" id="accountDoAddCancel" class="account-do-btn account-do-btn--secondary" data-i18n="cancel">Annuler</button>
+              <button type="button" id="accountDoAddSubmit" class="account-do-btn account-do-btn--primary" data-i18n="do_scan_and_add">Scanner et ajouter</button>
+            </div>
             </div>
           </section>
         </div>
@@ -1890,14 +1774,30 @@
     <div class="events-sidebar-content">
       <div class="events-sidebar-section">
         <h3 class="sidebar-section-title">⭐ <span data-i18n="events_today">Événements du jour</span></h3>
-        <div id="sidebarScrapedEvents" class="events-carousel">
-          <div class="no-event" data-i18n="no_event_in_progress">Aucun événement en cours</div>
+        <div class="events-sidebar-showcase-stack">
+          <div class="events-sidebar-showcase-pane">
+            <div id="sidebarScrapedEvents" class="events-carousel">
+              <div class="no-event" data-i18n="no_event_in_progress">Aucun événement en cours</div>
+            </div>
+          </div>
+          <div class="events-sidebar-showcase-blocker" aria-hidden="true">
+            <span class="events-sidebar-showcase-cta" data-i18n="free_sidebar_upgrade_cta">Passer à PRO</span>
+            <span class="events-sidebar-showcase-hint" data-i18n="free_sidebar_events_demo_hint">Aperçu — non interactif</span>
+          </div>
         </div>
       </div>
       <div class="events-sidebar-section">
         <h3 class="sidebar-section-title">👥 <span data-i18n="sidebar_followed_players">Suivi joueurs</span></h3>
-        <div id="sidebarFollowedPlayers" class="sidebar-followed-players">
-          <div class="no-event" data-i18n="no_followed_players">Aucun joueur suivi</div>
+        <div class="events-sidebar-showcase-stack">
+          <div class="events-sidebar-showcase-pane">
+            <div id="sidebarFollowedPlayers" class="sidebar-followed-players">
+              <div class="no-event" data-i18n="no_followed_players">Aucun joueur suivi</div>
+            </div>
+          </div>
+          <div class="events-sidebar-showcase-blocker" aria-hidden="true">
+            <span class="events-sidebar-showcase-cta" data-i18n="free_sidebar_upgrade_cta">Passer à PRO</span>
+            <span class="events-sidebar-showcase-hint" data-i18n="free_sidebar_follow_demo_hint">Aperçu — non interactif</span>
+          </div>
         </div>
       </div>
     </div>
@@ -2238,7 +2138,6 @@
 <script src="backend/reference-manager.js"></script>
 <script src="backend/reference-session.js"></script>
 <script src="backend/history.js"></script>
-<script src="backend/comparaison.js"></script>
 <script src="backend/progression.js"></script>
 <script src="backend/timer.js"></script>
 <script src="backend/events.js"></script>
@@ -2263,7 +2162,6 @@
 
 <!-- NIVEAU 3 : Frontend — UI, navigation, affichage -->
 <script src="frontend/permissions-ui.js"></script>
-<script src="frontend/charts.js"></script>
 <script src="frontend/tabs.js"></script>
 <script src="frontend/theme.js"></script>
 <script src="frontend/dropdown.js"></script>

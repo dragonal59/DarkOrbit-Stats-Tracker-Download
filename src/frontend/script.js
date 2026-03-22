@@ -24,9 +24,6 @@ window.doReloadApp = function () {
 // - stats.js         : Gestion des statistiques
 // - sessions.js      : Gestion des sessions
 // - history.js       : Affichage de l'historique
-// - progression.js   : Onglet progression
-// - charts.js        : Graphiques (Chart.js)
-// - comparaison.js   : Comparaison de sessions
 // - timer.js         : Timer de session 24h
 // - tabs.js          : Navigation par onglets
 // - theme.js         : Thèmes et modes d'affichage
@@ -115,7 +112,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // ========== CHARGER LES DONNÉES ==========
   loadCurrentStats();
   renderHistory();
-  updateProgressionTab();
+  if (typeof window.maybeRefreshProgression === 'function') window.maybeRefreshProgression();
   if (typeof window.updateActiveAccountDisplay === 'function') window.updateActiveAccountDisplay();
 
   // ========== ACCÈS APP : aucun accès sans au moins une session (sauf utilisateur Supabase connecté sans session = nouveau compte, afficher pour baseline) ==========
@@ -308,11 +305,6 @@ function initMainButtons() {
     });
   }
   
-  // Bouton Comparer Sessions
-  const compareBtn = document.getElementById('compareBtn');
-  if (compareBtn) {
-    compareBtn.addEventListener('click', compareSessions);
-  }
 }
 
 // ==========================================

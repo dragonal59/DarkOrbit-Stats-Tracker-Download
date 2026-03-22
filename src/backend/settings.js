@@ -60,6 +60,22 @@ function getSetting(key) {
   return settings[key] !== undefined ? settings[key] : DEFAULT_SETTINGS[key];
 }
 
+/**
+ * Fusion pull Supabase : valeur serveur si présente, sinon conservation locale, sinon défaut.
+ * Évite d'écraser une clé absente du JSON serveur (ex. notificationsEnabled jamais poussée).
+ */
+function mergeSettingsForPull(serverJson, localJson) {
+  const server = serverJson && typeof serverJson === 'object' ? serverJson : {};
+  const local = localJson && typeof localJson === 'object' ? localJson : {};
+  const out = {};
+  Object.keys(DEFAULT_SETTINGS).forEach(function (k) {
+    if (Object.prototype.hasOwnProperty.call(server, k)) out[k] = server[k];
+    else if (Object.prototype.hasOwnProperty.call(local, k)) out[k] = local[k];
+    else out[k] = DEFAULT_SETTINGS[k];
+  });
+  return out;
+}
+
 // ==========================================
 // INITIALISATION DES CONTRÔLES
 // ==========================================
@@ -306,4 +322,6 @@ window.getSetting = getSetting;
 window.sendNotification = sendNotification;
 window.isSettingsDirty = isSettingsDirty;
 window.clearSettingsDirtyFlag = clearSettingsDirtyFlag;
+window.initSettingsTab = initSettingsTab;
+window.mergeSettingsForPull = mergeSettingsForPull;
 

@@ -11,6 +11,10 @@ const { initAutoUpdater } = require('./electron/auto-updater');
 
 Menu.setApplicationMenu(null);
 
+// FIX 2 — reset explicite au boot (crash brutal session précédente : le finally peut ne pas s’exécuter)
+global.dostatsPipelineRunning = false;
+global.dostatsPipelineRunningSince = null;
+
 let autoUpdateManager = null;
 let alwaysOnTop = false;
 
@@ -94,10 +98,13 @@ const PlayerStatsScraper = require('./electron/player-stats-scraper');
 const PlayerStatsCredentials = require('./electron/player-stats-credentials');
 const { runDostatsRankingScraper, getLatestRanking, checkDostatsHealth, measureDostatsLatency, measureDostatsLatencyAndScanProfiles } = require('./electron/dostats-scraper');
 const { runDostatsProfilesScraper, getLatestProfile } = require('./electron/dostats-profile-scraper');
-const { loginAndExtractEventsOnly } = require('./electron/events-scraper-standalone');
+const { loginAndExtractEventsOnly, runEventsScraping } = require('./electron/events-scraper-standalone');
 
 let mainWindow;
 let scraperWindow = null;
+
+/** Une seule exécution DOSTATS (classements + suite profils/Supabase) à la fois : plusieurs `invoke` sans await enchaînés saturaient DOStats / Chromium. */
+let dostatsScraperStartQueue = Promise.resolve();
 
 let tray;
 let isQuitting = false;
@@ -118,6 +125,39 @@ const SCRAPER_APP_SETTINGS_PATH = path.join(app.getPath('userData'), 'scraper-ap
 const SCRAPER_APP_PLANNING_PATH = path.join(app.getPath('userData'), 'scraper-app-planning.json');
 const DO_EVENTS_CACHE_PATH = path.join(app.getPath('userData'), 'do-events-cache.json');
 global.dostatsProfilesConcurrency = 3;
+
+function getBlockingOperationsState() {
+  const reasons = [];
+  // FIX 2 — garde-fou : flag DOStats bloqué > 30 min (crash sans finally, etc.)
+  const DOSTATS_STUCK_MS = 30 * 60 * 1000;
+  try {
+    if (global.dostatsPipelineRunning) {
+      const since = global.dostatsPipelineRunningSince;
+      if (since == null) {
+        console.warn('[Main] FIX 2 — dostatsPipelineRunning sans timestamp, reset');
+        global.dostatsPipelineRunning = false;
+      } else if (Date.now() - since > DOSTATS_STUCK_MS) {
+        console.warn('[Main] FIX 2 — dostatsPipelineRunning réinitialisé (durée > 30 min, probable état stale)');
+        global.dostatsPipelineRunning = false;
+        global.dostatsPipelineRunningSince = null;
+      }
+    }
+    if (global.dostatsPipelineRunning) reasons.push('dostats');
+  } catch (_) {}
+  try {
+    if (hofPlanningState.current && hofPlanningState.current.status === 'running') reasons.push('hof');
+  } catch (_) {}
+  try {
+    if (ScraperBridge.getState().running) reasons.push('events');
+  } catch (_) {}
+  try {
+    if (SessionScraper.getState().running) reasons.push('session');
+  } catch (_) {}
+  try {
+    if (ClientLauncher.getScanState && ClientLauncher.getScanState().running) reasons.push('client_scan');
+  } catch (_) {}
+  return { blocking: reasons.length > 0, reasons };
+}
 
 function getScraperAppSettings() {
   try {
@@ -385,6 +425,8 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
+    // FIX 1 — ne pas afficher tant que ready-to-show (install pending quitte avant tout affichage)
+    show: false,
     frame: false,
     titleBarStyle: 'hiddenInset',
     // Icône principale de l'application (barre des tâches / fenêtre)
@@ -402,6 +444,14 @@ function createWindow() {
   mainWindow.loadFile(getSrcPath('auth.html'));
   mainWindow.setTitle(`DO Stats Tracker v${app.getVersion()}`);
   if (autoUpdateManager && autoUpdateManager.setWindowRef) autoUpdateManager.setWindowRef(mainWindow);
+  // FIX 1 — affichage uniquement après ready-to-show (évite flash si quitAndInstall au prochain boot)
+  mainWindow.once('ready-to-show', () => {
+    try {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show();
+    } catch (e) {
+      console.warn('[Main] FIX 1 ready-to-show show:', e?.message || e);
+    }
+  });
 
   // Console accessible uniquement via F12 (plus d'ouverture automatique au lancement)
   mainWindow.webContents.on('before-input-event', (event, input) => {
@@ -483,6 +533,7 @@ function setupPlayerStatsCredentials() {
   ipcMain.handle('player-stats-credentials:getAll', () => PlayerStatsCredentials.getAll());
   ipcMain.handle('player-stats-credentials:getActive', () => PlayerStatsCredentials.getActive());
   ipcMain.handle('player-stats-credentials:getActiveWithPassword', () => PlayerStatsCredentials.getActiveWithPassword());
+  ipcMain.handle('player-stats-credentials:getByIdWithPassword', (_, id) => PlayerStatsCredentials.getByIdWithPassword(id));
   ipcMain.handle('player-stats-credentials:add', (_, account) => PlayerStatsCredentials.add(account || {}));
   ipcMain.handle('player-stats-credentials:setActive', (_, id) => PlayerStatsCredentials.setActive(id));
   ipcMain.handle('player-stats-credentials:remove', (_, id) => PlayerStatsCredentials.remove(id));
@@ -680,106 +731,119 @@ function setupScraper() {
     return PlayerStatsScraper.collectPlayerStatsManual({ serverId: serverId || 'gbl5' });
   });
 
-  ipcMain.handle('dostats-scraper:start', async (event, payload) => {
-    const groupId = payload && payload.groupId ? String(payload.groupId) : null;
-    const serverCode = payload && payload.serverCode ? String(payload.serverCode) : null;
-    const scrapeProfiles = !!(payload && payload.scrapeProfiles);
-    const scrapeRankings = (payload && Object.prototype.hasOwnProperty.call(payload, 'scrapeRankings'))
-      ? !!payload.scrapeRankings
-      : true;
-
-    if (!scrapeRankings) {
-      return { ok: true, skipped: 'rankings_disabled' };
-    }
-    const targetWin = event.sender && BrowserWindow.fromWebContents(event.sender);
-    const rankingResult = await runDostatsRankingScraper({
-      groupId,
-      serverCode,
-      mainWindowRef: targetWin || mainWindow,
-    });
-    if (!scrapeProfiles || !rankingResult || !rankingResult.ok) {
-      return rankingResult;
-    }
-
-    const perServerUserIds = new Map(); // server -> Set(userId)
-    const dostatsCombosByServer = new Map(); // server -> [{ typeKey, periodKey, entries }]
-
-    (rankingResult.results || []).forEach((r) => {
-      if (!r || !r.path || !r.serverCode) return;
-      const key = String(r.serverCode).trim().toLowerCase() || 'unknown';
+  ipcMain.handle('dostats-scraper:start', (event, payload) => {
+    const runJob = async () => {
+      global.dostatsPipelineRunning = true;
+      global.dostatsPipelineRunningSince = Date.now();
       try {
-        const raw = fs.readFileSync(r.path, 'utf8');
-        const json = JSON.parse(raw);
-        const entries = Array.isArray(json?.entries) ? json.entries : [];
-        if (!dostatsCombosByServer.has(key)) dostatsCombosByServer.set(key, []);
-        dostatsCombosByServer.get(key).push({
-          typeKey: r.type,
-          periodKey: r.period,
-          entries,
-        });
+      const groupId = payload && payload.groupId ? String(payload.groupId) : null;
+      const serverCode = payload && payload.serverCode ? String(payload.serverCode) : null;
+      const scrapeProfiles = !!(payload && payload.scrapeProfiles);
+      const scrapeRankings = (payload && Object.prototype.hasOwnProperty.call(payload, 'scrapeRankings'))
+        ? !!payload.scrapeRankings
+        : true;
 
-        if (!entries.length) return;
-        if (!perServerUserIds.has(key)) perServerUserIds.set(key, new Set());
-        const set = perServerUserIds.get(key);
-        entries.forEach((e) => {
-          if (e && e.user_id) {
-            set.add(String(e.user_id).trim());
-          }
-        });
-      } catch (_) {
-        // ignore per-file errors
+      if (!scrapeRankings) {
+        return { ok: true, skipped: 'rankings_disabled' };
       }
-    });
+      const targetWin = event.sender && BrowserWindow.fromWebContents(event.sender);
+      const rankingResult = await runDostatsRankingScraper({
+        groupId,
+        serverCode,
+        mainWindowRef: targetWin || mainWindow,
+      });
+      if (!scrapeProfiles || !rankingResult || !rankingResult.ok) {
+        return rankingResult;
+      }
 
-    const logWin = targetWin || mainWindow;
-    let supabase = null;
-    try {
-      supabase = await requireSuperadminSupabaseClient(logWin);
-    } catch (e) {
-      sendDostatsSupabaseLog(logWin, null, 'warning', 'DOStats → Supabase désactivé : ' + (e?.message || e));
-    }
+      const perServerUserIds = new Map(); // server -> Set(userId)
+      const dostatsCombosByServer = new Map(); // server -> [{ typeKey, periodKey, entries }]
 
-    for (const [server, combos] of dostatsCombosByServer.entries()) {
-      const idsSet = perServerUserIds.get(server);
-      const ids = idsSet ? Array.from(idsSet) : [];
-
-      if (ids.length) {
-        let concurrency;
+      (rankingResult.results || []).forEach((r) => {
+        if (!r || !r.path || !r.serverCode) return;
+        const key = String(r.serverCode).trim().toLowerCase() || 'unknown';
         try {
-          if (fs.existsSync(SCRAPER_APP_SETTINGS_PATH)) {
-            const raw = fs.readFileSync(SCRAPER_APP_SETTINGS_PATH, 'utf8');
-            const data = JSON.parse(raw);
-            const v = data && data.scraper && typeof data.scraper.profilesConcurrency === 'number'
-              ? data.scraper.profilesConcurrency
-              : 3;
-            const n = Math.floor(Number.isFinite(v) ? v : 3);
-            concurrency = Math.max(1, Math.min(10, n));
-          }
-        } catch (e) {
-          concurrency = undefined;
+          const raw = fs.readFileSync(r.path, 'utf8');
+          const json = JSON.parse(raw);
+          const entries = Array.isArray(json?.entries) ? json.entries : [];
+          if (!dostatsCombosByServer.has(key)) dostatsCombosByServer.set(key, []);
+          dostatsCombosByServer.get(key).push({
+            typeKey: r.type,
+            periodKey: r.period,
+            entries,
+          });
+
+          if (!entries.length) return;
+          if (!perServerUserIds.has(key)) perServerUserIds.set(key, new Set());
+          const set = perServerUserIds.get(key);
+          entries.forEach((e) => {
+            if (e && e.user_id) {
+              set.add(String(e.user_id).trim());
+            }
+          });
+        } catch (_) {
+          // ignore per-file errors
         }
-        // eslint-disable-next-line no-await-in-loop
-        await runDostatsProfilesScraper({
-          serverCode: server,
-          userIds: ids,
-          mainWindowRef: targetWin || mainWindow,
-          concurrency,
-        });
-      } else {
-        sendDostatsSupabaseLog(logWin, server, 'warning', 'Aucun user_id HoF pour ce serveur (profiles skip).');
+      });
+
+      const logWin = targetWin || mainWindow;
+      let supabase = null;
+      try {
+        supabase = await requireSuperadminSupabaseClient(logWin);
+      } catch (e) {
+        sendDostatsSupabaseLog(logWin, null, 'warning', 'DOStats → Supabase désactivé : ' + (e?.message || e));
       }
 
-      if (supabase) {
-        // eslint-disable-next-line no-await-in-loop
-        await pushDostatsServerToSupabase({
-          logWin,
-          server,
-          combos: Array.isArray(combos) ? combos : [],
-        });
-      }
-    }
+      for (const [server, combos] of dostatsCombosByServer.entries()) {
+        const idsSet = perServerUserIds.get(server);
+        const ids = idsSet ? Array.from(idsSet) : [];
 
-    return rankingResult;
+        if (ids.length) {
+          let concurrency;
+          try {
+            if (fs.existsSync(SCRAPER_APP_SETTINGS_PATH)) {
+              const raw = fs.readFileSync(SCRAPER_APP_SETTINGS_PATH, 'utf8');
+              const data = JSON.parse(raw);
+              const v = data && data.scraper && typeof data.scraper.profilesConcurrency === 'number'
+                ? data.scraper.profilesConcurrency
+                : 3;
+              const n = Math.floor(Number.isFinite(v) ? v : 3);
+              concurrency = Math.max(1, Math.min(10, n));
+            }
+          } catch (e) {
+            concurrency = undefined;
+          }
+          // eslint-disable-next-line no-await-in-loop
+          await runDostatsProfilesScraper({
+            serverCode: server,
+            userIds: ids,
+            mainWindowRef: targetWin || mainWindow,
+            concurrency,
+          });
+        } else {
+          sendDostatsSupabaseLog(logWin, server, 'warning', 'Aucun user_id HoF pour ce serveur (profiles skip).');
+        }
+
+        if (supabase) {
+          // eslint-disable-next-line no-await-in-loop
+          await pushDostatsServerToSupabase({
+            logWin,
+            server,
+            combos: Array.isArray(combos) ? combos : [],
+          });
+        }
+      }
+
+      return rankingResult;
+      } finally {
+        global.dostatsPipelineRunning = false;
+        global.dostatsPipelineRunningSince = null;
+      }
+    };
+
+    const p = dostatsScraperStartQueue.then(() => runJob());
+    dostatsScraperStartQueue = p.catch(() => {});
+    return p;
   });
 
   ipcMain.handle('dostats:get-ranking', async (_, { serverCode, typeKey, periodKey }) => {
@@ -992,6 +1056,17 @@ async function pushDostatsServerToSupabase({ logWin, server, combos }) {
     let supabase = await getFreshSupabaseClientForDostatsPush(logWin);
     if (!supabase) {
       throw new Error('Jeton Supabase indisponible (refresh).');
+    }
+
+    {
+      const { error: delErr } = await supabase.rpc('delete_dostats_shared_data_for_server', {
+        p_server: serverNorm,
+      });
+      if (delErr) {
+        throw new Error('delete_dostats_shared_data_for_server: ' + (delErr?.message || delErr));
+      }
+      sendDostatsSupabaseLog(logWin, serverNorm, 'info',
+        'DOStats → Supabase : données du serveur vidées (profiles + snapshots), puis push…');
     }
 
     sendDostatsSupabaseLog(logWin, serverNorm, 'info', 'DOStats → Supabase : push profiles (overwrite strict)...');
@@ -1719,17 +1794,27 @@ app.on('ready', async () => {
 
   const pkg = require('./package.json');
   autoUpdateManager = initAutoUpdater(mainWindow, pkg);
+  // FIX 1 — avant toute fenêtre visible : install en attente → quitAndInstall immédiat, pas de createWindow
   if (autoUpdateManager.checkPendingInstall()) {
     return;
   }
   createWindow();
   createTray();
-  if (autoUpdateManager.setup) autoUpdateManager.setup();
-  ipcMain.on('update:startCriticalDownload', () => {
-    if (autoUpdateManager && autoUpdateManager.startCriticalDownload) autoUpdateManager.startCriticalDownload();
-  });
+  // FIX 3 — vérif MAJ déclenchée sur ready-to-show (voir setup(win) dans auto-updater.js)
+  if (autoUpdateManager.setup) autoUpdateManager.setup(mainWindow);
   ipcMain.on('update:check', () => {
     if (autoUpdateManager && autoUpdateManager.checkNow) autoUpdateManager.checkNow();
+  });
+  ipcMain.handle('update:check-blocking-operations', () => getBlockingOperationsState());
+  ipcMain.handle('update:quit-and-install', () => {
+    const s = getBlockingOperationsState();
+    if (s.blocking) return { ok: false, blocking: true, reasons: s.reasons };
+    if (!autoUpdateManager || !autoUpdateManager.quitAndInstallNow) return { ok: false };
+    return { ok: !!autoUpdateManager.quitAndInstallNow() };
+  });
+  ipcMain.handle('update:quit-and-install-confirmed', () => {
+    if (!autoUpdateManager || !autoUpdateManager.quitAndInstallNow) return { ok: false };
+    return { ok: !!autoUpdateManager.quitAndInstallNow() };
   });
   ipcMain.on('window:toggle-always-on-top', (event, desiredState) => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -1859,7 +1944,37 @@ app.on('ready', async () => {
       }
     };
     try {
-      return await loginAndExtractEventsOnly({ sendLog });
+      // Même flux que le planificateur : upsert shared_events + user_settings + IPC events-updated (fenêtre principale).
+      // Sans session Supabase, on garde l'ancien comportement (aperçu local uniquement).
+      await ScraperBridge.refreshSupabaseToken();
+      if (!global.currentUserId || !global.supabaseAccessToken) {
+        sendLog({
+          type: 'warning',
+          message: 'Pas de session Supabase — extraction locale uniquement (rien n\'est envoyé au cloud). Ouvrez l\'app principale et connectez-vous.'
+        });
+        return await loginAndExtractEventsOnly({ sendLog });
+      }
+      if (global.scrapingState?.running) {
+        sendLog({ type: 'error', message: 'Un autre scraping est déjà en cours.' });
+        return { ok: false, error: 'Scraping déjà en cours', events: [] };
+      }
+      sendLog({ type: 'info', message: 'Extraction + envoi Supabase (shared_events)…' });
+      const result = await runEventsScraping({ mainWindowRef: mainWindow });
+      if (result?.ok && Array.isArray(result.events)) {
+        sendLog({
+          type: 'success',
+          message: `${result.events.length} événement(s) enregistré(s) dans Supabase.`
+        });
+        return {
+          ok: true,
+          events: result.events,
+          eventsCount: result.eventsCount,
+          pushedToSupabase: true
+        };
+      }
+      const errMsg = result?.error || 'Échec du scraping événements';
+      sendLog({ type: 'error', message: errMsg });
+      return { ok: false, error: errMsg, events: [], pushedToSupabase: false };
     } catch (e) {
       console.warn('[Main] do-events:scrape:', e?.message || e);
       return { ok: false, error: e?.message || 'Erreur', events: [] };

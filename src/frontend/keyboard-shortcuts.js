@@ -73,7 +73,8 @@ const ActionHistory = {
       case 'session_delete':
         if (action.data.session && typeof restoreSessionToSupabase === 'function') {
           restoreSessionToSupabase(action.data.session).then(function (ok) {
-            if (ok && typeof renderHistory === 'function') { renderHistory(); updateProgressionTab(); }
+            if (ok && typeof renderHistory === 'function') { renderHistory(); }
+            if (ok && typeof window.maybeRefreshProgression === 'function') window.maybeRefreshProgression();
           });
         }
         break;
@@ -106,7 +107,8 @@ const ActionHistory = {
       case 'session_save':
         if (action.data.session && typeof restoreSessionToSupabase === 'function') {
           restoreSessionToSupabase(action.data.session).then(function (ok) {
-            if (ok && typeof renderHistory === 'function') { renderHistory(); updateProgressionTab(); }
+            if (ok && typeof renderHistory === 'function') { renderHistory(); }
+            if (ok && typeof window.maybeRefreshProgression === 'function') window.maybeRefreshProgression();
           });
         }
         break;
@@ -176,10 +178,10 @@ const KeyboardShortcuts = {
     // Ne pas traiter les raccourcis de navigation si dans un input
     if (isInputFocused) return;
     
-    // Ctrl + 1-5 : Navigation onglets
-    if (e.ctrlKey && ['1', '2', '3', '4', '5'].includes(e.key)) {
+    // Ctrl + 1-6 : Statistiques, Historique, Progression, Classement, Coupons, Paramètres
+    if (e.ctrlKey && ['1', '2', '3', '4', '5', '6'].includes(e.key)) {
       e.preventDefault();
-      const tabs = ['stats', 'progression', 'history', 'events', 'settings'];
+      const tabs = ['stats', 'history', 'progression', 'classement', 'coupons', 'settings'];
       const tabIndex = parseInt(e.key) - 1;
       if (tabs[tabIndex] && typeof switchTab === 'function') {
         switchTab(tabs[tabIndex]);
@@ -196,14 +198,6 @@ const KeyboardShortcuts = {
       return;
     }
     
-    // Ctrl + P : Progression
-    if (e.ctrlKey && e.key === 'p') {
-      e.preventDefault();
-      if (typeof switchTab === 'function') {
-        switchTab('progression');
-      }
-      return;
-    }
     
     // Ctrl + Shift + T : Changer thème
     if (e.ctrlKey && e.shiftKey && e.key === 'T') {

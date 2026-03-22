@@ -1,6 +1,78 @@
-// Récolte auto des stats depuis le client Flash (badge !== FREE), cooldown 6h
+// Récolte auto des stats (client Flash ou scraper login). FREE : 24 h entre deux récoltes ; PRO : 6 h.
 
-const COLLECT_COOLDOWN_MS = 6 * 60 * 60 * 1000;
+const COLLECT_COOLDOWN_MS_PRO = 6 * 60 * 60 * 1000;
+const COLLECT_COOLDOWN_MS_FREE = 24 * 60 * 60 * 1000;
+
+/** Dernier profil connu pour réafficher le libellé de cooldown au changement de langue */
+var _collectCooldownProfileSnapshot = null;
+
+function getCollectCooldownMs(badge) {
+  var b = (badge || '').toString().toUpperCase();
+  if (b === 'ADMIN' || b === 'SUPERADMIN') return 0;
+  if (b === 'FREE') return COLLECT_COOLDOWN_MS_FREE;
+  return COLLECT_COOLDOWN_MS_PRO;
+}
+
+function formatCooldownRemaining(remainingMs) {
+  if (remainingMs <= 0) return '0s';
+  var h = Math.floor(remainingMs / 3600000);
+  var m = Math.floor((remainingMs % 3600000) / 60000);
+  var s = Math.floor((remainingMs % 60000) / 1000);
+  var parts = [];
+  if (h > 0) parts.push(h + 'h');
+  if (m > 0 || h > 0) parts.push(m + 'min');
+  parts.push(s + 's');
+  return parts.join(' ');
+}
+
+function _localeTagForUiLang(lang) {
+  var map = { fr: 'fr-FR', de: 'de-DE', ru: 'ru-RU', es: 'es-ES', en: 'en-US', tr: 'tr-TR' };
+  return map[lang] || 'fr-FR';
+}
+
+function _i18nFmtStatsRecovery(template, map) {
+  var s = template || '';
+  if (!map) return s;
+  for (var k in map) {
+    if (Object.prototype.hasOwnProperty.call(map, k)) {
+      s = s.split('{{' + k + '}}').join(String(map[k]));
+    }
+  }
+  return s;
+}
+
+/**
+ * Ligne du type « Prochaine récupération : demain à 16:52 » (FREE, cooldown 24 h depuis lastAt).
+ * @param {number} lastAtMs - timestamp dernière récolte réussie
+ * @returns {string} chaîne vide si pas de cooldown actif
+ */
+function formatNextRecoveryFullLine(lastAtMs) {
+  var cd = COLLECT_COOLDOWN_MS_FREE;
+  if (!lastAtMs || lastAtMs <= 0) return '';
+  var nextMs = lastAtMs + cd;
+  if (nextMs <= Date.now()) return '';
+  var t = (typeof window !== 'undefined' && typeof window.i18nT === 'function') ? window.i18nT : function (k) { return k; };
+  var lang = (typeof getCurrentLang === 'function') ? getCurrentLang() : 'fr';
+  var loc = _localeTagForUiLang(lang);
+  var next = new Date(nextMs);
+  var now = new Date();
+  var startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  var startTomorrow = startToday + 86400000;
+  var startDayAfter = startTomorrow + 86400000;
+  var timeStr = next.toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit' });
+  var whenKey;
+  var params = { time: timeStr };
+  if (nextMs >= startToday && nextMs < startTomorrow) {
+    whenKey = 'stats_recovery_when_today';
+  } else if (nextMs >= startTomorrow && nextMs < startDayAfter) {
+    whenKey = 'stats_recovery_when_tomorrow';
+  } else {
+    whenKey = 'stats_recovery_when_date';
+    params.date = next.toLocaleDateString(loc, { day: 'numeric', month: 'long', year: 'numeric' });
+  }
+  var whenPart = _i18nFmtStatsRecovery(t(whenKey), params);
+  return _i18nFmtStatsRecovery(t('stats_next_recovery_full'), { when: whenPart });
+}
 
 var RANK_ID_TO_FR_RECAP = {
   'rank_1': 'Pilote de 1ère classe', 'rank_2': 'Caporal', 'rank_3': 'Caporal-chef', 'rank_4': 'Sergent',
@@ -24,6 +96,73 @@ function formatRecapNum(n) {
   return isNaN(x) ? '—' : String(x).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
+var _statsRecapCloseTimer = null;
+var _statsRecapListenersBound = false;
+var STATS_RECAP_AUTO_CLOSE_MS = 30000;
+
+function formatRecapServerDisplay(serverCode) {
+  if (serverCode == null || serverCode === '') return '—';
+  var key = String(serverCode).toLowerCase().trim();
+  var map = (typeof window !== 'undefined' && window.SERVER_CODE_TO_DISPLAY) || (typeof SERVER_CODE_TO_DISPLAY !== 'undefined' ? SERVER_CODE_TO_DISPLAY : {});
+  var label = map[key];
+  var bracket = key.toUpperCase();
+  if (label) return label + ' [' + bracket + ']';
+  return String(serverCode) + ' [' + bracket + ']';
+}
+
+function recapFindRankIndex(initialRank) {
+  if (initialRank == null || typeof RANKS_DATA === 'undefined' || !RANKS_DATA.length) return -1;
+  var ir = String(initialRank).trim();
+  var m = ir.match(/^rank_(\d+)$/i);
+  if (m) {
+    var id = parseInt(m[1], 10);
+    var i = RANKS_DATA.findIndex(function (r) { return r.rank_id === id; });
+    if (i >= 0) return i;
+  }
+  if (typeof RANK_KEY_TO_RANK_NAME !== 'undefined' && RANK_KEY_TO_RANK_NAME[ir]) {
+    var rk = RANK_KEY_TO_RANK_NAME[ir];
+    var j = RANKS_DATA.findIndex(function (r) { return r.rank === rk; });
+    if (j >= 0) return j;
+  }
+  var key = ir.toLowerCase().replace(/-/g, '_').replace(/^(rank_|hof_|hof_rank_)/, '');
+  var k = RANKS_DATA.findIndex(function (r) { return r.rank === key; });
+  if (k >= 0) return k;
+  return -1;
+}
+
+function hideStatsRecap() {
+  if (_statsRecapCloseTimer) {
+    clearTimeout(_statsRecapCloseTimer);
+    _statsRecapCloseTimer = null;
+  }
+  var overlay = document.getElementById('statsRecapOverlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+function initStatsRecapOverlayListeners() {
+  if (_statsRecapListenersBound) return;
+  _statsRecapListenersBound = true;
+  var overlay = document.getElementById('statsRecapOverlay');
+  var closeBtn = document.getElementById('statsRecapCloseBtn');
+  var modal = overlay ? overlay.querySelector('.stats-recap-modal') : null;
+  if (closeBtn) {
+    closeBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      hideStatsRecap();
+    });
+  }
+  if (overlay) {
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) hideStatsRecap();
+    });
+  }
+  if (modal) {
+    modal.addEventListener('click', function (e) {
+      e.stopPropagation();
+    });
+  }
+}
+
 function profileUpdateOnlyDisplay(data, nowIso) {
   return {
     game_pseudo: data.game_pseudo != null ? data.game_pseudo : undefined,
@@ -34,20 +173,94 @@ function profileUpdateOnlyDisplay(data, nowIso) {
 }
 
 function showRecapFromScan(data) {
-  var section = document.getElementById('statsRecapSection');
-  if (!section) return;
-  var set = function (id, text) { var el = document.getElementById(id); if (el) el.textContent = text || '—'; };
-  set('recapServer', data.server || '—');
-  set('recapPseudo', data.game_pseudo || '—');
-  set('recapPlayerId', data.player_id != null ? String(data.player_id) : '—');
-  set('recapCompany', data.company || '—');
-  var gradeLabel = (data.initial_rank ? (RANK_ID_TO_FR_RECAP[data.initial_rank] || data.initial_rank) : '—');
-  set('recapGrade', gradeLabel);
-  set('recapXp', formatRecapNum(data.initial_xp));
-  set('recapHonor', formatRecapNum(data.initial_honor));
-  set('recapRankPoints', formatRecapNum(data.initial_rank_points));
-  set('recapNextRankPoints', formatRecapNum(data.next_rank_points));
-  section.style.display = '';
+  var overlay = document.getElementById('statsRecapOverlay');
+  if (!overlay) return;
+  initStatsRecapOverlayListeners();
+  if (_statsRecapCloseTimer) {
+    clearTimeout(_statsRecapCloseTimer);
+    _statsRecapCloseTimer = null;
+  }
+
+  data = data || {};
+  var setText = function (id, text) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = text != null && text !== '' ? text : '—';
+  };
+
+  setText('recapServer', formatRecapServerDisplay(data.server));
+  setText('recapPseudo', data.game_pseudo || '—');
+  setText('recapPlayerId', data.player_id != null ? String(data.player_id) : '—');
+  setText('recapXp', formatRecapNum(data.initial_xp));
+  setText('recapHonor', formatRecapNum(data.initial_honor));
+  setText('recapRankPoints', formatRecapNum(data.initial_rank_points));
+  setText('recapNextRankPoints', formatRecapNum(data.next_rank_points));
+
+  var companySlot = document.getElementById('recapCompanySlot');
+  if (companySlot) {
+    var badgeFn = (typeof window !== 'undefined' && typeof window.getCompanyBadgeHtml === 'function') ? window.getCompanyBadgeHtml : null;
+    if (badgeFn) {
+      companySlot.innerHTML = badgeFn(data.company) || '';
+    } else {
+      companySlot.innerHTML = '';
+    }
+    if (!companySlot.innerHTML.trim()) {
+      var rawCo = data.company != null ? String(data.company).trim() : '';
+      companySlot.innerHTML = rawCo
+        ? '<span class="company-badge company-other">' + (typeof escapeHtml === 'function' ? escapeHtml(rawCo.toUpperCase()) : rawCo) + '</span>'
+        : '<span class="stats-recap-value">—</span>';
+    }
+  }
+
+  var serverForImg = data.server;
+  var rankRaw = data.initial_rank;
+  var gradeImg = document.getElementById('recapGradeImg');
+  var fallbackName = rankRaw ? (RANK_ID_TO_FR_RECAP[rankRaw] || rankRaw) : '—';
+  var tooltipFn = (typeof window !== 'undefined' && typeof window.getGradeTooltip === 'function') ? window.getGradeTooltip : null;
+  var rankImgFn = (typeof window !== 'undefined' && typeof window.getRankImg === 'function') ? window.getRankImg : null;
+  var tip = tooltipFn ? tooltipFn(rankRaw, fallbackName) : fallbackName;
+  var imgSrc = rankImgFn ? rankImgFn(rankRaw, serverForImg) : '';
+  if (gradeImg) {
+    if (imgSrc) {
+      gradeImg.src = imgSrc;
+      gradeImg.alt = tip || '';
+      gradeImg.title = tip || '';
+      gradeImg.style.display = '';
+    } else {
+      gradeImg.removeAttribute('src');
+      gradeImg.alt = '';
+      gradeImg.title = tip || '';
+      gradeImg.style.display = 'none';
+    }
+  }
+
+  var nextImgEl = document.getElementById('recapNextGradeImg');
+  var idx = recapFindRankIndex(rankRaw);
+  if (nextImgEl) {
+    if (idx >= 0 && idx + 1 < RANKS_DATA.length) {
+      var nextR = RANKS_DATA[idx + 1];
+      var nextKey = 'rank_' + nextR.rank_id;
+      var nextTip = tooltipFn ? tooltipFn(nextKey, nextR.name) : nextR.name;
+      nextImgEl.src = nextR.img || '';
+      nextImgEl.alt = nextTip || '';
+      nextImgEl.title = nextTip || '';
+      nextImgEl.style.display = nextR.img ? '' : 'none';
+    } else {
+      nextImgEl.removeAttribute('src');
+      nextImgEl.alt = '';
+      nextImgEl.title = '';
+      nextImgEl.style.display = 'none';
+    }
+  }
+
+  if (typeof applyTranslations === 'function' && typeof getCurrentLang === 'function') {
+    applyTranslations(getCurrentLang());
+  }
+
+  overlay.style.display = 'flex';
+  _statsRecapCloseTimer = setTimeout(function () {
+    _statsRecapCloseTimer = null;
+    hideStatsRecap();
+  }, STATS_RECAP_AUTO_CLOSE_MS);
 }
 
 async function onCollectSuccess(data, nowIso) {
@@ -95,44 +308,10 @@ window.buildManualStatsDropdown = function buildManualStatsDropdown() {
   });
 };
 
-function showFreeLimitMessage(show) {
-  var section = document.getElementById('statsManualSection');
-  if (!section) return;
-  var msgEl = section.querySelector('.free-limit-message');
-  if (show) {
-    if (!msgEl) {
-      msgEl = document.createElement('p');
-      msgEl.className = 'free-limit-message';
-      msgEl.style.cssText = 'color: var(--warning, #f59e0b); margin: 12px 0; padding: 12px; background: rgba(245,158,11,0.15); border-radius: 8px;';
-      var firstChild = section.querySelector('h2');
-      if (firstChild && firstChild.nextSibling) section.insertBefore(msgEl, firstChild.nextSibling);
-      else section.insertBefore(msgEl, section.firstChild);
-    }
-    msgEl.textContent = 'Les utilisateurs FREE ne peuvent pas ajouter de nouvelles sessions. Passez en PRO pour enregistrer plus de sessions !';
-    msgEl.style.display = '';
-  } else if (msgEl) {
-    msgEl.style.display = 'none';
-  }
-}
-
-var _freeLimitListenerAttached = false;
 function updateStatsManualUI() {
   var section = document.getElementById('statsManualSection');
   if (!section) return;
-  var badge = typeof getCurrentBadge === 'function' ? getCurrentBadge() : (typeof BackendAPI !== 'undefined' ? BackendAPI.getUserBadge() : 'FREE');
-  if (badge === 'FREE') {
-    buildManualStatsDropdown();
-    section.style.display = '';
-    if (!_freeLimitListenerAttached) {
-      _freeLimitListenerAttached = true;
-      window.addEventListener('sessionSaveBlocked', function (e) {
-        if (e.detail && e.detail.reason === 'FREE_LIMIT') showFreeLimitMessage(true);
-      });
-    }
-  } else {
-    section.style.display = 'none';
-    showFreeLimitMessage(false);
-  }
+  section.style.display = 'none';
 }
 
 function showCollectProgress(show) {
@@ -165,22 +344,24 @@ function updateCollectStatsUI(profile) {
   var cooldownEl = document.getElementById('collectStatsCooldownText');
   if (!section) return;
 
-  var badge = typeof getCurrentBadge === 'function' ? getCurrentBadge() : (typeof BackendAPI !== 'undefined' ? BackendAPI.getUserBadge() : 'FREE');
-  if (badge === 'FREE') {
-    section.style.display = 'none';
-    updateStatsManualUI();
-    return;
+  if (!profile) {
+    _collectCooldownProfileSnapshot = null;
+  } else if (Object.prototype.hasOwnProperty.call(profile, 'last_stats_collected_at')) {
+    _collectCooldownProfileSnapshot = profile;
   }
+
+  var badge = typeof getCurrentBadge === 'function' ? getCurrentBadge() : (typeof BackendAPI !== 'undefined' ? BackendAPI.getUserBadge() : 'FREE');
   section.style.display = '';
   updateStatsManualUI();
+
+  var cooldownMs = getCollectCooldownMs(badge);
+  var lastAt = profile && profile.last_stats_collected_at ? new Date(profile.last_stats_collected_at).getTime() : 0;
 
   if (btn) {
     if (badge === 'ADMIN' || badge === 'SUPERADMIN') {
       btn.disabled = false;
     } else {
-      var lastAt = profile && profile.last_stats_collected_at ? new Date(profile.last_stats_collected_at).getTime() : 0;
-      var now = Date.now();
-      var remaining = lastAt + COLLECT_COOLDOWN_MS - now;
+      var remaining = lastAt && cooldownMs > 0 ? lastAt + cooldownMs - Date.now() : 0;
       if (remaining > 0) {
         btn.disabled = true;
       } else {
@@ -188,7 +369,22 @@ function updateCollectStatsUI(profile) {
       }
     }
   }
-  if (cooldownEl) cooldownEl.textContent = '';
+  if (cooldownEl) {
+    cooldownEl.textContent = '';
+    if (btn && btn.disabled && badge !== 'ADMIN' && badge !== 'SUPERADMIN' && lastAt > 0 && cooldownMs > 0) {
+      var rem = lastAt + cooldownMs - Date.now();
+      if (rem > 0) {
+        if ((badge || '').toString().toUpperCase() === 'FREE') {
+          cooldownEl.textContent = formatNextRecoveryFullLine(lastAt);
+        } else {
+          var tRem = (typeof window !== 'undefined' && typeof window.i18nT === 'function')
+            ? window.i18nT('stats_collect_cooldown_pro')
+            : 'Prochaine collecte dans {{remaining}}';
+          cooldownEl.textContent = _i18nFmtStatsRecovery(tRem, { remaining: formatCooldownRemaining(rem) });
+        }
+      }
+    }
+  }
 }
 
 function hasActiveDarkOrbitCredentials() {
@@ -204,15 +400,6 @@ function hasActiveDarkOrbitCredentials() {
 function updateStatsCollectHelpMessage() {
   var helpEl = document.getElementById('statsCollectHelpText');
   if (!helpEl) return;
-  var badge = typeof getCurrentBadge === 'function'
-    ? getCurrentBadge()
-    : (typeof BackendAPI !== 'undefined' && BackendAPI.getUserBadge ? BackendAPI.getUserBadge() : 'FREE');
-  var upper = (badge || 'FREE').toString().toUpperCase();
-  if (upper === 'FREE') {
-    helpEl.textContent = '';
-    helpEl.style.display = 'none';
-    return;
-  }
   var hasCreds = hasActiveDarkOrbitCredentials();
   var t = (typeof window !== 'undefined' && typeof window.i18nT === 'function') ? window.i18nT : function (k) { return k; };
   var text = hasCreds
@@ -226,10 +413,7 @@ async function runStatsCollectFromGame() {
   var btn = document.getElementById('collectStatsFromGameBtn');
   var supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
   var badge = typeof getCurrentBadge === 'function' ? getCurrentBadge() : (typeof BackendAPI !== 'undefined' ? BackendAPI.getUserBadge() : 'FREE');
-  if (badge === 'FREE') {
-    if (typeof showToast === 'function') showToast('Récolte des stats réservée aux comptes PRO.', 'info');
-    return;
-  }
+  var cooldownMs = getCollectCooldownMs(badge);
   if (btn && btn.disabled && badge !== 'ADMIN' && badge !== 'SUPERADMIN') {
     var profile = typeof BackendAPI !== 'undefined' && typeof BackendAPI.getUserProfile === 'function' ? BackendAPI.getUserProfile() : null;
     var lastAt = profile && profile.last_stats_collected_at ? new Date(profile.last_stats_collected_at).getTime() : 0;
@@ -244,9 +428,14 @@ async function runStatsCollectFromGame() {
         Logger.error('[StatsCollect] lecture last_stats_collected_at error:', e?.message || e);
       }
     }
-    var remaining = lastAt + COLLECT_COOLDOWN_MS - Date.now();
+    var remaining = lastAt && cooldownMs > 0 ? lastAt + cooldownMs - Date.now() : 0;
     if (remaining > 0 && typeof showToast === 'function') {
-      showToast('Stats déjà récupérées. Prochaine collecte disponible dans ' + formatCooldownRemaining(remaining), 'info');
+      if ((badge || '').toString().toUpperCase() === 'FREE') {
+        var line = formatNextRecoveryFullLine(lastAt);
+        showToast(line || ('Stats déjà récupérées. Prochaine collecte dans ' + formatCooldownRemaining(remaining)), 'info');
+      } else {
+        showToast('Stats déjà récupérées. Prochaine collecte disponible dans ' + formatCooldownRemaining(remaining), 'info');
+      }
     }
     return;
   }
@@ -439,18 +628,6 @@ async function initCollectStatsFromGameButton() {
     }
   })();
 
-  function formatCooldownRemaining(remainingMs) {
-    if (remainingMs <= 0) return '0s';
-    var h = Math.floor(remainingMs / 3600000);
-    var m = Math.floor((remainingMs % 3600000) / 60000);
-    var s = Math.floor((remainingMs % 60000) / 1000);
-    var parts = [];
-    if (h > 0) parts.push(h + 'h');
-    if (m > 0 || h > 0) parts.push(m + 'min');
-    parts.push(s + 's');
-    return parts.join(' ');
-  }
-
   if (btn) btn.addEventListener('click', runStatsCollectFromGame);
 
   if (useWebScraper && doModalSubmit) {
@@ -511,8 +688,18 @@ if (document.readyState === 'loading') {
   runInitCollectStats();
 }
 window.addEventListener('load', function () { runInitCollectStats(); });
-  window.addEventListener('darkorbitCredentialsChanged', function () {
-    try {
-      updateStatsCollectHelpMessage();
-    } catch (e) {}
-  });
+window.addEventListener('darkorbitCredentialsChanged', function () {
+  try {
+    updateStatsCollectHelpMessage();
+  } catch (e) {}
+});
+window.addEventListener('languageChanged', function () {
+  try {
+    updateCollectStatsUI(_collectCooldownProfileSnapshot || null);
+    updateStatsCollectHelpMessage();
+    var ov = document.getElementById('statsRecapOverlay');
+    if (ov && ov.style.display !== 'none' && typeof applyTranslations === 'function' && typeof getCurrentLang === 'function') {
+      applyTranslations(getCurrentLang());
+    }
+  } catch (e) {}
+});

@@ -143,16 +143,22 @@ function updateBoosterAlert() {
   // Ajouter la classe du type de booster pour le style
   alert.className = `booster-sidebar-content booster-${booster}`;
 
-  // Notification Windows : une seule fois par jour (évite spam à chaque clic / updateBoosterAlert)
+  // Notification Windows : une fois par session de fenêtre (sessionStorage → pas de spam au F5 ; nouvelle fenêtre app = nouvelle notif)
   try {
     if (typeof window.sendNotification !== 'function' ||
         typeof getSetting !== 'function' ||
         !getSetting('notificationsEnabled') ||
         typeof currentHasFeature !== 'function' ||
         !currentHasFeature('notificationsWindows')) return;
-    var todayKey = new Date().toISOString().slice(0, 10);
-    if (window._lastBoosterNotifDate === todayKey) return;
-    window._lastBoosterNotifDate = todayKey;
+    if (window._boosterWinNotifSentThisLoad) return;
+    var boosterNotifSessionKey = 'doTracker_boosterWinNotifSent';
+    try {
+      if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(boosterNotifSessionKey) === '1') return;
+    } catch (e) {}
+    try {
+      if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(boosterNotifSessionKey, '1');
+    } catch (e2) {}
+    window._boosterWinNotifSentThisLoad = true;
     var notifTitle = 'Booster 50%';
     var notifBody = booster === 'xp'
       ? 'Un booster 50% XP est actif aujourd\'hui.'

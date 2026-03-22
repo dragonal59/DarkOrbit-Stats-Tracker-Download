@@ -12,7 +12,7 @@ function getCurrentTab() {
 function switchTab(tabName) {
   if (typeof guardRoute === 'function' && !guardRoute(tabName, () => {
     if (typeof currentCanAccessTab === 'function') {
-      const first = ['stats', 'progression', 'history', 'events', 'classement', 'coupons', 'settings', 'superadmin'].find(t => (t === 'coupons' ? (typeof currentHasFeature === 'function' && currentHasFeature('couponsTab')) : currentCanAccessTab(t)));
+      const first = ['stats', 'history', 'progression', 'events', 'classement', 'coupons', 'settings', 'superadmin'].find(t => (t === 'coupons' ? (typeof currentHasFeature === 'function' && currentHasFeature('couponsTab')) : currentCanAccessTab(t)));
       if (first && first !== tabName) switchTab(first);
     }
   })) return;
@@ -52,6 +52,11 @@ function switchTab(tabName) {
 
   if (tabName === 'coupons') {
     if (typeof window.refreshCouponsUI === 'function') window.refreshCouponsUI();
+  }
+
+  if (tabName === 'progression') {
+    if (typeof window.initProgressionTab === 'function') window.initProgressionTab();
+    if (typeof window.renderProgression === 'function') window.renderProgression();
   }
 
   if (tabName === 'stats') {

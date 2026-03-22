@@ -155,6 +155,12 @@ function getRankImg(rankName, server) {
   return '';
 }
 
+if (typeof window !== 'undefined') {
+  window.getCompanyBadgeHtml = getCompanyBadgeHtml;
+  window.getGradeTooltip = getGradeTooltip;
+  window.getRankImg = getRankImg;
+}
+
 function initRankingTab() {
   const filterServer = document.getElementById('ranking-filter-server');
   const filterType = document.getElementById('ranking-filter-type');
@@ -477,6 +483,14 @@ function initRankingTab() {
           filters,
           count: _lastRankingData.length
         });
+        // FIX 1 + FIX 3 — même enrichissement que renderRanking si le chargement ne repasse pas par render (sécurité)
+        try {
+          if (typeof isPlayerFollowed === 'function') {
+            for (var _fj = 0; _fj < _lastRankingData.length; _fj++) {
+              if (isPlayerFollowed(_lastRankingData[_fj])) _mergePersistedFollowedStatsFromRow(_lastRankingData[_fj]);
+            }
+          }
+        } catch (_fe2) {}
         updateComparisonBar(_lastRankingData, filters);
         renderRanking(_lastRankingData, filters.type);
       }
@@ -784,6 +798,14 @@ function renderRanking(data, sortType) {
       highlightActiveUserRow(tbody, token);
     });
   });
+  // FIX 1 + FIX 3 — cache persistant : chaque ligne du classement correspondant à un suivi enrichit le stockage
+  try {
+    if (Array.isArray(data) && typeof isPlayerFollowed === 'function') {
+      for (var _fri = 0; _fri < data.length; _fri++) {
+        if (isPlayerFollowed(data[_fri])) _mergePersistedFollowedStatsFromRow(data[_fri]);
+      }
+    }
+  } catch (_fe) {}
 }
 
 function highlightActiveUserRow(tbody, renderToken) {
@@ -933,6 +955,7 @@ function addFollowedPlayer(row) {
   var key = rowToFollowKey(row);
   var list = getFollowedPlayers().filter(function (p) { return rowToFollowKey(p) !== key; });
   var gradeVal = (row.grade != null ? String(row.grade) : null) || (row.current_rank != null ? String(row.current_rank) : null) || (row.grade_normalized != null ? String(row.grade_normalized) : null);
+  // FIX 7 — normaliser avant stockage (estimated_rp si aucune métrique brute)
   var entry = {
     userId: row.userId != null ? String(row.userId) : (row.user_id != null ? String(row.user_id) : ''),
     user_id: row.user_id != null ? String(row.user_id) : (row.userId != null ? String(row.userId) : ''),
@@ -947,8 +970,19 @@ function addFollowedPlayer(row) {
     rank_points: row.rank_points != null ? Number(row.rank_points) : null,
     estimated_rp: row.estimated_rp != null ? Number(row.estimated_rp) : null
   };
+  var hasHonor = entry.honor != null && Number.isFinite(Number(entry.honor));
+  var hasXp = entry.xp != null && Number.isFinite(Number(entry.xp));
+  var hasRp = entry.rank_points != null && Number.isFinite(Number(entry.rank_points));
+  if (!hasHonor && !hasXp && !hasRp) {
+    var est = _computeEstimatedRpFromStats(entry.honor, entry.xp, entry.rank_points);
+    if (est != null && Number.isFinite(est)) entry.estimated_rp = est;
+    else Logger.warn('[FollowedPlayers] Suivi sans métrique honneur/XP/rank_points (cache pourra enrichir)', entry.game_pseudo, entry.server);
+  }
   list.push(entry);
   setFollowedPlayers(list);
+  try {
+    _mergePersistedFollowedStatsFromRow(row);
+  } catch (_e) {}
 }
 
 function removeFollowedPlayer(userId, server) {
@@ -980,6 +1014,194 @@ function _setFollowedStatsHistory(map) {
   }
 }
 
+// FIX 1 — clé stable cache persistant (user_id + serveur)
+function _followedPersistKey(userId, server) {
+  var uid = (userId != null && userId !== '') ? String(userId).trim() : '';
+  var srv = (server || '').toString().toLowerCase().trim();
+  return uid + '|' + srv;
+}
+
+function _isEmptyFollowedPersistValue(v) {
+  if (v === null || v === undefined) return true;
+  if (typeof v === 'string' && v.trim() === '') return true;
+  return false;
+}
+
+function _mergeFollowedPersistedStatsObjects(prev, incoming) {
+  var out = {};
+  for (var k in prev) {
+    if (Object.prototype.hasOwnProperty.call(prev, k)) out[k] = prev[k];
+  }
+  if (!incoming || typeof incoming !== 'object') return out;
+  for (var k2 in incoming) {
+    if (!Object.prototype.hasOwnProperty.call(incoming, k2)) continue;
+    var v = incoming[k2];
+    if (_isEmptyFollowedPersistValue(v)) continue;
+    out[k2] = v;
+  }
+  return out;
+}
+
+function _rowToPersistedFollowedStatsPayload(row) {
+  if (!row) return {};
+  var rawRank = (row.current_rank ? String(row.current_rank) : null) ||
+    (row.grade_normalized ? String(row.grade_normalized) : null) ||
+    (row.grade ? String(row.grade) : null);
+  var serverForImg = (row._server || row.server || '').toString().toLowerCase().trim();
+  var gradeImg = '';
+  var companyBadgeHtml = '';
+  try {
+    gradeImg = getRankImg(rawRank, serverForImg) || '';
+    companyBadgeHtml = getCompanyBadgeHtml(row.company) || '';
+  } catch (_) {}
+  var gradeName = (row.grade && String(row.grade).trim()) || (row.current_rank && String(row.current_rank).trim()) || (row.grade_normalized && String(row.grade_normalized).trim()) || '';
+  var estRp = row.estimated_rp != null ? Number(row.estimated_rp) : null;
+  if (estRp == null || !Number.isFinite(estRp)) {
+    estRp = _computeEstimatedRpFromStats(row.honor, row.xp, row.rank_points);
+  }
+  return {
+    honor: row.honor != null ? Number(row.honor) : null,
+    xp: row.xp != null ? Number(row.xp) : null,
+    rank_points: row.rank_points != null ? Number(row.rank_points) : null,
+    estimated_rp: estRp,
+    level: row.level != null ? Number(row.level) : null,
+    company: row.company != null ? String(row.company) : null,
+    grade: gradeName || rawRank || null,
+    gradeImg: gradeImg,
+    gradeName: gradeName,
+    companyBadgeHtml: companyBadgeHtml,
+    game_pseudo: row.game_pseudo != null ? String(row.game_pseudo) : (row.name != null ? String(row.name) : null),
+    server: serverForImg,
+    user_id: row.userId != null ? String(row.userId) : (row.user_id != null ? String(row.user_id) : null),
+    npc_kills: row.npc_kills != null ? Number(row.npc_kills) : null,
+    ship_kills: row.ship_kills != null ? Number(row.ship_kills) : null,
+    galaxy_gates: row.galaxy_gates != null ? Number(row.galaxy_gates) : null
+  };
+}
+
+function _mergePersistedFollowedStatsFromRow(row) {
+  if (!row || typeof isPlayerFollowed !== 'function' || !isPlayerFollowed(row)) return;
+  var uid = row.userId != null ? String(row.userId) : (row.user_id != null ? String(row.user_id) : '');
+  var srv = (row._server || row.server || '').toString().toLowerCase().trim();
+  var key = _followedPersistKey(uid, srv);
+  if (!key || key === '|') return;
+  var map = _getFollowedStatsHistory();
+  var payload = _rowToPersistedFollowedStatsPayload(row);
+  var prev = map[key] && typeof map[key] === 'object' ? map[key] : {};
+  map[key] = _mergeFollowedPersistedStatsObjects(prev, payload);
+  _setFollowedStatsHistory(map);
+}
+
+function _statsFromFollowedSnapshot(followed) {
+  if (!followed) return null;
+  var gradeNameFromFollowed = (followed.grade && String(followed.grade).trim()) || (followed.current_rank && String(followed.current_rank).trim()) || '';
+  var est = followed.estimated_rp != null ? Number(followed.estimated_rp) : null;
+  if (est == null || !Number.isFinite(est)) {
+    est = _computeEstimatedRpFromStats(followed.honor, followed.xp, followed.rank_points);
+  }
+  var gradeImgSnap = '';
+  try {
+    var raw = (followed.grade && String(followed.grade)) || (followed.current_rank && String(followed.current_rank)) || '';
+    var srv = (followed.server || followed._server || '').toString().toLowerCase().trim();
+    gradeImgSnap = raw ? (getRankImg(raw, srv) || '') : '';
+  } catch (_) {}
+  var companyBadgeHtml = '';
+  try {
+    companyBadgeHtml = getCompanyBadgeHtml(followed.company) || '';
+  } catch (_) {}
+  return {
+    honor: followed.honor != null ? Number(followed.honor) : null,
+    xp: followed.xp != null ? Number(followed.xp) : null,
+    rank_points: followed.rank_points != null ? Number(followed.rank_points) : null,
+    estimated_rp: est,
+    level: followed.level != null ? Number(followed.level) : null,
+    company: followed.company != null ? String(followed.company) : null,
+    gradeImg: gradeImgSnap,
+    companyBadgeHtml: companyBadgeHtml,
+    gradeName: gradeNameFromFollowed
+  };
+}
+
+function _pickFirstNonEmptyStat() {
+  for (var i = 0; i < arguments.length; i++) {
+    var v = arguments[i];
+    if (_isEmptyFollowedPersistValue(v)) continue;
+    if (typeof v === 'number' && !Number.isFinite(v)) continue;
+    return v;
+  }
+  return null;
+}
+
+// FIX 5 — recherche dans un tableau import : user_id + serveur d'abord, pseudo ensuite
+function _findImportedRankingRowForFollowed(list, srv, pseudoNorm, userId) {
+  if (!Array.isArray(list)) return null;
+  var srvNorm = (srv || '').toString().toLowerCase().trim();
+  var uid = (userId || '').toString().trim();
+  var pseudoN = (pseudoNorm || '').toString().trim().toLowerCase();
+  if (uid) {
+    for (var i = 0; i < list.length; i++) {
+      var r = list[i];
+      if (!r) continue;
+      var rs = ((r._server || r.server) || '').toString().toLowerCase().trim();
+      if (rs !== srvNorm) continue;
+      var ru = (r.userId != null ? String(r.userId) : (r.user_id != null ? String(r.user_id) : '')).trim();
+      if (ru === uid) return r;
+    }
+  }
+  if (pseudoN) {
+    for (var j = 0; j < list.length; j++) {
+      var r2 = list[j];
+      if (!r2) continue;
+      var rs2 = ((r2._server || r2.server) || '').toString().toLowerCase().trim();
+      if (rs2 !== srvNorm) continue;
+      var pPseudo = (r2.game_pseudo || r2.name || '').toString().trim().toLowerCase();
+      if (pPseudo === pseudoN) return r2;
+    }
+  }
+  return null;
+}
+
+function _buildLiveStatsFromImports(srv, pseudoNorm, userId) {
+  if (typeof getImportedRanking !== 'function') return null;
+  var rowH = _findImportedRankingRowForFollowed(getImportedRanking(srv, 'honor'), srv, pseudoNorm, userId);
+  var rowX = _findImportedRankingRowForFollowed(getImportedRanking(srv, 'xp'), srv, pseudoNorm, userId);
+  var rowR = _findImportedRankingRowForFollowed(getImportedRanking(srv, 'rank_points'), srv, pseudoNorm, userId);
+  var found = rowH || rowX || rowR;
+  if (!found) return null;
+  var estRp = (rowH && rowH.estimated_rp != null) ? Number(rowH.estimated_rp)
+    : (rowX && rowX.estimated_rp != null) ? Number(rowX.estimated_rp)
+    : (rowR && rowR.estimated_rp != null) ? Number(rowR.estimated_rp)
+    : (found.estimated_rp != null ? Number(found.estimated_rp) : null);
+  if (estRp == null || !Number.isFinite(estRp)) {
+    var baseHonor = rowH ? rowH.honor : (rowX ? rowX.honor : (rowR ? rowR.honor : found.honor));
+    var baseXp = rowX ? rowX.xp : (rowH ? rowH.xp : (rowR ? rowR.xp : found.xp));
+    var baseRp = rowR ? rowR.rank_points : found.rank_points;
+    estRp = _computeEstimatedRpFromStats(baseHonor, baseXp, baseRp);
+  }
+  var rawRank = (found.current_rank ? String(found.current_rank) : null) ||
+    (found.grade_normalized ? String(found.grade_normalized) : null) ||
+    (found.grade ? String(found.grade) : null);
+  var serverForImg = (found._server || found.server || srv || '').toString().toLowerCase().trim();
+  var gradeImg = '';
+  var companyBadgeHtml = '';
+  try {
+    gradeImg = getRankImg(rawRank, serverForImg) || '';
+    companyBadgeHtml = getCompanyBadgeHtml(found.company) || '';
+  } catch (_) {}
+  var gradeNameFromRow = (found.grade && String(found.grade).trim()) || (found.current_rank && String(found.current_rank).trim()) || (found.grade_normalized && String(found.grade_normalized).trim()) || '';
+  return {
+    honor: rowH && rowH.honor != null ? Number(rowH.honor) : (found.honor != null ? Number(found.honor) : null),
+    xp: rowX && rowX.xp != null ? Number(rowX.xp) : (found.xp != null ? Number(found.xp) : null),
+    rank_points: rowR && rowR.rank_points != null ? Number(rowR.rank_points) : (found.rank_points != null ? Number(found.rank_points) : null),
+    estimated_rp: estRp,
+    gradeImg: gradeImg || '',
+    companyBadgeHtml: companyBadgeHtml || '',
+    company: found.company != null ? String(found.company) : null,
+    level: found.level != null ? Number(found.level) : null,
+    gradeName: gradeNameFromRow
+  };
+}
+
 function _computeEstimatedRpFromStats(honor, xp, rankPoints) {
   if (rankPoints != null && Number.isFinite(Number(rankPoints))) {
     return Number(rankPoints);
@@ -994,134 +1216,62 @@ function _computeEstimatedRpFromStats(honor, xp, rankPoints) {
 }
 
 /**
- * Cherche un joueur suivi dans les données de classement disponibles.
- * Ordre de priorité :
- *   1. Classements scrapés (getImportedRanking — via Supabase sync)
- *   2. Classement affiché en mémoire (_lastRankingData, même serveur)
- *   3. Stats sauvegardées au moment du clic "Suivre" (followed.honor/xp/rank_points)
- * Retourne { honor, xp, rank_points } ou null si rien n'est disponible.
+ * FIX 2 + FIX 4 + FIX 5 — Stats joueur suivi : fusion champ par champ
+ * (import live → cache persistant → snapshot au clic Suivre). Plus de _lastRankingData ici.
  */
 function _getFollowedPlayerCurrentStats(followed) {
   var srv = (followed.server || followed._server || '').toString().toLowerCase().trim();
   var pseudo = (followed.game_pseudo || '').toString().trim().toLowerCase();
-  if (!srv || !pseudo) return null;
+  var userId = (followed.userId != null ? String(followed.userId) : (followed.user_id != null ? String(followed.user_id) : '')).trim();
+  if (!srv) return null;
+  if (!userId && !pseudo) return null;
 
-  function findInList(list) {
-    if (!Array.isArray(list)) return null;
-    return list.find(function (r) {
-      return (r.game_pseudo || r.name || '').toString().trim().toLowerCase() === pseudo;
-    }) || null;
-  }
+  var live = _buildLiveStatsFromImports(srv, pseudo, userId);
+  var cacheKey = _followedPersistKey(userId || followed.userId || followed.user_id, srv);
+  var map = _getFollowedStatsHistory();
+  var cache = (cacheKey && map[cacheKey] && typeof map[cacheKey] === 'object') ? map[cacheKey] : null;
+  var snap = _statsFromFollowedSnapshot(followed);
 
-  // 1. Classements scrapés en localStorage (getImportedRanking)
-  if (typeof getImportedRanking === 'function') {
-    var rowH = findInList(getImportedRanking(srv, 'honor'));
-    var rowX = findInList(getImportedRanking(srv, 'xp'));
-    var rowR = findInList(getImportedRanking(srv, 'rank_points'));
-    var found = rowH || rowX || rowR;
-    if (found) {
-      var estRp = (rowH && rowH.estimated_rp != null) ? Number(rowH.estimated_rp)
-                : (rowX && rowX.estimated_rp != null) ? Number(rowX.estimated_rp)
-                : (rowR && rowR.estimated_rp != null) ? Number(rowR.estimated_rp)
-                : (found.estimated_rp != null ? Number(found.estimated_rp) : null);
-      if (estRp == null) {
-        var baseHonor = rowH ? rowH.honor : (rowX ? rowX.honor : (rowR ? rowR.honor : found.honor));
-        var baseXp    = rowX ? rowX.xp    : (rowH ? rowH.xp    : (rowR ? rowR.xp    : found.xp));
-        var baseRp    = rowR ? rowR.rank_points : found.rank_points;
-        estRp = _computeEstimatedRpFromStats(baseHonor, baseXp, baseRp);
-      }
-      var gradeImg = '';
-      var companyBadgeHtml = '';
-      try {
-        var rawRank = (found.current_rank ? String(found.current_rank) : null) ||
-          (found.grade_normalized ? String(found.grade_normalized) : null) ||
-          (found.grade ? String(found.grade) : null);
-        var serverForImg = (found._server || found.server || '').toString().toLowerCase().trim();
-        gradeImg = getRankImg(rawRank, serverForImg);
-        companyBadgeHtml = getCompanyBadgeHtml(found.company);
-      } catch (_) {}
-      var gradeNameFromRow = (found.grade && String(found.grade).trim()) || (found.current_rank && String(found.current_rank).trim()) || (found.grade_normalized && String(found.grade_normalized).trim()) || '';
-      var res1 = {
-        honor:        rowH ? Number(rowH.honor || 0)       : (found.honor       != null ? Number(found.honor)       : null),
-        xp:           rowX ? Number(rowX.xp || 0)          : (found.xp          != null ? Number(found.xp)          : null),
-        rank_points:  rowR ? Number(rowR.rank_points || 0) : (found.rank_points != null ? Number(found.rank_points) : null),
-        estimated_rp: estRp,
-        gradeImg:     gradeImg || '',
-        companyBadgeHtml: companyBadgeHtml || '',
-        level:        found.level != null ? Number(found.level) : null,
-        gradeName:    gradeNameFromRow
-      };
-      if (typeof window !== 'undefined' && window.DEBUG) {
-        Logger.warn('[debug] estimated_rp (imported):', res1.estimated_rp, 'pour:', pseudo, 'srv:', srv, found);
-      }
-      return res1;
+  var honor = _pickFirstNonEmptyStat(live && live.honor, cache && cache.honor, snap && snap.honor);
+  var xp = _pickFirstNonEmptyStat(live && live.xp, cache && cache.xp, snap && snap.xp);
+  var rank_points = _pickFirstNonEmptyStat(live && live.rank_points, cache && cache.rank_points, snap && snap.rank_points);
+  var level = _pickFirstNonEmptyStat(live && live.level, cache && cache.level, snap && snap.level);
+  var estimated_rp = _pickFirstNonEmptyStat(live && live.estimated_rp, cache && cache.estimated_rp, snap && snap.estimated_rp);
+  var gradeImg = _pickFirstNonEmptyStat(live && live.gradeImg, cache && cache.gradeImg, snap && snap.gradeImg);
+  var companyBadgeHtml = _pickFirstNonEmptyStat(live && live.companyBadgeHtml, cache && cache.companyBadgeHtml, snap && snap.companyBadgeHtml);
+  var gradeName = _pickFirstNonEmptyStat(live && live.gradeName, cache && cache.gradeName, snap && snap.gradeName);
+  if (gradeName != null && typeof gradeName !== 'string') gradeName = String(gradeName);
+
+  if (_isEmptyFollowedPersistValue(companyBadgeHtml)) {
+    var c = _pickFirstNonEmptyStat(live && live.company, cache && cache.company, snap && snap.company, followed.company);
+    if (!_isEmptyFollowedPersistValue(c)) {
+      try { companyBadgeHtml = getCompanyBadgeHtml(c) || ''; } catch (_) {}
     }
   }
 
-  // 2. Classement affiché en mémoire (_lastRankingData)
-  if (Array.isArray(_lastRankingData) && _lastRankingData.length > 0) {
-    var inMemory = findInList(_lastRankingData.filter(function (r) {
-      return (r._server || r.server || '').toString().toLowerCase().trim() === srv;
-    }));
-    if (inMemory) {
-      var rawRank = (inMemory.current_rank ? String(inMemory.current_rank) : null) ||
-        (inMemory.grade_normalized ? String(inMemory.grade_normalized) : null) ||
-        (inMemory.grade ? String(inMemory.grade) : null);
-      var gradeNameFromMem = (rawRank && rawRank.trim()) || '';
-      var stats = {
-        honor:        inMemory.honor        != null ? Number(inMemory.honor)        : null,
-        xp:           inMemory.xp           != null ? Number(inMemory.xp)           : null,
-        rank_points:  inMemory.rank_points  != null ? Number(inMemory.rank_points)  : null,
-        estimated_rp: inMemory.estimated_rp != null ? Number(inMemory.estimated_rp) : null,
-        level:        inMemory.level        != null ? Number(inMemory.level)        : null,
-        gradeImg:     (function () {
-          try {
-            var serverForImg = (inMemory._server || inMemory.server || '').toString().toLowerCase().trim();
-            return getRankImg(rawRank, serverForImg) || '';
-          } catch (_) { return ''; }
-        })(),
-        companyBadgeHtml:   '',
-        gradeName:    gradeNameFromMem
-      };
-      if (stats.estimated_rp == null) {
-        stats.estimated_rp = _computeEstimatedRpFromStats(stats.honor, stats.xp, stats.rank_points);
-      }
-      try {
-        stats.companyBadgeHtml = getCompanyBadgeHtml(inMemory.company);
-      } catch (_) {}
-      if (typeof window !== 'undefined' && window.DEBUG) {
-        Logger.warn('[debug] estimated_rp (inMemory):', stats.estimated_rp, 'pour:', pseudo, 'srv:', srv, inMemory);
-      }
-      return stats;
-    }
+  if (estimated_rp == null || !Number.isFinite(Number(estimated_rp))) {
+    estimated_rp = _computeEstimatedRpFromStats(honor, xp, rank_points);
   }
 
-  // 3. Stats sauvegardées au moment du follow
-  if (followed.honor != null || followed.xp != null || followed.rank_points != null) {
-    var gradeNameFromFollowed = (followed.grade && String(followed.grade).trim()) || (followed.current_rank && String(followed.current_rank).trim()) || '';
-    var fallbackStats = {
-      honor:        followed.honor        != null ? Number(followed.honor)        : null,
-      xp:           followed.xp           != null ? Number(followed.xp)           : null,
-      rank_points:  followed.rank_points  != null ? Number(followed.rank_points)  : null,
-      estimated_rp: followed.estimated_rp != null ? Number(followed.estimated_rp) : null,
-      level:        followed.level        != null ? Number(followed.level)        : null,
-      gradeImg:     '',
-      companyBadgeHtml:   '',
-      gradeName:    gradeNameFromFollowed
-    };
-    if (fallbackStats.estimated_rp == null) {
-      fallbackStats.estimated_rp = _computeEstimatedRpFromStats(fallbackStats.honor, fallbackStats.xp, fallbackStats.rank_points);
-    }
-    try {
-      fallbackStats.companyBadgeHtml = getCompanyBadgeHtml(followed.company);
-    } catch (_) {}
-    if (typeof window !== 'undefined' && window.DEBUG) {
-      Logger.warn('[debug] estimated_rp (fallback):', fallbackStats.estimated_rp, 'pour:', pseudo, 'srv:', srv, followed);
-    }
-    return fallbackStats;
+  if (
+    honor == null && xp == null && rank_points == null &&
+    (estimated_rp == null || !Number.isFinite(Number(estimated_rp))) &&
+    _isEmptyFollowedPersistValue(gradeImg) && _isEmptyFollowedPersistValue(gradeName) &&
+    _isEmptyFollowedPersistValue(companyBadgeHtml) && level == null
+  ) {
+    return null;
   }
 
-  return null;
+  return {
+    honor: honor,
+    xp: xp,
+    rank_points: rank_points,
+    estimated_rp: estimated_rp,
+    level: level,
+    gradeImg: gradeImg || '',
+    companyBadgeHtml: companyBadgeHtml || '',
+    gradeName: gradeName || ''
+  };
 }
 
 /**
@@ -1148,7 +1298,11 @@ function _getUserStatsForComparison() {
  * @returns {{ sign: string, formatted: string, cls: string }} ou null si valeurs manquantes
  */
 function _formatComparisonDiff(userVal, playerVal) {
-  if (userVal == null || playerVal == null || !Number.isFinite(Number(userVal)) || !Number.isFinite(Number(playerVal))) return null;
+  // FIX 8 — delta partiel : pas de blocage si une seule valeur joueur manque
+  if (userVal == null || !Number.isFinite(Number(userVal))) return null;
+  if (playerVal == null || !Number.isFinite(Number(playerVal))) {
+    return { missing: true };
+  }
   var u = Number(userVal);
   var p = Number(playerVal);
   var diff = u - p;
@@ -1161,17 +1315,22 @@ function _formatComparisonDiff(userVal, playerVal) {
 
 function _buildComparisonDeltasHtml(userStats, playerHonor, playerXp, playerRp) {
   if (!userStats) return '';
-  var honorPart = _formatComparisonDiff(userStats.honor, playerHonor);
-  var xpPart = _formatComparisonDiff(userStats.xp, playerXp);
-  var rpPart = _formatComparisonDiff(userStats.rankPoints, playerRp);
-  if (!honorPart && !xpPart && !rpPart) return '';
+  if (userStats.honor == null && userStats.xp == null && userStats.rankPoints == null) return '';
   function span(part) {
     if (!part) return '<span class="comparison-diff-item comparison-diff-missing">—</span>';
+    if (part.missing) return '<span class="comparison-diff-item comparison-diff-missing">—</span>';
     return '<span class="comparison-diff-item ' + part.cls + '">' + part.sign + part.formatted + '</span>';
   }
-  return '<div class="watched-player-stat-group">' + span(honorPart) + '</div>' +
-    '<div class="watched-player-stat-group">' + span(xpPart) + '</div>' +
-    '<div class="watched-player-stat-group">' + span(rpPart) + '</div>';
+  function cell(userStat, playerStat) {
+    if (userStat == null || !Number.isFinite(Number(userStat))) return span(null);
+    return span(_formatComparisonDiff(userStat, playerStat));
+  }
+  var honorPart = cell(userStats.honor, playerHonor);
+  var xpPart = cell(userStats.xp, playerXp);
+  var rpPart = cell(userStats.rankPoints, playerRp);
+  return '<div class="watched-player-stat-group">' + honorPart + '</div>' +
+    '<div class="watched-player-stat-group">' + xpPart + '</div>' +
+    '<div class="watched-player-stat-group">' + rpPart + '</div>';
 }
 
 /**
@@ -1182,9 +1341,10 @@ function _buildComparisonDeltasHtml(userStats, playerHonor, playerXp, playerRp) 
  * @returns {{ honorDelta: number|null, xpDelta: number|null, rpDelta: number|null }|null}
  */
 function _getFollowedPlayer24hDelta(server, pseudo, userId) {
+  // FIX 8 — deltas 24h partiels si un seul classement 24h a échoué
   var srv = (server || '').toString().toLowerCase().trim();
   var cache = _last24hByServer[srv];
-  if (!cache || !cache.honor || !cache.xp || !cache.rank_points) return null;
+  if (!cache) return null;
   var pseudoNorm = (pseudo || '').toString().trim().toLowerCase();
   var uid = (userId || '').toString().trim();
 
@@ -1197,13 +1357,16 @@ function _getFollowedPlayer24hDelta(server, pseudo, userId) {
       return rPseudo === pseudoNorm;
     }) || null;
   }
-  var rowH = findInRows(cache.honor);
-  var rowX = findInRows(cache.xp);
-  if (!rowH && !rowX) return null;
+  var rowH = cache.honor ? findInRows(cache.honor) : null;
+  var rowX = cache.xp ? findInRows(cache.xp) : null;
+  var rowR = cache.rank_points ? findInRows(cache.rank_points) : null;
+  if (!rowH && !rowX && !rowR) return null;
   var honorDelta = rowH && rowH.honor != null ? Number(rowH.honor) : null;
   var xpDelta = rowX && rowX.xp != null ? Number(rowX.xp) : null;
   var rpDelta = null;
-  if (honorDelta != null || xpDelta != null) {
+  if (rowR && rowR.rank_points != null) {
+    rpDelta = Number(rowR.rank_points);
+  } else if (honorDelta != null || xpDelta != null) {
     var h = Number.isFinite(Number(honorDelta)) ? Number(honorDelta) : 0;
     var x = Number.isFinite(Number(xpDelta)) ? Number(xpDelta) : 0;
     rpDelta = Math.round((h / 100) + (x / 100000));
@@ -1220,25 +1383,26 @@ function _getFollowedPlayer24hDelta(server, pseudo, userId) {
  * Appelle onDone() quand c'est prêt ; si des données ont été ajoutées, onDone(true) pour re-render la sidebar.
  */
 function _ensure24hDataForServer(server, onDone) {
+  // FIX 8 — un échec sur un des 3 loads ne vide pas tout le cache 24h
   var srv = (server || '').toString().toLowerCase().trim();
   if (!srv || typeof loadRanking !== 'function') {
     if (typeof onDone === 'function') onDone(false);
     return;
   }
-  if (_last24hByServer[srv] && _last24hByServer[srv].honor && _last24hByServer[srv].xp && _last24hByServer[srv].rank_points) {
+  if (_last24hByServer[srv] && _last24hByServer[srv]._ready24h) {
     if (typeof onDone === 'function') onDone(false);
     return;
   }
   var hadBefore = !!_last24hByServer[srv];
   Promise.all([
-    loadRanking({ server: srv, type: 'honor', period: '24h', limit: 500 }),
-    loadRanking({ server: srv, type: 'xp', period: '24h', limit: 500 }),
-    loadRanking({ server: srv, type: 'rank_points', period: '24h', limit: 500 })
+    loadRanking({ server: srv, type: 'honor', period: '24h', limit: 500 }).catch(function () { return []; }),
+    loadRanking({ server: srv, type: 'xp', period: '24h', limit: 500 }).catch(function () { return []; }),
+    loadRanking({ server: srv, type: 'rank_points', period: '24h', limit: 500 }).catch(function () { return []; })
   ]).then(function (results) {
     var honor = Array.isArray(results[0]) ? results[0] : [];
     var xp = Array.isArray(results[1]) ? results[1] : [];
     var rank_points = Array.isArray(results[2]) ? results[2] : [];
-    _last24hByServer[srv] = { honor: honor, xp: xp, rank_points: rank_points };
+    _last24hByServer[srv] = { honor: honor, xp: xp, rank_points: rank_points, _ready24h: true };
     if (typeof onDone === 'function') onDone(!hadBefore);
   }).catch(function () {
     if (typeof onDone === 'function') onDone(false);
@@ -1261,20 +1425,147 @@ function _build24hDeltasRowHtml(deltas) {
 }
 
 function _formatFollowedDelta(followed, userStats) {
+  // FIX 8 — comparaison partielle si les stats joueur sont incomplètes
   if (!followed || !userStats) return '';
   var playerStats = _getFollowedPlayerCurrentStats(followed);
-  if (!playerStats) return '';
   return _buildComparisonDeltasHtml(
     userStats,
-    playerStats.honor != null ? Number(playerStats.honor) : null,
-    playerStats.xp != null ? Number(playerStats.xp) : null,
-    playerStats.estimated_rp != null ? Number(playerStats.estimated_rp) : null
+    playerStats && playerStats.honor != null ? Number(playerStats.honor) : null,
+    playerStats && playerStats.xp != null ? Number(playerStats.xp) : null,
+    playerStats && playerStats.estimated_rp != null ? Number(playerStats.estimated_rp) : null
   );
+}
+
+var _FREE_FOLLOW_DEMO = [
+  { pseudo: 'StarHunter_', server: 'gbl5', company: 'eic', level: 26, honor: 1842000, xp: 412000000, rp: 8120000, rankKey: 'rank_12' },
+  { pseudo: 'Nova-7', server: 'fr1', company: 'mmo', level: 22, honor: 920000, xp: 98500000, rp: 3100000, rankKey: 'rank_9' },
+  { pseudo: 'Vega_K', server: 'int5', company: 'vru', level: 19, honor: 510000, xp: 45200000, rp: 1200000, rankKey: 'rank_7' },
+  { pseudo: 'Orion.Legacy', server: 'de2', company: 'eic', level: 31, honor: 3200000, xp: 890000000, rp: 15800000, rankKey: 'rank_15' }
+];
+
+function renderFreeShowcaseFollowedPlayers() {
+  var container = document.getElementById('sidebarFollowedPlayers');
+  if (!container) return;
+  var serverDisplay = typeof SERVER_CODE_TO_DISPLAY !== 'undefined' ? SERVER_CODE_TO_DISPLAY : {};
+  var demos = _FREE_FOLLOW_DEMO;
+
+  function esc(s) {
+    if (typeof escapeHtml === 'function') return escapeHtml(s);
+    var d = document.createElement('div');
+    d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
+  }
+
+  var html = demos.map(function (p) {
+    var displayServer = serverDisplay[p.server] ? serverDisplay[p.server] + ' (' + p.server + ')' : p.server;
+    var companyBadgeHtml = typeof window.getCompanyBadgeHtml === 'function' ? window.getCompanyBadgeHtml(p.company) : '';
+    var companyName = (p.company || '').toString().trim().toUpperCase() || '—';
+    var line2Firme = companyBadgeHtml
+      ? '<span class="watched-player-tooltip-wrap" data-tooltip="' + esc(companyName) + '">' + companyBadgeHtml + '</span>'
+      : '<span class="watched-player-tooltip-wrap" data-tooltip="' + esc(companyName) + '">—</span>';
+
+    var gradeImg = '';
+    var gradeName = '—';
+    if (typeof window.getRankImg === 'function' && p.rankKey) {
+      gradeImg = window.getRankImg(p.rankKey, p.server) || '';
+    }
+    if (typeof window.getGradeTooltip === 'function' && p.rankKey) {
+      gradeName = window.getGradeTooltip(p.rankKey, p.rankKey) || p.rankKey;
+    }
+    var gradeImgHtml = gradeImg
+      ? '<img class="watched-player-grade-icon" src="' + esc(gradeImg) + '" alt="" title="' + esc(gradeName) + '" />'
+      : '';
+    var line2Grade = gradeImgHtml
+      ? '<span class="watched-player-tooltip-wrap" data-tooltip="' + esc(gradeName) + '">' + gradeImgHtml + '</span>'
+      : '<span class="watched-player-tooltip-wrap" data-tooltip="' + esc(gradeName) + '">—</span>';
+
+    var honorLine = '<span class="watched-player-stat-line"><span class="watched-player-stat-label"><img src="img/icon_btn/honor_icon.png" alt="" class="watched-player-stat-icon"></span><span class="watched-player-stat-value">' + esc(formatRankingNumber(p.honor)) + '</span></span>';
+    var xpLine = '<span class="watched-player-stat-line"><span class="watched-player-stat-label"><img src="img/icon_btn/xp_icon.png" alt="" class="watched-player-stat-icon"></span><span class="watched-player-stat-value">' + esc(formatRankingNumber(p.xp)) + '</span></span>';
+    var gradeLine = '<span class="watched-player-stat-line"><span class="watched-player-stat-label"><img src="img/icon_btn/rp_icon.png" alt="" class="watched-player-stat-icon"></span><span class="watched-player-stat-value">' + esc(formatRankingNumber(p.rp)) + '</span></span>';
+
+    return (
+      '<div class="watched-player-card watched-player-card--free-demo" data-free-demo="1">' +
+        '<div class="watched-player-header">' +
+          '<div class="watched-player-header-main">' +
+            '<div class="watched-player-header-line1">' +
+              '<span class="watched-player-pseudo">' + esc(p.pseudo) + '</span>' +
+              '<span class="watched-player-server">' + esc(displayServer) + '</span>' +
+            '</div>' +
+            '<div class="watched-player-header-line2">' +
+              '<span class="watched-player-line2-block"><span class="watched-player-line2-label">Firme :</span> ' + line2Firme + '</span>' +
+              '<span class="watched-player-line2-block"><span class="watched-player-line2-label">Niveau :</span> ' + esc(String(p.level)) + '</span>' +
+              '<span class="watched-player-line2-block"><span class="watched-player-line2-label">Grade :</span> ' + line2Grade + '</span>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="watched-player-separator"></div>' +
+        '<div class="watched-player-stats">' +
+          '<div class="watched-player-stat-group">' + honorLine + '</div>' +
+          '<div class="watched-player-stat-group">' + xpLine + '</div>' +
+          '<div class="watched-player-stat-group">' + gradeLine + '</div>' +
+        '</div>' +
+      '</div>'
+    );
+  }).join('');
+
+  container.innerHTML = html;
+}
+
+function _hideFollowedPlayerInfoTooltip() {
+  var el = document.getElementById('watchedPlayerInfoTooltip');
+  if (el) {
+    el.classList.remove('is-visible');
+    el.textContent = '';
+  }
+}
+
+function _showFollowedPlayerInfoTooltip(icon) {
+  var text = icon.getAttribute('data-tooltip');
+  if (!text) return;
+  var el = document.getElementById('watchedPlayerInfoTooltip');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'watchedPlayerInfoTooltip';
+    el.className = 'watched-player-floating-tooltip';
+    el.setAttribute('role', 'tooltip');
+    document.body.appendChild(el);
+  }
+  el.textContent = text;
+  var r = icon.getBoundingClientRect();
+  var vw = window.innerWidth || 800;
+  var maxW = Math.max(200, Math.min(300, vw - 32));
+  el.style.width = maxW + 'px';
+  el.style.maxWidth = maxW + 'px';
+  var cx = r.left + r.width / 2;
+  cx = Math.max(maxW / 2 + 8, Math.min(cx, vw - maxW / 2 - 8));
+  el.style.left = cx + 'px';
+  el.style.top = (r.bottom + 6) + 'px';
+  el.classList.add('is-visible');
+}
+
+function _bindFollowedPlayerInfoTooltips(container) {
+  if (!container) return;
+  container.querySelectorAll('.watched-player-row-info-icon').forEach(function (icon) {
+    icon.addEventListener('mouseenter', function () { _showFollowedPlayerInfoTooltip(icon); });
+    icon.addEventListener('mouseleave', function () { _hideFollowedPlayerInfoTooltip(); });
+  });
+  if (!container._followedInfoScrollBound) {
+    container._followedInfoScrollBound = true;
+    container.addEventListener('scroll', function () { _hideFollowedPlayerInfoTooltip(); }, true);
+  }
+  if (!window._followedInfoWindowScrollBound) {
+    window._followedInfoWindowScrollBound = true;
+    window.addEventListener('scroll', function () { _hideFollowedPlayerInfoTooltip(); }, true);
+  }
 }
 
 function renderFollowedPlayersSidebar() {
   var container = document.getElementById('sidebarFollowedPlayers');
   if (!container) return;
+  if (typeof getCurrentBadge === 'function' && getCurrentBadge() === 'FREE') {
+    renderFreeShowcaseFollowedPlayers();
+    return;
+  }
   var list = getFollowedPlayers();
   var noFollowedText = typeof window.i18nT === 'function' ? window.i18nT('no_followed_players') : 'Aucun joueur suivi';
   var unfollowText = typeof window.i18nT === 'function' ? window.i18nT('unfollow_player') : 'Ne plus suivre';
@@ -1320,22 +1611,29 @@ function renderFollowedPlayersSidebar() {
     var deltas24h = _getFollowedPlayer24hDelta(srv, pseudo, p.userId || p.user_id || '');
     var row24hHtml = _build24hDeltasRowHtml(deltas24h);
 
+    // FIX 6 — icône grade en priorité ; texte si pas d’image ou erreur de chargement
     var gradeImg = playerStats && playerStats.gradeImg ? String(playerStats.gradeImg) : '';
     var companyBadgeHtml = playerStats && playerStats.companyBadgeHtml ? String(playerStats.companyBadgeHtml) : '';
     var companyName = (p.company || '').toString().trim().toUpperCase() || '—';
     var gradeNameRaw = (playerStats && playerStats.gradeName) || p.grade || p.current_rank || '';
     gradeNameRaw = gradeNameRaw.toString().trim();
-    var gradeName = gradeNameRaw ? gradeNameRaw.replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); }) : '—';
-    var gradeImgHtml = gradeImg
-      ? '<img class="watched-player-grade-icon" src="' + escapeHtml(gradeImg) + '" alt="" />'
-      : '';
-
+    var gradeName = gradeNameRaw ? gradeNameRaw.replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); }) : '';
+    var gradeTip = gradeName || gradeNameRaw || '';
+    var gradeFallbackText = gradeName || gradeNameRaw || '';
     var line2Firme = companyBadgeHtml
       ? '<span class="watched-player-tooltip-wrap" data-tooltip="' + escapeHtml(companyName) + '">' + companyBadgeHtml + '</span>'
       : '<span class="watched-player-tooltip-wrap" data-tooltip="' + escapeHtml(companyName) + '">—</span>';
-    var line2Grade = gradeImgHtml
-      ? '<span class="watched-player-tooltip-wrap" data-tooltip="' + escapeHtml(gradeName) + '">' + gradeImgHtml + '</span>'
-      : '<span class="watched-player-tooltip-wrap" data-tooltip="' + escapeHtml(gradeName) + '">—</span>';
+    var line2Grade;
+    if (gradeImg) {
+      line2Grade = '<span class="watched-player-tooltip-wrap" data-tooltip="' + escapeHtml(gradeTip) + '">' +
+        '<span class="watched-player-grade-cell" data-fallback="' + escapeHtml(gradeFallbackText) + '">' +
+        '<img class="watched-player-grade-icon" src="' + escapeHtml(gradeImg) + '" alt="" onerror="var p=this.parentNode;if(p)p.textContent=p.getAttribute(\'data-fallback\')||\'\';this.style.display=\'none\';" />' +
+        '</span></span>';
+    } else {
+      line2Grade = '<span class="watched-player-tooltip-wrap" data-tooltip="' + escapeHtml(gradeTip) + '">' +
+        (gradeFallbackText ? escapeHtml(gradeFallbackText) : '—') +
+        '</span>';
+    }
 
     return (
       '<div class="watched-player-card" data-user-id="' + escapeHtml(p.userId || p.user_id || '') + '" data-server="' + escapeHtml(srv) + '">' +
@@ -1370,7 +1668,7 @@ function renderFollowedPlayersSidebar() {
               comparisonDeltasHtml +
               '<span class="watched-player-row-info-icon" data-tooltip="Différence de points entre vous et ' + escapeHtml(pseudo) + '" aria-label="Info">ℹ</span>' +
               row24hHtml +
-              '<span class="watched-player-row-info-icon" data-tooltip="Points que ' + escapeHtml(pseudo) + ' a faits les dernières 24 heures" aria-label="Info">ℹ</span>' +
+              '<span class="watched-player-row-info-icon" data-tooltip="Points réalisés par ' + escapeHtml(pseudo) + ' sur les dernières 24 heures" aria-label="Info">ℹ</span>' +
             '</div>'
           : '<div class="watched-player-stats">' +
               '<div class="watched-player-stat-group">' + honorLine + '</div>' +
@@ -1382,6 +1680,7 @@ function renderFollowedPlayersSidebar() {
   }).join('');
 
   container.innerHTML = html;
+  _bindFollowedPlayerInfoTooltips(container);
 
   // Charger les classements 24h pour les serveurs des joueurs suivis (cache) ; re-render quand des données arrivent
   var servers = [];
@@ -1586,14 +1885,42 @@ function renderFollowedPlayersSidebar() {
 
   // Clic sur la carte : ouvre le popup de détail si possible
   function findRankingRowForFollowed(userId, server) {
-    if (!Array.isArray(_lastRankingData) || _lastRankingData.length === 0) return null;
+    // FIX 2 — ouvrir le détail même si le classement courant est un autre serveur (imports + cache)
     var uid = (userId || '').toString().trim();
     var srv = (server || '').toString().toLowerCase().trim();
-    for (var i = 0; i < _lastRankingData.length; i++) {
-      var r = _lastRankingData[i];
-      var ru = (r.userId != null ? String(r.userId) : (r.user_id != null ? String(r.user_id) : '')).trim();
-      var rs = ((r._server || r.server) || '').toString().toLowerCase().trim();
-      if (uid && ru === uid && (!srv || rs === srv)) return r;
+    if (typeof getImportedRanking === 'function' && srv) {
+      var imp = getImportedRanking(srv, 'honor');
+      if (Array.isArray(imp)) {
+        for (var ii = 0; ii < imp.length; ii++) {
+          var ir = imp[ii];
+          var iru = (ir.userId != null ? String(ir.userId) : (ir.user_id != null ? String(ir.user_id) : '')).trim();
+          var irs = ((ir._server || ir.server) || '').toString().toLowerCase().trim();
+          if (uid && iru === uid && irs === srv) return ir;
+        }
+      }
+    }
+    // FIX 2b — sans serveur suivi explicite, ne pas utiliser _lastRankingData (évite match user_id seul sur le mauvais serveur)
+    if (srv && Array.isArray(_lastRankingData) && _lastRankingData.length > 0) {
+      for (var i = 0; i < _lastRankingData.length; i++) {
+        var r = _lastRankingData[i];
+        var ru = (r.userId != null ? String(r.userId) : (r.user_id != null ? String(r.user_id) : '')).trim();
+        var rs = ((r._server || r.server) || '').toString().toLowerCase().trim();
+        // FIX 2b — ligne sans serveur : ne jamais matcher ; sinon exiger rs === srv avec uid aligné
+        if (!rs) continue;
+        if (uid && ru === uid && rs === srv) return r;
+      }
+    }
+    var flist = getFollowedPlayers();
+    for (var f = 0; f < flist.length; f++) {
+      var p = flist[f];
+      var pu = (p.userId != null ? String(p.userId) : (p.user_id != null ? String(p.user_id) : '')).trim();
+      var ps = ((p._server || p.server) || '').toString().toLowerCase().trim();
+      if (uid && pu === uid && ps === srv) {
+        var ck = _followedPersistKey(pu, srv);
+        var cmap = _getFollowedStatsHistory();
+        var c = (ck && cmap[ck] && typeof cmap[ck] === 'object') ? cmap[ck] : {};
+        return Object.assign({}, p, c, { game_pseudo: p.game_pseudo, _server: srv, server: srv });
+      }
     }
     return null;
   }
@@ -1610,10 +1937,24 @@ function renderFollowedPlayersSidebar() {
   });
 }
 
-if (typeof window !== 'undefined') window.refreshFollowedPlayersSidebar = renderFollowedPlayersSidebar;
+if (typeof window !== 'undefined') {
+  window.refreshFollowedPlayersSidebar = renderFollowedPlayersSidebar;
+  // FIX 3 — autres modules peuvent enrichir le cache (ex. ranking.js après enrichissement profils)
+  window.mergeFollowedPlayerStatsCacheFromRow = function (row) {
+    if (!row) return;
+    try {
+      if (typeof isPlayerFollowed === 'function' && isPlayerFollowed(row)) {
+        _mergePersistedFollowedStatsFromRow(row);
+      }
+    } catch (_e) {}
+  };
+}
 
 function showPlayerDetails(row) {
   _currentRankingDetailRow = row;
+  try {
+    if (typeof _mergePersistedFollowedStatsFromRow === 'function') _mergePersistedFollowedStatsFromRow(row);
+  } catch (_e) {}
   const modal = document.getElementById('ranking-detail-modal');
   const overlay = document.getElementById('ranking-detail-overlay');
   if (!modal || !overlay) return;

@@ -201,6 +201,9 @@ const DataSync = {
       return { success: true };
     } catch (e) {
       Logger.warn('[DataSync] syncSettingsOnly erreur:', e?.message || e);
+      if (typeof UnifiedStorage !== 'undefined') {
+        try { UnifiedStorage.set(PENDING_SYNC_KEY, true); } catch (_) {}
+      }
       return { success: false, error: e?.message };
     }
   },
@@ -280,7 +283,12 @@ const DataSync = {
         UnifiedStorage.set(evKey, eventsFromSupabase);
       }
       if (settingsRow && typeof UnifiedStorage !== 'undefined') {
-        UnifiedStorage.set(sk.SETTINGS || 'darkOrbitSettings', settingsRow.settings_json || {});
+        var settingsKey = sk.SETTINGS || 'darkOrbitSettings';
+        var localSettings = UnifiedStorage.get(settingsKey, {});
+        var mergedSettings = typeof window.mergeSettingsForPull === 'function'
+          ? window.mergeSettingsForPull(settingsRow.settings_json, localSettings)
+          : Object.assign({}, localSettings, settingsRow.settings_json || {});
+        UnifiedStorage.set(settingsKey, mergedSettings);
         if (Array.isArray(settingsRow.links_json)) UnifiedStorage.set(sk.CUSTOM_LINKS || 'darkOrbitCustomLinks', settingsRow.links_json);
         var impKey = sk.IMPORTED_RANKINGS || 'darkOrbitImportedRankings';
         var serverImp = settingsRow.imported_rankings_json;
@@ -302,17 +310,17 @@ const DataSync = {
       }
       // Rafraîchir toute l'UI concernée par les données synchronisées
       if (typeof renderHistory === 'function') renderHistory();
+      if (typeof window.maybeRefreshProgression === 'function') window.maybeRefreshProgression();
       if (typeof updateEventsDisplay === 'function') updateEventsDisplay();
       if (typeof window.refreshEventsFromSupabase === 'function') window.refreshEventsFromSupabase();
       if (typeof window.updateBoosterAlert === 'function') window.updateBoosterAlert();
       if (typeof window.updateBoosterWidget === 'function') window.updateBoosterWidget();
       if (typeof window.applyBoosterVisibility === 'function') window.applyBoosterVisibility();
-      if (typeof updateProgressionTab === 'function') updateProgressionTab();
       if (typeof loadCurrentStats === 'function') loadCurrentStats();
-      if (typeof refreshChartColors === 'function') refreshChartColors();
       if (typeof window.refreshRanking === 'function') window.refreshRanking();
       if (typeof window.refreshFollowedPlayersSidebar === 'function') window.refreshFollowedPlayersSidebar();
       if (typeof window.refreshCouponsUI === 'function') window.refreshCouponsUI();
+      if (typeof window.initSettingsTab === 'function') window.initSettingsTab();
       return { success: true };
     } catch (e) {
       Logger.error('[DataSync] Pull erreur:', { message: e?.message, error: e });

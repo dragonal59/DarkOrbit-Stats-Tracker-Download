@@ -151,7 +151,9 @@ async function addSessionFromScan(data) {
       if (typeof showToast === 'function') showToast(rpc.data && rpc.data.error ? rpc.data.error : (rpc.error && rpc.error.message) || 'Erreur sauvegarde', 'error');
       return false;
     }
-    SafeStorage.set(CONFIG.STORAGE_KEYS.CURRENT_STATS, {
+    var belowPts = data.below_rank_points != null ? Number(data.below_rank_points) : NaN;
+    var belowRaw = data.below_rank_raw != null ? String(data.below_rank_raw).trim() : '';
+    var curPayload = {
       honor: session.honor,
       xp: session.xp,
       rankPoints: session.rankPoints,
@@ -159,10 +161,18 @@ async function addSessionFromScan(data) {
       currentRank: session.currentRank,
       note: '',
       timestamp: now
-    });
+    };
+    if (Number.isFinite(belowPts) && belowPts > 0 && belowRaw) {
+      curPayload.belowRankPoints = belowPts;
+      curPayload.belowRankRaw = belowRaw;
+    } else {
+      curPayload.belowRankPoints = null;
+      curPayload.belowRankRaw = null;
+    }
+    SafeStorage.set(CONFIG.STORAGE_KEYS.CURRENT_STATS, curPayload);
     await refreshSessionsFromSupabase();
     if (typeof renderHistory === 'function') renderHistory();
-    if (typeof updateProgressionTab === 'function') updateProgressionTab();
+    if (typeof window.maybeRefreshProgression === 'function') window.maybeRefreshProgression();
     if (typeof updateStatsDisplay === 'function') updateStatsDisplay();
     return true;
   } catch (e) {
@@ -225,10 +235,19 @@ async function saveBaselineSession(stats) {
   });
   await refreshSessionsFromSupabase();
   if (typeof renderHistory === 'function') renderHistory();
-  if (typeof updateProgressionTab === 'function') updateProgressionTab();
+  if (typeof window.maybeRefreshProgression === 'function') window.maybeRefreshProgression();
 }
 
 async function saveSession() {
+  var badgeEarly = (typeof getCurrentBadge === 'function' ? getCurrentBadge() : (typeof BackendAPI !== 'undefined' && BackendAPI.getUserBadge ? BackendAPI.getUserBadge() : 'FREE') || '').toString().toUpperCase();
+  if (badgeEarly === 'FREE') {
+    if (typeof showToast === 'function') {
+      showToast((typeof window !== 'undefined' && typeof window.i18nT === 'function')
+        ? window.i18nT('stats_save_manual_free_use_auto')
+        : 'Utilisez « Récupérer mes statistiques » (badge FREE, une fois par 24 h).', 'info');
+    }
+    return;
+  }
   var stats = getCurrentStats();
   if (!stats.currentRank || stats.honor === 0) {
     if (typeof showToast === 'function') showToast("Veuillez remplir au moins le grade et les points d'honneur", "warning");
@@ -281,7 +300,7 @@ async function saveSession() {
   await refreshSessionsFromSupabase();
   saveCurrentStats();
   renderHistory();
-  updateProgressionTab();
+  if (typeof window.maybeRefreshProgression === 'function') window.maybeRefreshProgression();
   if (typeof updateStatsDisplay === 'function') updateStatsDisplay();
   startSessionTimer();
   
@@ -380,7 +399,7 @@ async function deleteSession(id) {
   await refreshSessionsFromSupabase();
   if (typeof showToast === 'function') showToast("Session supprimée (Ctrl+Z pour annuler)", "success");
   if (typeof renderHistory === 'function') renderHistory();
-  if (typeof updateProgressionTab === 'function') updateProgressionTab();
+  if (typeof window.maybeRefreshProgression === 'function') window.maybeRefreshProgression();
   if (typeof updateStatsDisplay === 'function') updateStatsDisplay();
   if (typeof startSessionTimer === 'function') startSessionTimer();
 }
@@ -678,7 +697,7 @@ function handleImportFile(e) {
       // Recharger l'interface
       loadCurrentStats();
       renderHistory();
-      updateProgressionTab();
+      if (typeof window.maybeRefreshProgression === 'function') window.maybeRefreshProgression();
       startSessionTimer();
       
       // Recharger les événements si fonction disponible

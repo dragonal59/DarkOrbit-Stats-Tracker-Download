@@ -1,0 +1,22 @@
+---
+description: Quand l'utilisateur demande « Tu as bien compris ? », répondre par une synthèse sans code ; n'implémenter qu'après « tu peux coder ».
+alwaysApply: true
+---
+
+# Compréhension avant codage
+
+## 1. Question « Tu as bien compris ? »
+
+Lorsque l’utilisateur demande explicitement **« Tu as bien compris ? »** (ou une formulation équivalente pour valider la compréhension) :
+
+1. Répondre **oui** et fournir une **courte synthèse** de ce qui doit être fait (périmètre, règles métier, fichiers ou zones concernés si déjà identifiés).
+2. **Ne pas** inclure d’**exemples de code**, de patches ni de blocs techniques dans cette réponse de confirmation.
+
+## 2. Feu vert pour coder
+
+- **Ne pas** commencer l’implémentation (modifs de fichiers, refactors, migrations) tant que l’utilisateur n’a pas donné un feu vert explicite, par exemple **« tu peux coder »** ou une phrase équivalente claire.
+- Après ce feu vert, appliquer la synthèse validée et les règles du projet (FREE / PRO, i18n, permissions, etc.).
+
+---
+
+*Évite les malentendus : validation de compréhension d’abord, code ensuite.*

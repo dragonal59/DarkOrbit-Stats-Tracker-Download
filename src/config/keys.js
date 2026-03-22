@@ -46,7 +46,11 @@
     FOLLOWED_PLAYERS: 'darkOrbitFollowedPlayers',
     FOLLOWED_PLAYERS_STATS: 'darkOrbitFollowedPlayersStats',
     USER_COUPONS: 'darkOrbitUserCoupons',
-    USER_COUPON_HISTORY: 'darkOrbitUserCouponHistory'
+    USER_COUPON_HISTORY: 'darkOrbitUserCouponHistory',
+    /** Legacy : ancien throttle (record_user_login utilise sessionStorage par session app). */
+    RECORD_USER_LOGIN_THROTTLE: 'darkorbit_lastLoginRecord',
+    /** Dernière version dont l’utilisateur a validé le changelog (machine, survit au logout). */
+    LAST_APP_VERSION_ACK: 'doStatsTracker_appVersionLastAcked'
   };
 
   var SYNC_KEYS = [
@@ -67,7 +71,7 @@
    * N’y ajouter que des clés réellement « machine » (ex. jamais de données d’un utilisateur A visibles par B).
    */
   function LOGOUT_KEEP_STORAGE_KEYS() {
-    return [];
+    return [STORAGE_KEYS.LAST_APP_VERSION_ACK];
   }
 
   window.APP_KEYS = {

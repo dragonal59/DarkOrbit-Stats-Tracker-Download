@@ -357,6 +357,7 @@
    */
   async function deleteExpiredEvent(eventId, sourceEvent) {
     if (!eventId) return;
+    if (String(eventId).indexOf('free-demo-') === 0) return;
     if (sourceEvent != null && typeof sourceEvent === 'object' && getEndTimestamp(sourceEvent) == null) {
       if (typeof window !== 'undefined' && window.DEBUG && typeof Logger !== 'undefined' && Logger.debug) {
         Logger.debug('[Events] deleteExpiredEvent ignoré (pas d’échéance):', eventId);
@@ -491,6 +492,155 @@
     if (timerHtml) html += '<div class="event-time">' + timerHtml + '</div>';
     html += '</div></div>';
     return html;
+  }
+
+  var FREE_SHOWCASE_EVENT_COUNT = 10;
+
+  function shuffleEventsDbCopy(arr) {
+    var a = arr.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = a[i];
+      a[i] = a[j];
+      a[j] = t;
+    }
+    return a;
+  }
+
+  /** Carte démo FREE : pas de boutons (sidebar vitrine). */
+  function buildFreeShowcaseEventCard(ev) {
+    var endMs = getEndTimestamp(ev);
+    var rawName = (ev.name || '').trim();
+    var lang = (typeof window.getCurrentLang === 'function') ? window.getCurrentLang() : 'fr';
+    var dbEvent = findEventInDatabaseForScraped(ev);
+    var name;
+    var desc;
+    var imageUrl;
+    if (dbEvent && dbEvent.names) {
+      name = (dbEvent.names[lang] || dbEvent.names.fr || dbEvent.names.en || rawName || '').trim() || (typeof window.i18nT === 'function' ? window.i18nT('event_default_name') : 'Événement');
+      desc = (dbEvent.descriptions && (dbEvent.descriptions[lang] || dbEvent.descriptions.fr || dbEvent.descriptions.en)) || '';
+      if (desc.length > MAX_DESC_LENGTH) desc = desc.slice(0, MAX_DESC_LENGTH) + '...';
+      imageUrl = (dbEvent.image || '').trim();
+    } else {
+      name = rawName || (typeof window.i18nT === 'function' ? window.i18nT('event_default_name') : 'Événement');
+      desc = (ev.description || '').trim();
+      if (desc.length > MAX_DESC_LENGTH) desc = desc.slice(0, MAX_DESC_LENGTH) + '...';
+      imageUrl = (ev.imageUrl || '').trim();
+    }
+    var badgeText = typeof window.i18nT === 'function' ? window.i18nT('events_current') : 'En cours';
+    var timerClass = endMs && (endMs - Date.now()) < 24 * 3600 * 1000 ? 'scraped-event-timer-urgent' : 'scraped-event-timer';
+    var timerHtml = endMs ? '<span class="' + timerClass + '" data-end-ms="' + endMs + '">' + escapeHtml(formatCountdown(endMs)) + '</span>' : '';
+    var cardClass = 'event-card event-card-compact scraped-event-card manual-event-card';
+    var evId = escapeHtml(ev.id || '');
+    var html = '<div class="' + cardClass + '" data-event-id="' + evId + '" data-free-demo="1">';
+    if (imageUrl) {
+      html += '<img src="' + escapeHtml(imageUrl) + '" alt="" class="manual-event-bg scraped-event-img">';
+    } else {
+      html += '<div class="manual-event-placeholder"></div>';
+    }
+    html += '<span class="event-badge current">' + escapeHtml(badgeText) + '</span>';
+    html += '<div class="event-card-content">';
+    html += '<div class="event-name">' + escapeHtml(name) + '</div>';
+    if (desc) html += '<div class="event-description scraped-event-desc">' + escapeHtml(desc) + '</div>';
+    if (timerHtml) html += '<div class="event-time">' + timerHtml + '</div>';
+    html += '</div></div>';
+    return html;
+  }
+
+  function renderFreeShowcaseEvents() {
+    var container = document.getElementById('sidebarScrapedEvents');
+    if (!container) return;
+    if (container._intervalId) {
+      clearInterval(container._intervalId);
+      container._intervalId = null;
+    }
+    var resetBtn = document.getElementById('sidebarScrapedEventsResetHidden');
+    if (resetBtn) resetBtn.style.display = 'none';
+
+    if (!_eventsDatabase || !_eventsDatabase.events || _eventsDatabase.events.length === 0) {
+      loadEventsDatabase().then(function () { renderFreeShowcaseEvents(); }).catch(function () {
+        var t = typeof window.i18nT === 'function' ? window.i18nT('no_event_in_progress') : '—';
+        container.innerHTML = '<div class="no-event">' + escapeHtml(t) + '</div>';
+      });
+      return;
+    }
+
+    var pool = shuffleEventsDbCopy(_eventsDatabase.events.filter(function (db) {
+      return db && db.id && db.names && (db.names.fr || db.names.en);
+    }));
+    var pick = pool.slice(0, FREE_SHOWCASE_EVENT_COUNT);
+    if (pick.length === 0) {
+      container.innerHTML = '<div class="no-event">' + escapeHtml(typeof window.i18nT === 'function' ? window.i18nT('no_event_in_progress') : '—') + '</div>';
+      return;
+    }
+
+    var lang = (typeof window.getCurrentLang === 'function' ? window.getCurrentLang() : 'fr') || 'fr';
+    var synthetic = pick.map(function (db, idx) {
+      var nm = (db.names[lang] || db.names.fr || db.names.en || 'Event').trim();
+      return {
+        id: 'free-demo-' + db.id + '-' + idx,
+        name: nm,
+        description: (db.descriptions && (db.descriptions[lang] || db.descriptions.fr)) || '',
+        endMs: Date.now() + ((idx + 5) % 18 + 4) * 3600000
+      };
+    });
+
+    if (synthetic.length === 1) {
+      container.innerHTML = '<div class="events-carousel-viewport"><div class="events-carousel-track events-carousel-track--single"><div class="events-carousel-slide">' + buildFreeShowcaseEventCard(synthetic[0]) + '</div></div></div>';
+      container.classList.remove('events-carousel--multi');
+      container._goTo = null;
+      container._next = null;
+      container._total = 0;
+      if (synthetic[0].endMs) startCountdownInterval();
+      return;
+    }
+
+    var total = synthetic.length;
+    var slidePct = (100 / total).toFixed(2);
+    var slidesHtml = synthetic.map(function (ev) {
+      return '<div class="events-carousel-slide" style="flex:0 0 ' + slidePct + '%">' + buildFreeShowcaseEventCard(ev) + '</div>';
+    }).join('');
+    var dotsHtml = synthetic.map(function (_, i) {
+      return '<button type="button" class="events-carousel-dot' + (i === 0 ? ' active' : '') + '" data-index="' + i + '" aria-label="Slide ' + (i + 1) + '" tabindex="-1">' + '</button>';
+    }).join('');
+    container.innerHTML =
+      '<div class="events-carousel-viewport">' +
+        '<div class="events-carousel-track" style="width:' + total * 100 + '%; transform:translateX(0)">' + slidesHtml + '</div>' +
+      '</div>' +
+      '<div class="events-carousel-nav">' +
+        '<button type="button" class="events-carousel-prev" aria-hidden="true" tabindex="-1">‹</button>' +
+        '<div class="events-carousel-dots">' + dotsHtml + '</div>' +
+        '<button type="button" class="events-carousel-next" aria-hidden="true" tabindex="-1">›</button>' +
+      '</div>';
+    container.classList.add('events-carousel--multi');
+    container.setAttribute('data-carousel-index', '0');
+    container._isTransitioning = false;
+
+    function goTo(index) {
+      if (container._isTransitioning) return;
+      if (total === 0) return;
+      index = (index % total + total) % total;
+      container._isTransitioning = true;
+      container.setAttribute('data-carousel-index', String(index));
+      var track = container.querySelector('.events-carousel-track');
+      if (track) track.style.transform = 'translateX(-' + (index * 100 / total) + '%)';
+      var dots = container.querySelectorAll('.events-carousel-dot');
+      for (var d = 0; d < dots.length; d++) dots[d].classList.toggle('active', d === index);
+      setTimeout(function () { container._isTransitioning = false; }, TRANSITION_DURATION_MS);
+    }
+
+    function next() {
+      if (container._isTransitioning) return;
+      var i = parseInt(container.getAttribute('data-carousel-index'), 10) || 0;
+      goTo(i + 1);
+    }
+
+    container._goTo = goTo;
+    container._next = next;
+    container._total = total;
+    container._intervalId = setInterval(next, 15000);
+    attachScrapedCarouselHoverOnce(container);
+    startCountdownInterval();
   }
 
   function attachScrapedCarouselHoverOnce(container) {
@@ -631,12 +781,19 @@
       el.textContent = formatCountdown(endMs);
     });
     expiredIds.forEach(function (id) {
+      if (String(id).indexOf('free-demo-') === 0) return;
       var ev = getScrapedEvents().find(function (e) { return String(e.id || '') === String(id); });
       if (ev && getEndTimestamp(ev) == null) return;
       deleteExpiredEvent(id, ev);
       _setCachedEvents(getScrapedEvents().filter(function (e) { return String(e.id || '') !== id; }));
     });
-    if (expiredIds.length > 0) renderScrapedEvents();
+    if (expiredIds.length > 0) {
+      if (typeof getCurrentBadge === 'function' && getCurrentBadge() === 'FREE') {
+        renderFreeShowcaseEvents();
+      } else {
+        renderScrapedEvents();
+      }
+    }
   }
 
   function startCountdownInterval() {
@@ -682,6 +839,10 @@
   var _lastRefreshEventsAt = 0;
   var REFRESH_EVENTS_THROTTLE_MS = 60000;
   function refreshEventsFromSupabase(force) {
+    if (typeof getCurrentBadge === 'function' && getCurrentBadge() === 'FREE') {
+      loadEventsDatabase().then(function () { renderFreeShowcaseEvents(); }).catch(function () { renderFreeShowcaseEvents(); });
+      return;
+    }
     var now = Date.now();
     var cacheEmpty = getScrapedEvents().length === 0;
     if (!force && !cacheEmpty && now - _lastRefreshEventsAt < REFRESH_EVENTS_THROTTLE_MS && _lastRefreshEventsAt > 0) return;
@@ -716,11 +877,18 @@
     });
   }
 
+  function bootstrapEventsSidebar() {
+    if (typeof getCurrentBadge === 'function' && getCurrentBadge() === 'FREE') {
+      loadEventsDatabase().then(function () { renderFreeShowcaseEvents(); }).catch(function () { renderFreeShowcaseEvents(); });
+    } else {
+      loadEventsDatabase().then(function () { refreshEventsFromSupabase(); }).catch(function () { refreshEventsFromSupabase(); });
+    }
+  }
+
   function init() {
-    loadEventsDatabase().then(function () {
-      refreshEventsFromSupabase();
-    }).catch(function () {
-      refreshEventsFromSupabase();
+    bootstrapEventsSidebar();
+    window.addEventListener('permissionsApplied', function () {
+      bootstrapEventsSidebar();
     });
 
     if (window.electronScraper) {
@@ -833,9 +1001,14 @@
   window.findEventInDatabase = findEventInDatabase;
   window.loadSharedEvents = loadSharedEvents;
   window.getActiveBoosterType = getActiveBoosterType;
+  window.renderFreeShowcaseEvents = renderFreeShowcaseEvents;
 
   window.addEventListener('languageChanged', function () {
-    renderScrapedEvents();
+    if (typeof getCurrentBadge === 'function' && getCurrentBadge() === 'FREE') {
+      renderFreeShowcaseEvents();
+    } else {
+      renderScrapedEvents();
+    }
   });
 
   window.addEventListener('beforeunload', stopCountdownInterval);

@@ -117,6 +117,17 @@ function isStatsFormEmpty() {
   return !hasNumericValue && !hasRank;
 }
 
+function mergeBelowRankFromStorage(stats) {
+  if (!stats) return stats;
+  var bp = stats.belowRankPoints != null ? Number(stats.belowRankPoints) : NaN;
+  if (Number.isFinite(bp) && bp > 0 && stats.belowRankRaw) return stats;
+  var st = SafeStorage.get(CONFIG.STORAGE_KEYS.CURRENT_STATS);
+  if (!st) return stats;
+  var sbp = st.belowRankPoints != null ? Number(st.belowRankPoints) : NaN;
+  if (!Number.isFinite(sbp) || sbp <= 0 || !st.belowRankRaw) return stats;
+  return { ...stats, belowRankPoints: sbp, belowRankRaw: st.belowRankRaw };
+}
+
 function getDisplayStats() {
   if (!isStatsFormEmpty()) {
     return getCurrentStats();
@@ -147,11 +158,11 @@ function getLastSessionStats() {
 function getHeaderStatsSource() {
   const lastSession = getLastSessionStats();
   if (lastSession && lastSession.currentRank) {
-    return normalizeStatsForDisplay(lastSession);
+    return mergeBelowRankFromStorage(normalizeStatsForDisplay(lastSession));
   }
   const storedStats = SafeStorage.get(CONFIG.STORAGE_KEYS.CURRENT_STATS);
   if (storedStats && storedStats.currentRank) {
-    return normalizeStatsForDisplay(storedStats);
+    return mergeBelowRankFromStorage(normalizeStatsForDisplay(storedStats));
   }
   return null;
 }
@@ -161,13 +172,17 @@ function normalizeStatsForDisplay(s) {
   const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
   const rankPoints = num(s.rankPoints ?? s.rank_points);
   const nextRankPoints = num(s.nextRankPoints ?? s.next_rank_points);
+  const belowPts = s.belowRankPoints ?? s.below_rank_points;
+  const belowN = belowPts != null && belowPts !== '' ? Number(belowPts) : NaN;
   return {
     ...s,
     honor: num(s.honor),
     xp: num(s.xp),
     rankPoints: rankPoints,
     nextRankPoints: nextRankPoints || rankPoints,
-    currentRank: ((s.currentRank ?? s.current_rank ?? '').toString().trim()) || s.currentRank || s.current_rank
+    currentRank: ((s.currentRank ?? s.current_rank ?? '').toString().trim()) || s.currentRank || s.current_rank,
+    belowRankPoints: Number.isFinite(belowN) && belowN > 0 ? belowN : null,
+    belowRankRaw: (s.belowRankRaw ?? s.below_rank_raw ?? '').toString().trim() || null
   };
 }
 
@@ -188,8 +203,14 @@ function saveCurrentStats() {
     }
   }
   
-  const result = SafeStorage.set(CONFIG.STORAGE_KEYS.CURRENT_STATS, stats);
-  
+  const prevSave = SafeStorage.get(CONFIG.STORAGE_KEYS.CURRENT_STATS) || {};
+  const payloadSave = {
+    ...stats,
+    belowRankPoints: prevSave.belowRankPoints != null ? prevSave.belowRankPoints : null,
+    belowRankRaw: prevSave.belowRankRaw != null ? prevSave.belowRankRaw : null
+  };
+  const result = SafeStorage.set(CONFIG.STORAGE_KEYS.CURRENT_STATS, payloadSave);
+
   if (!result.success) {
     Logger.error('Failed to save current stats');
   }
@@ -255,6 +276,7 @@ function loadCurrentStats() {
           selected.innerHTML = `<span>${sanitizeHTML(lastSession.currentRank)}</span>`;
         }
       }
+      var prevBelow = SafeStorage.get(CONFIG.STORAGE_KEYS.CURRENT_STATS) || {};
       SafeStorage.set(CONFIG.STORAGE_KEYS.CURRENT_STATS, {
         honor: lastSession.honor,
         xp: lastSession.xp,
@@ -262,7 +284,9 @@ function loadCurrentStats() {
         nextRankPoints: lastSession.nextRankPoints != null ? lastSession.nextRankPoints : lastSession.rankPoints,
         currentRank: lastSession.currentRank,
         note: lastSession.note || '',
-        timestamp: lastSession.timestamp || Date.now()
+        timestamp: lastSession.timestamp || Date.now(),
+        belowRankPoints: prevBelow.belowRankPoints != null ? prevBelow.belowRankPoints : null,
+        belowRankRaw: prevBelow.belowRankRaw != null ? prevBelow.belowRankRaw : null
       });
     }
   }
@@ -275,12 +299,76 @@ function loadCurrentStats() {
 // DISPLAY UPDATE
 // ==========================================
 
+function updateBelowRankProgress(stats) {
+  const wrap = document.getElementById('belowRankProgressWrap');
+  const bar = document.getElementById('belowRankBar');
+  const pctEl = document.getElementById('belowRankProgressPct');
+  const det = document.getElementById('belowRankDetails');
+  if (!wrap || !bar || !pctEl || !det) return;
+  if (!stats) {
+    wrap.style.display = 'none';
+    return;
+  }
+  const belowFloor = Number(stats.belowRankPoints);
+  const ceiling = Number(stats.nextRankPoints);
+  const cur = Number(stats.rankPoints);
+  if (!Number.isFinite(belowFloor) || belowFloor <= 0 || !Number.isFinite(ceiling) || ceiling <= belowFloor || !stats.belowRankRaw) {
+    wrap.style.display = 'none';
+    return;
+  }
+  wrap.style.display = '';
+  const span = ceiling - belowFloor;
+  // Barre rouge : proximité du seuil du grade inférieur (B) vs vos points (cur) / plafond palier (C).
+  // Plus cur est proche de B, plus la barre se remplit ; proche de C (prochain grade) → vide.
+  const frac = span > 0 ? Math.min(1, Math.max(0, (ceiling - cur) / span)) : 0;
+  const pct = frac * 100;
+  bar.style.width = `${pct.toFixed(1)}%`;
+  pctEl.textContent = `${pct.toFixed(1)}%`;
+
+  let server = 'gbl5';
+  try {
+    if (typeof UserPreferencesAPI !== 'undefined' && UserPreferencesAPI.getActivePlayerInfoSync) {
+      const inf = UserPreferencesAPI.getActivePlayerInfoSync();
+      if (inf && inf.player_server) server = inf.player_server;
+    }
+  } catch (_e) {}
+
+  const rawRank = stats.belowRankRaw;
+  const imgUrl = (typeof window.getRankImg === 'function' && rawRank) ? window.getRankImg(rawRank, server) : '';
+  const tip = (typeof window.getGradeTooltip === 'function' && rawRank)
+    ? window.getGradeTooltip(rawRank, rawRank)
+    : (rawRank || '');
+
+  det.innerHTML = '';
+  const intro = document.createElement('span');
+  intro.className = 'stats-below-rank-intro';
+  const tIntro = typeof window.i18nT === 'function' ? window.i18nT('stats_below_rank_intro') : 'Le grade juste au-dessous';
+  intro.textContent = `${tIntro}\u00a0`;
+  det.appendChild(intro);
+  if (imgUrl) {
+    const im = document.createElement('img');
+    im.className = 'stats-below-rank-grade-img';
+    im.src = imgUrl;
+    im.width = 26;
+    im.height = 26;
+    im.alt = '';
+    im.title = tip;
+    det.appendChild(im);
+    det.appendChild(document.createTextNode('\u00a0'));
+  }
+  const rest = document.createElement('span');
+  const tpl = typeof window.i18nT === 'function' ? window.i18nT('stats_below_rank_rest') : 'a environ {{points}} points de grade.';
+  rest.textContent = tpl.split('{{points}}').join(formatNumberDisplay(belowFloor));
+  det.appendChild(rest);
+}
+
 function updateStatsDisplay() {
   const headerStats = getHeaderStatsSource();
   var sessions = typeof getSessions === 'function' ? getSessions() : [];
   var hasSessions = sessions && sessions.length > 0;
   let stats = (headerStats && hasSessions) ? headerStats : getDisplayStats();
   if (stats) {
+    stats = mergeBelowRankFromStorage(normalizeStatsForDisplay(stats));
     stats = {
       ...stats,
       honor: Number(stats.honor) || 0,
@@ -325,6 +413,7 @@ function updateStatsDisplay() {
       const setW = (id, v) => { const e = document.getElementById(id); if (e) e.style.width = v; };
       setT("rankProgress", "0%"); setW("rankBar", "0%"); setT("rankDetails", "-");
       setT("levelProgress", "0%"); setW("levelBar", "0%"); setT("levelDetails", "-");
+      updateBelowRankProgress(null);
       var nk = document.getElementById('npcKillsDisplay');
       var sk = document.getElementById('shipKillsDisplay');
       var gg = document.getElementById('galaxyGatesDisplay');
@@ -333,6 +422,7 @@ function updateStatsDisplay() {
       if (gg) gg.textContent = '—';
     } else {
       if (statsPanel) statsPanel.style.display = 'none';
+      updateBelowRankProgress(null);
     }
     return;
   }
@@ -397,6 +487,7 @@ function updateStatsDisplay() {
       document.getElementById("rankProgress").textContent = "0%";
     document.getElementById("rankBar").style.width = "0%";
     document.getElementById("rankDetails").textContent = "-";
+    updateBelowRankProgress(stats);
   } else if (currentRankIndex === RANKS_DATA.length - 1) {
     const nextRankImg = document.getElementById("nextRankImg");
     const nextRankText = document.getElementById("nextRankText");
@@ -405,6 +496,7 @@ function updateStatsDisplay() {
     document.getElementById("rankProgress").textContent = "100%";
     document.getElementById("rankBar").style.width = "100%";
     document.getElementById("rankDetails").textContent = "Vous êtes au grade maximum";
+    updateBelowRankProgress(stats);
   } else {
     const nextRankData = RANKS_DATA[currentRankIndex + 1];
     
@@ -430,7 +522,7 @@ function updateStatsDisplay() {
       rankRemaining > 0 
         ? `Il vous reste ${formatNumberDisplay(rankRemaining)} points` 
         : "✅ Objectif atteint !";
-    
+    updateBelowRankProgress(stats);
   }
   
   // Calculate level progress
@@ -705,3 +797,11 @@ function getNextRank(current) {
 }
 
 if (typeof window !== 'undefined') window.numFormat = numFormat;
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('languageChanged', function () {
+    try {
+      if (typeof updateStatsDisplay === 'function') updateStatsDisplay();
+    } catch (_e) {}
+  });
+}

@@ -6,8 +6,8 @@
 
 const ROUTE_PERMISSIONS = Object.freeze({
   stats: null,
-  progression: null,
   history: null,
+  progression: null,
   settings: null,
   classement: null,
   coupons: 'couponsTab',
@@ -17,7 +17,7 @@ const ROUTE_PERMISSIONS = Object.freeze({
 
 /**
  * Vérifie si l'utilisateur peut accéder à une route (onglet)
- * @param {string} routeId - ID de l'onglet (stats, progression, events, superadmin, etc.)
+ * @param {string} routeId - ID de l'onglet (stats, history, events, superadmin, etc.)
  * @returns {boolean}
  */
 function canAccessRoute(routeId) {

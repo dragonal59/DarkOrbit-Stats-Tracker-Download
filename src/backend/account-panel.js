@@ -1,6 +1,7 @@
 /**
  * Panel Mon Compte — accessible à tous (FREE, PRO, ADMIN, SUPERADMIN)
- * Informations compte, sécurité, stats, sessions, danger zone
+ * Onglets : infos, Compte DarkOrbit (identifiants pour « Récupérer mes statistiques »), sécurité, à propos.
+ * FREE : même modal que PRO ; limite 1 compte DarkOrbit (cf. loadDoTab + RPC get_darkorbit_account_limit).
  */
 (function () {
   'use strict';
@@ -14,9 +15,65 @@
     return div.innerHTML;
   }
 
-  function formatNumber(num) {
-    if (num == null || isNaN(num)) return '0';
-    return Number(num).toLocaleString('en-US');
+  function escapeAttr(s) {
+    if (s == null) return '';
+    return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  }
+
+  var PWD_MASK_PLACEHOLDER = '**********';
+
+  async function loadDarkOrbitPasswordIntoCard(card, accountId, hasPassword) {
+    var pwdEl = card.querySelector('.account-do-cred-password');
+    if (!pwdEl || pwdEl.getAttribute('data-pwd-loaded') === '1') return;
+    if (!hasPassword) return;
+    var api = window.electronPlayerStatsCredentials;
+    if (!api || typeof api.getByIdWithPassword !== 'function') {
+      pwdEl.placeholder = PWD_MASK_PLACEHOLDER;
+      pwdEl.removeAttribute('data-i18n-placeholder');
+      return;
+    }
+    try {
+      var res = await api.getByIdWithPassword(accountId);
+      if (res && res.ok && res.password) {
+        pwdEl.value = res.password;
+        pwdEl.setAttribute('data-pwd-loaded', '1');
+        pwdEl.type = 'password';
+        pwdEl.removeAttribute('placeholder');
+        pwdEl.removeAttribute('data-i18n-placeholder');
+      } else {
+        pwdEl.placeholder = PWD_MASK_PLACEHOLDER;
+        pwdEl.removeAttribute('data-i18n-placeholder');
+      }
+    } catch (e) {
+      Logger.warn('[account-panel] getByIdWithPassword:', e);
+      pwdEl.placeholder = PWD_MASK_PLACEHOLDER;
+      pwdEl.removeAttribute('data-i18n-placeholder');
+    }
+  }
+
+  function applyPasswordLockState(section, locked) {
+    var input = section.querySelector('.account-do-cred-password');
+    var lock = section.querySelector('.account-do-cred-lock');
+    if (!input || !lock) return;
+    input.readOnly = locked;
+    lock.classList.toggle('account-do-cred-lock--unlocked', !locked);
+    lock.textContent = locked ? '🔒' : '🔓';
+    lock.setAttribute('aria-pressed', locked ? 'true' : 'false');
+    var tLocked = typeof window.i18nT === 'function' ? window.i18nT('do_password_lock_hint_locked') : 'Verrouillé — cliquer pour modifier';
+    var tUnlocked = typeof window.i18nT === 'function' ? window.i18nT('do_password_lock_hint_unlocked') : 'Déverrouillé — cliquer pour verrouiller';
+    lock.title = locked ? tLocked : tUnlocked;
+    lock.setAttribute('aria-label', locked ? tLocked : tUnlocked);
+  }
+
+  function bindPasswordLock(section) {
+    var input = section.querySelector('.account-do-cred-password');
+    var lock = section.querySelector('.account-do-cred-lock');
+    if (!input || !lock) return;
+    applyPasswordLockState(section, true);
+    lock.addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      applyPasswordLockState(section, !input.readOnly);
+    });
   }
 
   function formatDate(isoOrTs) {
@@ -50,24 +107,31 @@
     return 'account-badge--free';
   }
 
-  function setSupabaseStatus(connected) {
-    var el = document.getElementById('accountSupabaseStatus');
-    if (!el) return;
-    var key = connected ? 'supabase_connected' : 'supabase_disconnected';
-    var fallback = connected ? '✅ Connecté' : '❌ Hors ligne';
-    var text = (typeof window.i18nT === 'function') ? window.i18nT(key) : fallback;
-    el.textContent = text;
-    el.className = 'account-status-chip ' + (connected ? 'account-status-chip--ok' : 'account-status-chip--error');
+  function parseProfileMetadata(profile) {
+    var meta = {};
+    if (profile && profile.metadata) {
+      if (typeof profile.metadata === 'object' && profile.metadata !== null) meta = profile.metadata;
+      else if (typeof profile.metadata === 'string') {
+        try { meta = JSON.parse(profile.metadata); } catch (e) { meta = {}; }
+      }
+    }
+    return meta && typeof meta === 'object' ? meta : {};
   }
 
-  function updateSubscriptionSection(profile, badge) {
-    var statusEl = document.getElementById('accountSubscriptionStatus');
-    var expiryEl = document.getElementById('accountSubscriptionExpiry');
-    if (!statusEl && !expiryEl) return;
+  function updateAboutSubscriptionSection(profile, badge) {
     var subStatus = profile && profile.subscription_status ? profile.subscription_status : 'free';
     var trialExpires = profile && profile.trial_expires_at ? profile.trial_expires_at : null;
     var b = String(badge || '').toUpperCase();
     var isPro = b === 'PRO' || subStatus === 'premium';
+    var meta = parseProfileMetadata(profile);
+    var subMeta = meta.subscription || meta.paypal || {};
+
+    var statusEl = document.getElementById('accountAboutSubStatus');
+    var priceEl = document.getElementById('accountAboutSubPrice');
+    var lastTxEl = document.getElementById('accountAboutSubLastTx');
+    var renewalEl = document.getElementById('accountAboutSubRenewal');
+    var expiryEl = document.getElementById('accountAboutExpiryCancel');
+    if (!statusEl && !priceEl && !lastTxEl && !renewalEl && !expiryEl) return;
 
     if (statusEl) {
       var key;
@@ -75,21 +139,44 @@
       else if (subStatus === 'trial') key = 'subscription_status_trial';
       else if (subStatus === 'suspended') key = 'subscription_status_suspended';
       else key = 'subscription_status_free';
-      var fallbackStatus = subStatus;
-      statusEl.textContent = (typeof window.i18nT === 'function') ? window.i18nT(key) : fallbackStatus;
+      statusEl.textContent = (typeof window.i18nT === 'function') ? window.i18nT(key) : subStatus;
+    }
+
+    var pricePro = (typeof window.i18nT === 'function') ? window.i18nT('price_pro_month') : '7.99€/mois';
+    if (priceEl) {
+      if (subMeta.price != null && String(subMeta.price).trim() !== '') {
+        priceEl.textContent = String(subMeta.price);
+      } else if (subStatus === 'premium' || subStatus === 'trial') {
+        priceEl.textContent = pricePro;
+      } else {
+        priceEl.textContent = '—';
+      }
+    }
+
+    if (lastTxEl) {
+      if (subMeta.last_payment_at) lastTxEl.textContent = formatDate(subMeta.last_payment_at);
+      else if (subMeta.last_transaction_at) lastTxEl.textContent = formatDate(subMeta.last_transaction_at);
+      else lastTxEl.textContent = '—';
+    }
+
+    if (renewalEl) {
+      if (subMeta.next_billing_at) renewalEl.textContent = formatDate(subMeta.next_billing_at);
+      else if (subMeta.renewal_at) renewalEl.textContent = formatDate(subMeta.renewal_at);
+      else if (subStatus === 'trial' && trialExpires) renewalEl.textContent = formatDate(trialExpires);
+      else if (isPro && !trialExpires) {
+        renewalEl.textContent = (typeof window.i18nT === 'function') ? window.i18nT('subscription_renewal_auto') : 'Renouvellement automatique';
+      } else {
+        renewalEl.textContent = '—';
+      }
     }
 
     if (expiryEl) {
-      if (isPro) {
-        if (trialExpires) {
-          expiryEl.textContent = formatDate(trialExpires);
-        } else {
-          var k = 'subscription_no_expiry';
-          var fb = 'Pas de date d\'expiration (renouvellement automatique)';
-          expiryEl.textContent = (typeof window.i18nT === 'function') ? window.i18nT(k) : fb;
-        }
-      } else if (subStatus === 'trial' && trialExpires) {
+      if (subStatus === 'trial' && trialExpires) {
         expiryEl.textContent = formatDate(trialExpires);
+      } else if (isPro && trialExpires) {
+        expiryEl.textContent = formatDate(trialExpires);
+      } else if (isPro && !trialExpires) {
+        expiryEl.textContent = (typeof window.i18nT === 'function') ? window.i18nT('subscription_access_until_cancel') : 'Accès actif jusqu’à résiliation dans PayPal';
       } else {
         expiryEl.textContent = '—';
       }
@@ -99,59 +186,30 @@
   async function loadPanelData() {
     var supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
     if (!supabase) {
-      setSupabaseStatus(false);
       if (typeof showToast === 'function') showToast('Supabase non disponible.', 'error');
       return;
     }
     var user = (await supabase.auth.getUser()).data?.user;
     if (!user) {
-      setSupabaseStatus(false);
       if (typeof showToast === 'function') showToast('Non connecté.', 'error');
       return;
-    }
-    setSupabaseStatus(true);
-
-    // Avatar
-    var avatarUrl = (user.user_metadata && user.user_metadata.avatar_url) ? user.user_metadata.avatar_url : '';
-    var avatarEl = document.getElementById('accountAvatarImg');
-    var avatarWrap = avatarEl && avatarEl.closest ? avatarEl.closest('.account-avatar-wrap') : null;
-    var placeholderEl = avatarWrap ? avatarWrap.querySelector('.account-avatar-placeholder') : null;
-    if (avatarEl) {
-      if (avatarUrl) {
-        avatarEl.src = avatarUrl;
-        avatarEl.alt = '';
-        avatarEl.style.display = '';
-        if (placeholderEl) placeholderEl.style.display = 'none';
-        avatarEl.onerror = function () {
-          avatarEl.style.display = 'none';
-          if (placeholderEl) { placeholderEl.style.display = 'flex'; placeholderEl.textContent = (user.user_metadata?.username || (user.email || '').split('@')[0] || '?').charAt(0).toUpperCase(); }
-        };
-      } else {
-        avatarEl.src = '';
-        avatarEl.style.display = 'none';
-        if (placeholderEl) {
-          placeholderEl.style.display = 'flex';
-          var letter = (user.user_metadata?.username || user.user_metadata?.game_pseudo || (user.email || '').split('@')[0] || '?').charAt(0).toUpperCase();
-          placeholderEl.textContent = letter;
-        }
-      }
     }
 
     // Username (profile ou email prefix)
     var username = user.user_metadata?.username || user.user_metadata?.game_pseudo || (user.email || '').split('@')[0] || '—';
     var profile = null;
     try {
-      var res = await supabase.from('profiles').select('username, email, game_pseudo, created_at, last_login, badge, subscription_status, trial_expires_at').eq('id', user.id).single();
+      var res = await supabase.from('profiles').select('username, email, game_pseudo, created_at, last_login, badge, subscription_status, trial_expires_at, metadata, paypal_subscription_id').eq('id', user.id).single();
       profile = res.data;
       if (profile && (profile.username || profile.game_pseudo)) username = profile.username || profile.game_pseudo;
     } catch (e) {}
     var usernameEl = document.getElementById('accountUsername');
     if (usernameEl) usernameEl.textContent = escapeHtml(username);
 
-    // Email
+    // Email (lecture seule — mise à jour via onglet Sécurité)
     var emailVal = user.email || (profile && profile.email) || '';
-    var emailInput = document.getElementById('accountEmailInput');
-    if (emailInput) emailInput.value = emailVal;
+    var emailDisplay = document.getElementById('accountEmailDisplay');
+    if (emailDisplay) emailDisplay.textContent = emailVal || '—';
 
     // Badge
     var badge = typeof getCurrentBadge === 'function' ? getCurrentBadge() : (typeof BackendAPI !== 'undefined' && BackendAPI.getUserBadge ? BackendAPI.getUserBadge() : (profile && profile.badge) || 'FREE');
@@ -160,259 +218,39 @@
       badgeEl.textContent = badge || 'FREE';
       badgeEl.className = 'account-badge ' + getBadgeClass(badge);
     }
-    updateSubscriptionSection(profile, badge);
+    updateAboutSubscriptionSection(profile, badge);
     var doTabBtn = document.querySelector('.account-panel-tab[data-tab="do"]');
-    var doTabEl = document.getElementById('accountTabDo');
-    if (doTabBtn || doTabEl) {
-      var isFree = !badge || String(badge).toUpperCase() === 'FREE';
-      if (doTabBtn) doTabBtn.style.display = isFree ? 'none' : '';
-      if (doTabEl) doTabEl.style.display = isFree ? 'none' : '';
-    }
+    if (doTabBtn) doTabBtn.style.display = '';
 
     // Date d'inscription
     var joinedAt = profile && profile.created_at ? profile.created_at : (user.created_at || '');
     var joinedEl = document.getElementById('accountJoinedAt');
     if (joinedEl) joinedEl.textContent = formatDate(joinedAt);
 
-    // Stats actuelles (lecture seule)
-    var stats = null;
-    if (typeof getDisplayStats === 'function') stats = getDisplayStats();
-    else if (typeof getCurrentStats === 'function') stats = getCurrentStats();
-    if (!stats) {
-      var sk = (typeof window !== 'undefined' && window.APP_KEYS && window.APP_KEYS.STORAGE_KEYS) ? window.APP_KEYS.STORAGE_KEYS : {};
-      var currentKey = sk.CURRENT_STATS || 'darkOrbitCurrentStats';
-      stats = typeof UnifiedStorage !== 'undefined' ? UnifiedStorage.get(currentKey, {}) : {};
-    }
-    var xpEl = document.getElementById('accountStatXp');
-    var honorEl = document.getElementById('accountStatHonor');
-    var rankPointsEl = document.getElementById('accountStatRankPoints');
-    if (xpEl) xpEl.textContent = formatNumber(stats.xp);
-    if (honorEl) honorEl.textContent = formatNumber(stats.honor);
-    if (rankPointsEl) rankPointsEl.textContent = formatNumber(stats.rankPoints);
-
-    // Grade actuel avec image
-    var rankName = (stats && stats.currentRank) ? stats.currentRank : '—';
-    var rankImg = '';
-    if (typeof getRankImg === 'function' && rankName && rankName !== '—') rankImg = getRankImg(rankName);
-    var gradeImgEl = document.getElementById('accountGradeImg');
-    var gradeNameEl = document.getElementById('accountGradeName');
-    if (gradeImgEl) {
-      if (rankImg) {
-        gradeImgEl.src = rankImg;
-        gradeImgEl.alt = rankName;
-        gradeImgEl.style.display = '';
-      } else {
-        gradeImgEl.src = '';
-        gradeImgEl.style.display = 'none';
-      }
-    }
-    if (gradeNameEl) gradeNameEl.textContent = rankName || '—';
-
-    // Sessions actives (Supabase ne expose qu'une session côté client)
-    var session = (await supabase.auth.getSession()).data?.session;
-    var sessionsList = document.getElementById('accountSessionsList');
-    if (sessionsList) {
-      if (session) {
-        var createdAt = formatDate(session.created_at || session.user?.created_at);
-        sessionsList.innerHTML =
-          '<div class="account-session-item">' +
-          '<span class="account-session-info">' + escapeHtml(typeof window.i18nT === 'function' ? window.i18nT('current_session') : 'Session actuelle') + ' — ' + escapeHtml(createdAt) + '</span>' +
-          '<button type="button" class="sa-btn sa-btn--small account-session-revoke" data-current="1">' + (typeof window.i18nT === 'function' ? window.i18nT('logout') : 'Déconnexion') + '</button>' +
-          '</div>';
-        var revokeBtn = sessionsList.querySelector('.account-session-revoke');
-        if (revokeBtn) revokeBtn.addEventListener('click', function () {
-          if (typeof AuthManager !== 'undefined' && AuthManager.logout) {
-            AuthManager.logout().then(function () {
-              if (typeof window.electronAPI !== 'undefined' && window.electronAPI.navigateToAuth) window.electronAPI.navigateToAuth();
-              else window.location.href = 'auth.html';
-            });
-          }
-        });
-      } else {
-        sessionsList.innerHTML = '<p class="account-empty">' + (typeof window.i18nT === 'function' ? window.i18nT('no_active_sessions') : 'Aucune session active') + '</p>';
-      }
-    }
-
-    // Historique des connexions (last_login)
+    // Historique des connexions (Supabase : user_login_history + repli sur profiles.last_login)
     var loginList = document.getElementById('accountLoginHistoryList');
     if (loginList) {
-      var lastLogin = profile && profile.last_login ? profile.last_login : null;
-      if (lastLogin) {
-        loginList.innerHTML = '<p class="account-login-item">' + escapeHtml(formatDate(lastLogin)) + ' — ' + (typeof window.i18nT === 'function' ? window.i18nT('last_connection') : 'Dernière connexion') + '</p>';
+      var rows = [];
+      try {
+        var hr = await supabase.from('user_login_history').select('logged_in_at').eq('user_id', user.id).order('logged_in_at', { ascending: false }).limit(50);
+        if (hr.error) {
+          Logger.warn('[account-panel] user_login_history:', hr.error.message || hr.error);
+        } else if (hr.data && hr.data.length) {
+          rows = hr.data;
+        }
+      } catch (e) {
+        Logger.warn('[account-panel] login history fetch:', e);
+      }
+      if (rows.length) {
+        loginList.innerHTML = rows.map(function (row) {
+          return '<p class="account-login-item">' + escapeHtml(formatDate(row.logged_in_at)) + '</p>';
+        }).join('');
+      } else if (profile && profile.last_login) {
+        loginList.innerHTML = '<p class="account-login-item">' + escapeHtml(formatDate(profile.last_login)) + ' — ' + escapeHtml(typeof window.i18nT === 'function' ? window.i18nT('last_connection') : 'Dernière connexion') + '</p>';
       } else {
         loginList.innerHTML = '<p class="account-empty">' + (typeof window.i18nT === 'function' ? window.i18nT('no_login_history') : 'Aucun historique') + '</p>';
       }
     }
-  }
-
-  function initAvatarChange() {
-    var btn = document.getElementById('accountAvatarChangeBtn');
-    var img = document.getElementById('accountAvatarImg');
-    var errorEl = document.getElementById('accountAvatarError');
-    if (!btn || !img) return;
-
-    function setAvatarError(msg) {
-      if (errorEl) {
-        errorEl.textContent = msg || '';
-        errorEl.style.display = msg ? 'block' : 'none';
-      }
-    }
-
-    function resizeImageToBlob(file, maxSize, quality, callback) {
-      var reader = new FileReader();
-      reader.onload = function (e) {
-        var dataUrl = e.target && e.target.result;
-        if (!dataUrl || typeof dataUrl !== 'string') {
-          callback(new Error('Lecture du fichier impossible'), null);
-          return;
-        }
-        var image = new Image();
-        image.onload = function () {
-          var w = image.width;
-          var h = image.height;
-          if (w <= maxSize && h <= maxSize) {
-            w = image.width;
-            h = image.height;
-          } else {
-            var r = Math.min(maxSize / w, maxSize / h);
-            w = Math.round(w * r);
-            h = Math.round(h * r);
-          }
-          var canvas = document.createElement('canvas');
-          canvas.width = w;
-          canvas.height = h;
-          var ctx = canvas.getContext('2d');
-          if (!ctx) {
-            callback(new Error('Canvas non disponible'), null);
-            return;
-          }
-          ctx.drawImage(image, 0, 0, w, h);
-          canvas.toBlob(function (blob) {
-            callback(null, blob);
-          }, 'image/jpeg', quality);
-        };
-        image.onerror = function () { callback(new Error('Image invalide'), null); };
-        image.src = dataUrl;
-      };
-      reader.onerror = function () { callback(new Error('Lecture du fichier impossible'), null); };
-      reader.readAsDataURL(file);
-    }
-
-    btn.addEventListener('click', function () {
-      setAvatarError('');
-      var input = document.createElement('input');
-      input.type = 'file';
-      input.accept = 'image/*';
-      input.style.display = 'none';
-      document.body.appendChild(input);
-      input.addEventListener('change', function () {
-        var file = input.files && input.files[0];
-        document.body.removeChild(input);
-        if (!file) return;
-        var supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
-        if (!supabase) {
-          setAvatarError(typeof window.i18nT === 'function' ? window.i18nT('error_generic') || 'Erreur' : 'Erreur');
-          return;
-        }
-        supabase.auth.getUser().then(function (r) {
-          var userId = r.data && r.data.user && r.data.user.id;
-          if (!userId) {
-            setAvatarError(typeof window.i18nT === 'function' ? window.i18nT('not_connected') || 'Non connecté' : 'Non connecté');
-            return;
-          }
-          btn.disabled = true;
-          resizeImageToBlob(file, 128, 0.85, function (err, blob) {
-            if (err) {
-              btn.disabled = false;
-              setAvatarError(err.message || 'Erreur redimensionnement');
-              return;
-            }
-            if (!blob) {
-              btn.disabled = false;
-              setAvatarError('Erreur redimensionnement');
-              return;
-            }
-            var path = userId + '/avatar.jpg';
-            supabase.storage.from('avatars').upload(path, blob, { upsert: true, contentType: 'image/jpeg' })
-              .then(function (uploadRes) {
-                if (uploadRes.error) {
-                  btn.disabled = false;
-                  setAvatarError(uploadRes.error.message || 'Erreur envoi');
-                  return;
-                }
-                var pub = supabase.storage.from('avatars').getPublicUrl(path);
-                var url = pub && pub.data && pub.data.publicUrl ? pub.data.publicUrl : null;
-                if (!url) {
-                  btn.disabled = false;
-                  setAvatarError('URL publique indisponible');
-                  return;
-                }
-                return supabase.auth.updateUser({ data: { avatar_url: url } }).then(function (updateRes) {
-                  return { updateRes: updateRes, url: url };
-                });
-              })
-              .then(function (result) {
-                btn.disabled = false;
-                if (!result || !result.url) return;
-                var updateRes = result.updateRes;
-                var url = result.url;
-                if (updateRes && updateRes.error) {
-                  setAvatarError(updateRes.error.message || 'Erreur mise à jour');
-                  return;
-                }
-                img.src = url;
-                img.style.display = '';
-                var wrap = img.closest && img.closest('.account-avatar-wrap');
-                if (wrap) {
-                  var ph = wrap.querySelector('.account-avatar-placeholder');
-                  if (ph) ph.style.display = 'none';
-                }
-                setAvatarError('');
-                if (typeof showToast === 'function') showToast(typeof window.i18nT === 'function' ? window.i18nT('saved') : 'Sauvegardé', 'success');
-              })
-              .catch(function (e) {
-                btn.disabled = false;
-                setAvatarError(e && e.message ? e.message : 'Erreur');
-                Logger.error('[account-panel] avatar upload:', e && e.message ? e.message : e);
-              });
-          });
-        }).catch(function (e) {
-          btn.disabled = false;
-          setAvatarError(e && e.message ? e.message : 'Erreur');
-        });
-      });
-      input.click();
-    });
-  }
-
-  function initSaveProfile() {
-    var btn = document.getElementById('accountSaveProfileBtn');
-    if (!btn) return;
-    btn.addEventListener('click', async function () {
-      var supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
-      if (!supabase) return;
-      var user = (await supabase.auth.getUser()).data?.user;
-      if (!user) return;
-      var emailInput = document.getElementById('accountEmailInput');
-      var newEmail = emailInput && emailInput.value ? emailInput.value.trim() : '';
-      if (!newEmail) {
-        if (typeof showToast === 'function') showToast(typeof window.i18nT === 'function' ? window.i18nT('email_required') : 'Email requis', 'warning');
-        return;
-      }
-      var updates = {};
-      if (newEmail !== user.email) updates.email = newEmail;
-      if (Object.keys(updates).length === 0) {
-        if (typeof showToast === 'function') showToast(typeof window.i18nT === 'function' ? window.i18nT('no_changes') : 'Aucun changement', 'info');
-        return;
-      }
-      var { error } = await supabase.auth.updateUser(updates);
-      if (error) {
-        if (typeof showToast === 'function') showToast(error.message || 'Erreur', 'error');
-        return;
-      }
-      if (typeof showToast === 'function') showToast(typeof window.i18nT === 'function' ? window.i18nT('saved') : 'Sauvegardé', 'success');
-      if (typeof BackendAPI !== 'undefined' && BackendAPI.invalidateProfileCache) BackendAPI.invalidateProfileCache();
-    });
   }
 
   function initChangePassword() {
@@ -518,16 +356,20 @@
     if (securityEl) securityEl.style.display = tabId === 'security' ? '' : 'none';
     if (aboutEl) aboutEl.style.display = tabId === 'about' ? '' : 'none';
     if (tabId === 'do') loadDoTab();
+    if (tabId === 'about' && typeof loadPanelData === 'function') loadPanelData();
   }
 
   function initAboutTab() {
-    var versionEl = document.getElementById('accountAppVersion');
+    var versionEl = document.getElementById('accountAppVersionInline');
     if (versionEl && typeof window.electronApp !== 'undefined' && typeof window.electronApp.getVersion === 'function') {
       window.electronApp.getVersion().then(function (v) {
-        versionEl.textContent = v || '—';
+        var s = (v || '—').trim();
+        versionEl.textContent = s.indexOf('v') === 0 ? s : 'v' + s;
       }).catch(function () {
-        versionEl.textContent = '—';
+        versionEl.textContent = 'v—';
       });
+    } else if (versionEl) {
+      versionEl.textContent = 'v—';
     }
 
     var statusEl = document.getElementById('accountUpdateStatus');
@@ -544,35 +386,37 @@
     var checkTimeoutId = null;
 
     if (typeof window.electronAppUpdater !== 'undefined') {
-      window.electronAppUpdater.onChecking(function () {
-        setUpdateStatus('update_status_checking', 'Recherche de mises à jour…');
-      });
-      window.electronAppUpdater.onUpdateAvailable(function () {
+      window.electronAppUpdater.onUpdateReadyToInstall(function () {
         if (checkTimeoutId) { clearTimeout(checkTimeoutId); checkTimeoutId = null; }
         checking = false;
         if (checkBtn) checkBtn.disabled = false;
-        setUpdateStatus('update_status_available', '🔄 Mise à jour disponible');
-        if (downloadBtn) downloadBtn.style.display = '';
-      });
-      window.electronAppUpdater.onUpdateNotAvailable(function () {
-        if (checkTimeoutId) { clearTimeout(checkTimeoutId); checkTimeoutId = null; }
-        checking = false;
-        if (checkBtn) checkBtn.disabled = false;
-        setUpdateStatus('update_status_up_to_date', '✅ À jour');
+        setUpdateStatus('update_status_ready_hint', '✅ Mise à jour prête — voir la fenêtre ou le badge en bas à gauche.');
         if (downloadBtn) downloadBtn.style.display = 'none';
       });
-      window.electronAppUpdater.onUpdateError(function () {
+      window.addEventListener('update-flow:dismissed', function () {
+        setUpdateStatus('update_status_ready_badge', '✅ Mise à jour prête — rappel dans le badge (bas à gauche).');
+      });
+      window.electronAppUpdater.onUpdateNotAvailable(function (payload) {
         if (checkTimeoutId) { clearTimeout(checkTimeoutId); checkTimeoutId = null; }
         checking = false;
         if (checkBtn) checkBtn.disabled = false;
-        setUpdateStatus('update_status_error', 'Erreur lors de la vérification des mises à jour');
+        if (payload && payload.reason === 'not_packaged') {
+          setUpdateStatus('update_status_dev_mode', 'Les mises à jour automatiques ne sont pas disponibles en mode développement.');
+        } else {
+          setUpdateStatus('update_status_up_to_date', '✅ À jour');
+        }
         if (downloadBtn) downloadBtn.style.display = 'none';
       });
-      window.electronAppUpdater.onUpdateDownloaded(function () {
+      window.electronAppUpdater.onUpdateError(function (data) {
         if (checkTimeoutId) { clearTimeout(checkTimeoutId); checkTimeoutId = null; }
         checking = false;
         if (checkBtn) checkBtn.disabled = false;
-        setUpdateStatus('update_status_downloaded', '✅ Mise à jour téléchargée — sera installée au prochain redémarrage');
+        var detail = data && data.message ? String(data.message) : '';
+        if (detail && statusEl) {
+          statusEl.textContent = (typeof window.i18nT === 'function' ? window.i18nT('update_status_error') : 'Erreur lors de la vérification des mises à jour') + ' — ' + detail;
+        } else {
+          setUpdateStatus('update_status_error', 'Erreur lors de la vérification des mises à jour');
+        }
         if (downloadBtn) downloadBtn.style.display = 'none';
       });
     }
@@ -593,7 +437,7 @@
           checkTimeoutId = null;
           if (checkBtn) checkBtn.disabled = false;
           setUpdateStatus('update_status_error', 'Erreur lors de la vérification des mises à jour');
-        }, 10000);
+        }, 90000);
       });
     }
 
@@ -654,40 +498,6 @@
       });
     }
 
-    var websiteBtn = document.getElementById('accountWebsiteLink');
-    if (websiteBtn) {
-      websiteBtn.addEventListener('click', function () {
-        var url = 'https://do-stats-tracker.netlify.app';
-        if (typeof window.electronAPI !== 'undefined' && window.electronAPI.openExternal) {
-          window.electronAPI.openExternal(url);
-        } else {
-          window.open(url, '_blank');
-        }
-      });
-    }
-
-    var supportBtn = document.getElementById('accountSupportLink');
-    if (supportBtn) {
-      supportBtn.addEventListener('click', function () {
-        var handle = 'dragonal1601';
-        var copied = false;
-        try {
-          if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(handle).then(function () {
-              copied = true;
-              if (typeof showToast === 'function') {
-                var msg = (typeof window.i18nT === 'function') ? window.i18nT('support_discord_copied') : 'Pseudo Discord copié : ' + handle;
-                showToast(msg, 'success');
-              }
-            });
-          }
-        } catch (e) {}
-        if (!copied && typeof showToast === 'function') {
-          var msg2 = (typeof window.i18nT === 'function') ? window.i18nT('support_discord_copied') : 'Pseudo Discord : ' + handle;
-          showToast(msg2, 'info');
-        }
-      });
-    }
   }
 
   function setBackBtnVisible(visible) {
@@ -755,57 +565,93 @@
     var serverNames = typeof window.SERVER_CODE_TO_DISPLAY === 'object' ? window.SERVER_CODE_TO_DISPLAY : {};
     cardsList.innerHTML = '';
     if (accounts.length === 0) {
-      cardsList.innerHTML = '<p class="account-empty">Aucun compte. Cliquez sur « Ajouter un compte ».</p>';
+      cardsList.innerHTML = '<p class="account-empty" data-i18n="do_accounts_empty">Aucun compte. Utilisez « Ajouter un compte ».</p>';
+      if (typeof window.applyTranslations === 'function') window.applyTranslations();
       if (wasOnAddView) showDoAddView();
       return;
     }
-    accounts.forEach(function (acc) {
-      var card = document.createElement('div');
-      card.className = 'account-do-card';
-      var pseudo = escapeHtml(acc.player_pseudo || acc.username || '—');
+    accounts.forEach(function (acc, index) {
+      var accId = acc.id;
+      var rawPseudo = acc.player_pseudo || acc.username || '';
+      var pseudoDisplay = escapeHtml(rawPseudo || '—');
       var serverCode = (acc.player_server || '').trim() || '—';
       var server = escapeHtml(serverNames[serverCode] || serverCode);
       var isActive = acc.id === activeId;
-      var autoScan = acc.auto_scan !== false;
-      var rankKey = acc.current_rank || '';
-      if (rankKey && typeof RANK_KEY_TO_RANK_NAME !== 'undefined' && rankKey.startsWith('rank_')) rankKey = RANK_KEY_TO_RANK_NAME[rankKey] || rankKey;
-      var rankImg = typeof getRankImg === 'function' && rankKey ? getRankImg(rankKey) : '';
-      var rankData = typeof RANKS_DATA !== 'undefined' && rankKey ? RANKS_DATA.find(function (r) { return r.rank === rankKey || r.name === rankKey; }) : null;
-      var rankDisplay = rankData ? rankData.name : (rankKey || '—');
-      var honor = acc.honor != null ? Number(acc.honor).toLocaleString('en-US') : '—';
-      var xp = acc.xp != null ? Number(acc.xp).toLocaleString('en-US') : '—';
-      var rp = acc.rank_points != null ? Number(acc.rank_points).toLocaleString('en-US') : '—';
-      var serverBadgeClass = 'account-server-badge account-server-badge--' + (serverCode.replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, 6) || 'def');
+      var hasPassword = !!acc.has_password;
+      var expanded = index === 0;
+      var card = document.createElement('div');
+      card.className = 'account-do-accordion';
+      card.setAttribute('data-account-id', accId);
+      card.setAttribute('data-has-password', hasPassword ? '1' : '0');
       card.innerHTML =
-        '<div class="account-do-card-grade">' +
-        (rankImg ? '<img src="' + escapeHtml(rankImg) + '" alt="' + escapeHtml(rankDisplay) + '" class="account-do-grade-img">' : '<div class="account-do-grade-placeholder">?</div>') +
-        '</div>' +
-        '<div class="account-do-card-info">' +
-        '<div class="account-do-card-pseudo">' + pseudo + '</div>' +
-        '<div class="account-do-card-stats">H ' + honor + ' · XP ' + xp + ' · RP ' + rp + '</div>' +
-        '<div class="account-do-card-badges">' +
-        '<span class="' + serverBadgeClass + '">' + server + '</span>' +
-        (isActive ? '<span class="account-badge account-badge--active">ACTIF</span>' : '') +
-        '</div>' +
-        '<div class="account-do-card-scan">' +
-        '<div class="auth-toggle-wrap account-do-scan-wrap">' +
-        '<div class="auth-toggle account-do-scan-toggle' + (autoScan ? ' active' : '') + '" role="switch" aria-checked="' + autoScan + '" data-id="' + escapeHtml(acc.id) + '" tabindex="0">' +
-        '</div><span class="auth-toggle-label">Scan auto</span></div>' +
-        (!autoScan ? '<div class="account-do-manual-msg">Saisie manuelle requise au prochain scan</div>' : '') +
-        '<div class="account-do-credentials-section" data-id="' + escapeHtml(acc.id) + '" style="display:' + (autoScan ? 'block' : 'none') + '">' +
-        (autoScan && !acc.username ? '<div class="account-do-cred-warn">⚠️ Identifiants requis pour le scan automatique</div>' : '') +
-        '<div class="account-do-cred-row"><label>Pseudo DarkOrbit</label><input type="text" class="account-do-cred-pseudo account-input" value="' + escapeHtml(acc.username || '') + '" placeholder="Pseudo"></div>' +
-        '<div class="account-do-cred-row account-do-cred-pwd-row"><label>Mot de passe</label><div class="account-do-cred-pwd-wrap"><input type="password" class="account-do-cred-password account-input" placeholder="••••••"><button type="button" class="account-password-toggle account-do-cred-pwd-toggle" title="Afficher / masquer">👁</button></div></div>' +
-        '<button type="button" class="sa-btn sa-btn--small account-do-cred-save">Sauvegarder</button></div>' +
-        '</div>' +
-        '<div class="account-do-card-actions">' +
-        '<button type="button" class="session-btn account-do-load-btn" data-id="' + escapeHtml(acc.id) + '" data-pseudo="' + escapeHtml(pseudo) + '" data-player-id="' + escapeHtml(acc.player_id || '') + '" data-server-code="' + escapeHtml(serverCode) + '" title="Charger ce compte">▶</button>' +
-        '<button type="button" class="session-btn error account-do-remove-btn" data-id="' + escapeHtml(acc.id) + '" data-pseudo="' + escapeHtml(pseudo) + '" data-server="' + escapeHtml(server) + '" data-player-id="' + escapeHtml(acc.player_id || '') + '" title="Supprimer">🗑</button>' +
-        '</div>';
+        '<button type="button" class="account-do-accordion-header" aria-expanded="' + (expanded ? 'true' : 'false') + '">' +
+        '<div class="account-do-accordion-head-main">' +
+        '<div class="account-do-accordion-summary">' +
+        '<div class="account-do-card-pseudo">' + pseudoDisplay + '</div>' +
+        (isActive ? '<div class="account-do-card-badges"><span class="account-badge account-badge--active" data-i18n="do_active_badge">ACTIF</span></div>' : '') +
+        '</div></div>' +
+        '<span class="account-do-accordion-chevron" aria-hidden="true">▼</span>' +
+        '</button>' +
+        '<div class="account-do-accordion-body"' + (expanded ? '' : ' hidden') + '>' +
+        '<div class="account-do-body-inner">' +
+        '<div class="account-do-field account-do-field--display">' +
+        '<span class="account-do-field-label" data-i18n="do_game_pseudo_label">Pseudo</span>' +
+        '<span class="account-do-field-value">' + pseudoDisplay + '</span></div>' +
+        '<div class="account-do-field account-do-field--display">' +
+        '<span class="account-do-field-label" data-i18n="do_server_label">Serveur</span>' +
+        '<span class="account-do-field-value">' + server + '</span></div>' +
+        '<div class="account-do-credentials-section" data-id="' + escapeAttr(accId) + '">' +
+        '<div class="account-do-field">' +
+        '<label class="account-do-field-label" data-i18n="do_login_pseudo_label">Pseudo DarkOrbit (connexion)</label>' +
+        '<input type="text" class="account-do-cred-pseudo account-input" value="' + escapeAttr(acc.username || '') + '" autocomplete="username" /></div>' +
+        '<div class="account-do-field">' +
+        '<label class="account-do-field-label" data-i18n="do_password_darkorbit_label">Mot de passe DarkOrbit</label>' +
+        '<div class="account-input-password-wrap">' +
+        '<input type="password" class="account-do-cred-password account-input" autocomplete="new-password" data-i18n-placeholder="do_password_placeholder" />' +
+        '<button type="button" class="account-password-toggle account-do-cred-pwd-toggle" data-i18n-title="toggle_password_visibility" data-i18n-aria-label="toggle_password_visibility">👁</button>' +
+        '<button type="button" class="account-password-toggle account-do-cred-lock" data-i18n-title="do_password_lock_hint_locked" title="Verrouillé" aria-pressed="true">🔒</button>' +
+        '</div></div>' +
+        '<div class="account-do-actions">' +
+        '<button type="button" class="account-do-btn account-do-btn--primary account-do-cred-save" data-i18n="do_btn_save">Enregistrer</button>' +
+        '<button type="button" class="account-do-btn account-do-btn--secondary account-do-load-btn" data-id="' + escapeAttr(accId) + '" data-pseudo="' + escapeAttr(rawPseudo || '—') + '" data-player-id="' + escapeAttr(acc.player_id || '') + '" data-server-code="' + escapeAttr(serverCode) + '"></button>' +
+        '<button type="button" class="account-do-btn account-do-btn--danger account-do-remove-btn" data-id="' + escapeAttr(accId) + '" data-pseudo="' + escapeAttr(rawPseudo || 'ce compte') + '" data-server="' + escapeAttr(serverNames[serverCode] || serverCode) + '" data-player-id="' + escapeAttr(acc.player_id || '') + '"></button>' +
+        '</div></div></div></div>';
       cardsList.appendChild(card);
+      var header = card.querySelector('.account-do-accordion-header');
+      var body = card.querySelector('.account-do-accordion-body');
+      var loadBtn = card.querySelector('.account-do-load-btn');
+      if (loadBtn) {
+        loadBtn.setAttribute('data-i18n', 'do_btn_switch');
+        loadBtn.textContent = typeof window.i18nT === 'function' ? window.i18nT('do_btn_switch') : 'Changer de compte';
+      }
+      var remBtn = card.querySelector('.account-do-remove-btn');
+      if (remBtn) {
+        remBtn.setAttribute('data-i18n', 'do_btn_delete_account');
+        remBtn.textContent = typeof window.i18nT === 'function' ? window.i18nT('do_btn_delete_account') : 'Supprimer ce compte';
+      }
+      if (header && body) {
+        header.addEventListener('click', function () {
+          var isOpen = header.getAttribute('aria-expanded') === 'true';
+          var next = !isOpen;
+          header.setAttribute('aria-expanded', next);
+          body.hidden = !next;
+        });
+      }
+    });
+    if (typeof window.applyTranslations === 'function') window.applyTranslations();
+    var pwdLoads = [];
+    cardsList.querySelectorAll('.account-do-accordion').forEach(function (c) {
+      var id = c.getAttribute('data-account-id');
+      var hp = c.getAttribute('data-has-password') === '1';
+      pwdLoads.push(loadDarkOrbitPasswordIntoCard(c, id, hp));
+    });
+    await Promise.all(pwdLoads);
+    cardsList.querySelectorAll('.account-do-credentials-section').forEach(function (sec) {
+      bindPasswordLock(sec);
     });
     cardsList.querySelectorAll('.account-do-load-btn').forEach(function (btn) {
-      btn.addEventListener('click', async function () {
+      btn.addEventListener('click', async function (ev) {
+        ev.stopPropagation();
         var id = btn.getAttribute('data-id');
         var pseudo = btn.getAttribute('data-pseudo') || 'Compte';
         var playerId = btn.getAttribute('data-player-id') || '';
@@ -822,58 +668,20 @@
       });
     });
     if (wasOnAddView) showDoAddView(); else setBackBtnVisible(false);
-    cardsList.querySelectorAll('.account-do-scan-toggle').forEach(function (toggle) {
-      toggle.addEventListener('click', async function () {
-        var id = toggle.getAttribute('data-id');
-        var next = !toggle.classList.contains('active');
-        var r = await api.update(id, { auto_scan: next });
-        if (r && r.ok) {
-          toggle.classList.toggle('active', next);
-          toggle.setAttribute('aria-checked', next);
-          var scanDiv = toggle.closest('.account-do-card-scan');
-          var credSection = scanDiv ? scanDiv.querySelector('.account-do-credentials-section') : null;
-          if (credSection) {
-            credSection.style.display = next ? 'block' : 'none';
-            if (next) {
-              var pseudoInput = credSection.querySelector('.account-do-cred-pseudo');
-              var hasWarn = credSection.querySelector('.account-do-cred-warn');
-              if (!hasWarn && pseudoInput && !pseudoInput.value.trim()) {
-                var w = document.createElement('div');
-                w.className = 'account-do-cred-warn';
-                w.textContent = '⚠️ Identifiants requis pour le scan automatique';
-                credSection.insertBefore(w, credSection.firstChild);
-              }
-            }
-          }
-          var msg = scanDiv ? scanDiv.querySelector('.account-do-manual-msg') : null;
-          if (next) {
-            if (msg) msg.remove();
-          } else {
-            if (!msg) {
-              var m = document.createElement('div');
-              m.className = 'account-do-manual-msg';
-              m.textContent = 'Saisie manuelle requise au prochain scan';
-              var wrap = scanDiv ? scanDiv.querySelector('.account-do-scan-wrap') : null;
-              if (wrap && wrap.nextSibling) wrap.parentNode.insertBefore(m, wrap.nextSibling);
-              else if (wrap) wrap.parentNode.appendChild(m);
-            }
-          }
-        }
-      });
-    });
     cardsList.querySelectorAll('.account-do-cred-pwd-toggle').forEach(function (btn) {
-      btn.addEventListener('click', function () {
+      btn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
         var card = btn.closest('.account-do-credentials-section');
         var pwd = card ? card.querySelector('.account-do-cred-password') : null;
-        if (pwd) {
-          var isPass = pwd.type === 'password';
-          pwd.type = isPass ? 'text' : 'password';
-          btn.textContent = isPass ? '🙈' : '👁';
-        }
+        if (!pwd) return;
+        var isPass = pwd.type === 'password';
+        pwd.type = isPass ? 'text' : 'password';
+        btn.textContent = isPass ? '🙈' : '👁';
       });
     });
     cardsList.querySelectorAll('.account-do-cred-save').forEach(function (btn) {
-      btn.addEventListener('click', async function () {
+      btn.addEventListener('click', async function (ev) {
+        ev.stopPropagation();
         var section = btn.closest('.account-do-credentials-section');
         if (!section) return;
         var id = section.getAttribute('data-id');
@@ -886,13 +694,21 @@
         var r = await api.update(id, payload);
         if (r && r.ok) {
           if (typeof showToast === 'function') showToast('Identifiants sauvegardés', 'success');
-          var warn = section.querySelector('.account-do-cred-warn');
-          if (warn && username) warn.remove();
+          var accCard = section.closest('.account-do-accordion');
+          if (accCard && password) {
+            accCard.setAttribute('data-has-password', '1');
+            var pe = section.querySelector('.account-do-cred-password');
+            if (pe) {
+              pe.setAttribute('data-pwd-loaded', '1');
+            }
+          }
+          applyPasswordLockState(section, true);
         } else if (typeof showToast === 'function') showToast(r && r.error ? r.error : 'Erreur', 'error');
       });
     });
     cardsList.querySelectorAll('.account-do-remove-btn').forEach(function (btn) {
-      btn.addEventListener('click', async function () {
+      btn.addEventListener('click', async function (ev) {
+        ev.stopPropagation();
         var id = btn.getAttribute('data-id');
         var pseudo = btn.getAttribute('data-pseudo') || 'ce compte';
         var server = btn.getAttribute('data-server') || '';
@@ -934,7 +750,25 @@
     var addServer = document.getElementById('accountDoAddServer');
     var addManualToggle = document.getElementById('accountDoAddManualToggle');
     var addPwdToggle = document.getElementById('accountDoAddPasswordToggle');
+    var addPwdLock = document.getElementById('accountDoAddPasswordLock');
     if (!api || typeof api.getAll !== 'function') return;
+    function applyAddPasswordLock(locked) {
+      if (!addPassword || !addPwdLock) return;
+      addPassword.readOnly = locked;
+      addPwdLock.classList.toggle('account-do-cred-lock--unlocked', !locked);
+      addPwdLock.textContent = locked ? '🔒' : '🔓';
+      addPwdLock.setAttribute('aria-pressed', locked ? 'true' : 'false');
+      var tLocked = typeof window.i18nT === 'function' ? window.i18nT('do_password_lock_hint_locked') : '';
+      var tUnlocked = typeof window.i18nT === 'function' ? window.i18nT('do_password_lock_hint_unlocked') : '';
+      addPwdLock.title = locked ? tLocked : tUnlocked;
+      addPwdLock.setAttribute('aria-label', locked ? tLocked : tUnlocked);
+    }
+    if (addPwdLock && addPassword) {
+      applyAddPasswordLock(false);
+      addPwdLock.addEventListener('click', function () {
+        applyAddPasswordLock(!addPassword.readOnly);
+      });
+    }
     if (addPwdToggle && addPassword) {
       addPwdToggle.addEventListener('click', function () {
         var isPass = addPassword.type === 'password';
@@ -947,6 +781,10 @@
         var manual = addManualToggle.classList.contains('active');
         if (addPseudo) { addPseudo.disabled = manual; if (manual) addPseudo.value = ''; }
         if (addPassword) { addPassword.disabled = manual; if (manual) addPassword.value = ''; }
+        if (addPwdLock) {
+          addPwdLock.disabled = manual;
+          addPwdLock.style.opacity = manual ? '0.45' : '1';
+        }
       }
       addManualToggle.addEventListener('click', function () {
         var next = !addManualToggle.classList.contains('active');
@@ -1060,6 +898,7 @@
           if (addPseudo) addPseudo.value = '';
           if (addPassword) addPassword.value = '';
           if (addManualToggle) { addManualToggle.classList.remove('active'); addManualToggle.setAttribute('aria-checked', 'false'); }
+          if (addPwdLock && addPassword) applyAddPasswordLock(false);
           if (typeof showToast === 'function') showToast('Compte ajouté avec succès !', 'success');
         } else if (typeof showToast === 'function') showToast(addResult && addResult.error ? addResult.error : 'Erreur', 'error');
       } catch (e) {
@@ -1084,8 +923,6 @@
       t.addEventListener('click', function () { switchAccountTab(t.getAttribute('data-tab')); });
     });
 
-    initAvatarChange();
-    initSaveProfile();
     initChangePassword();
     initChangeEmail();
     initDeleteAccount();

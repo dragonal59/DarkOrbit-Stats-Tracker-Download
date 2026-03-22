@@ -136,10 +136,29 @@ const JS_EXTRACT_HOME_STATS = (() => {
 
 const JS_EXTRACT_RANK_PAGE = `(function(){
   try {
-    function getText(el){ return el ? (el.textContent || '').trim() : ''; }
+    function getText(el){ return el ? (el.textContent || '').trim().replace(/\\s+/g, ' ') : ''; }
     function parseNum(s){ if (s == null || s === '') return null; var n = parseInt(String(s).replace(/\\s/g,'').replace(/[.,]/g,''), 10); return isNaN(n) ? null : n; }
-    var body = (document.body && document.body.innerText) || document.documentElement.innerText || '';
+    function rankFromImgSrc(src) {
+      if (!src) return null;
+      var m = String(src).match(/\\/ranks\\/(rank_\\d+|[a-zA-Z0-9_-]+)\\./i);
+      return m ? m[1].replace(/-/g,'_') : null;
+    }
+    function maxNumInString(txt) {
+      var best = null;
+      var rx = /\\d[\\d\\s.,]*/g;
+      var m;
+      while ((m = rx.exec(txt)) !== null) {
+        var n = parseNum(m[0]);
+        if (n !== null && n >= 100) { if (best === null || n > best) best = n; }
+      }
+      return best;
+    }
+    var BELOW_RX = /au-dessous|en dessous|juste au-dessous|just below|rank below|grade below|lower rank|darunter|rang darunter|rang en dessous|inferior|inferior rank|debajo|rango inferior|ниже|звание ниже|derecesinin altında|rütbesinin altında|ünvanının altında/i;
+    var ENV_RX = /environ|approximately|approx\\.\\s*|~|ungefähr|ca\\.\\s*|circa|aprox|\\bca\\b|около|примерно|yaklaşık|yaklasik/i;
+
     var initial_rank_points = null, next_rank_points = null;
+    var below_rank_raw = null, below_rank_points = null;
+
     var sumDiv = document.querySelector('#hof_daily_sum');
     if (sumDiv) {
       var rows = sumDiv.querySelectorAll('tr');
@@ -153,23 +172,71 @@ const JS_EXTRACT_RANK_PAGE = `(function(){
       }
     }
     var wrapper = document.querySelector('#hof_daily_wrapper') || document.querySelector('#hof_daily_formulaUnits') || document.querySelector('.hof_inner_content');
-    var pNodes = wrapper ? wrapper.querySelectorAll('p') : [];
-    for (var pi = 0; pi < pNodes.length && next_rank_points === null; pi++) {
+    var pNodes = wrapper ? wrapper.querySelectorAll('p') : document.querySelectorAll('p');
+
+    var rankParagraphs = [];
+    for (var pi = 0; pi < pNodes.length; pi++) {
       var p = pNodes[pi];
-      if (!p.querySelector('img[src*="/ranks/rank_"]')) continue;
-      var pText = getText(p);
-      var numRx = /[\\d\\s.,]+/g;
-      var match;
-      var best = null;
-      while ((match = numRx.exec(pText)) !== null) {
-        var n = parseNum(match[0]);
-        if (n !== null && n >= 1000) { best = best === null ? n : Math.max(best, n); }
+      var img = p.querySelector('img[src*="/ranks/"], img[src*="do_img/global/ranks/"]');
+      if (!img) continue;
+      rankParagraphs.push({ text: getText(p), img: img });
+    }
+
+    var belowIdx = -1;
+    for (var ri = 0; ri < rankParagraphs.length; ri++) {
+      if (!BELOW_RX.test(rankParagraphs[ri].text)) continue;
+      belowIdx = ri;
+      var t = rankParagraphs[ri].text;
+      var em = ENV_RX.exec(t);
+      var bp = null;
+      if (em) {
+        var sub = t.slice(em.index + em[0].length);
+        var nm = sub.match(/([\\d\\s.,]{3,})/);
+        if (nm) bp = parseNum(nm[1]);
       }
-      if (best !== null) next_rank_points = best;
+      if (bp === null) bp = maxNumInString(t);
+      if (bp !== null) {
+        below_rank_points = bp;
+        below_rank_raw = rankFromImgSrc(rankParagraphs[ri].img.getAttribute('src') || rankParagraphs[ri].img.src || '');
+      }
       break;
     }
-    return { initial_rank_points: initial_rank_points, next_rank_points: next_rank_points };
-  } catch(e) { return { initial_rank_points: null, next_rank_points: null, _error: e.message }; }
+
+    for (var ri2 = 0; ri2 < rankParagraphs.length; ri2++) {
+      if (ri2 === belowIdx) continue;
+      var best = maxNumInString(rankParagraphs[ri2].text);
+      if (best !== null && best >= 1000) {
+        next_rank_points = best;
+        break;
+      }
+    }
+
+    if (next_rank_points === null) {
+      for (var pi2 = 0; pi2 < pNodes.length; pi2++) {
+        var p2 = pNodes[pi2];
+        if (!p2.querySelector('img[src*="/ranks/rank_"]')) continue;
+        var pText2 = getText(p2);
+        if (BELOW_RX.test(pText2)) continue;
+        var numRx = /[\\d\\s.,]+/g;
+        var match2;
+        var best2 = null;
+        while ((match2 = numRx.exec(pText2)) !== null) {
+          var n2 = parseNum(match2[0]);
+          if (n2 !== null && n2 >= 1000) { best2 = best2 === null ? n2 : Math.max(best2, n2); }
+        }
+        if (best2 !== null) { next_rank_points = best2; break; }
+      }
+    }
+
+    return {
+      initial_rank_points: initial_rank_points,
+      next_rank_points: next_rank_points,
+      below_rank_raw: below_rank_raw,
+      below_rank_points: below_rank_points
+    };
+  } catch(e) {
+    return { initial_rank_points: null, next_rank_points: null, below_rank_raw: null, below_rank_points: null, _error: e.message };
+  }
 })()`;
 
 const JS_ACCEPT_BANNER = `(function(){
@@ -351,6 +418,8 @@ async function _collectPlayerStatsWithLogin(opts) {
       initial_honor: home && home.initial_honor,
       initial_rank_points: rank && rank.initial_rank_points,
       next_rank_points: rank && rank.next_rank_points,
+      below_rank_raw: rank && rank.below_rank_raw,
+      below_rank_points: rank && rank.below_rank_points,
     };
     destroyWindow();
     return { ok: true, data };
@@ -446,6 +515,8 @@ async function _collectPlayerStatsManual(opts) {
       initial_honor: home && home.initial_honor,
       initial_rank_points: rank && rank.initial_rank_points,
       next_rank_points: rank && rank.next_rank_points,
+      below_rank_raw: rank && rank.below_rank_raw,
+      below_rank_points: rank && rank.below_rank_points,
     };
     console.log('[PlayerStatsScraper] player_id extrait:', data.player_id);
     return { ok: true, data };

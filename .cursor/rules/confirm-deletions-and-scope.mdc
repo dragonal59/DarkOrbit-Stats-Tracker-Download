@@ -1,0 +1,29 @@
+---
+description: Avant toute suppression ou refactor large, confirmer le périmètre exact avec l'utilisateur ; lever les ambiguïtés de libellé (section vs onglet vs fichier).
+alwaysApply: true
+---
+
+# Suppressions et périmètre — confirmation obligatoire
+
+## 1. Toujours confirmer avant de supprimer
+
+Lorsque la demande implique **supprimer**, **retirer**, **enlever** ou **nettoyer** du code ou de l’UI :
+
+1. **Reformuler le périmètre** dans une phrase précise (ex. : « supprimer uniquement le bloc HTML + titre “Analyse de progression” sous l’onglet Progression », et non « supprimer l’onglet Progression entier »).
+2. **Demander explicitement à l’utilisateur** : *« Tu confirmes que tu veux supprimer [reformulation exacte] ? Pas le reste (ex. tout l’onglet / autres fichiers) ? »*
+3. **N’exécuter la suppression** qu’après cette confirmation, sauf si la demande est déjà **sans ambiguïté** sur le périmètre (fichier unique nommé, ou citation précise du fichier + lignes / composant).
+
+## 2. Ambiguïté des libellés
+
+Les titres d’interface (ex. *Analyse de progression*) ne désignent **pas** forcément tout un onglet ou tout un module.
+
+- Si la cible peut être interprétée à plusieurs échelles (section, sous-section, onglet entier, feature complète), **poser une question de clarification** avant de coder.
+- En cas de doute, **privilégier la suppression la plus petite** qui correspond au libellé, et proposer l’élargissement comme option.
+
+## 3. Modifications “larges” (hors suppression)
+
+Pour un **refactor** ou une **refonte** touchant plusieurs fichiers, routes, permissions ou i18n : brièvement **résumer le plan** et demander validation si l’ampleur dépasse ce que la phrase de l’utilisateur suggérait clairement.
+
+---
+
+*Contexte : une demande de retirer “Analyse de progression” avait été interprétée comme la suppression de tout l’onglet Progression — à éviter en systématisant la confirmation de périmètre.*

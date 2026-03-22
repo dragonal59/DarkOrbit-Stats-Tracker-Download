@@ -105,7 +105,7 @@ async function updateExportButtonVisibility() {
 window.updateExportButtonVisibility = updateExportButtonVisibility;
 
 function applyTabVisibility() {
-  const tabIds = ['stats', 'progression', 'history', 'classement', 'coupons', 'settings', 'superadmin'];
+  const tabIds = ['stats', 'history', 'progression', 'classement', 'coupons', 'settings', 'superadmin'];
   const visibleTabs = tabIds.filter(id => currentCanAccessTab(id));
   let activeTabVisible = false;
 
@@ -127,8 +127,11 @@ function applySidebarVisibility() {
   const eventsSidebar = document.querySelector('.events-sidebar');
   const badge = typeof getCurrentBadge === 'function' ? getCurrentBadge() : '';
   if (!badge) return;
-  const hasEvents = ['PRO', 'ADMIN', 'SUPERADMIN'].includes(badge);
-  if (eventsSidebar) eventsSidebar.style.display = hasEvents ? '' : 'none';
+  const hasEvents = badge === 'FREE' || ['PRO', 'ADMIN', 'SUPERADMIN'].includes(badge);
+  if (eventsSidebar) {
+    eventsSidebar.style.display = hasEvents ? '' : 'none';
+    eventsSidebar.classList.toggle('events-sidebar--free-showcase', badge === 'FREE');
+  }
 }
 
 function applySettingsVisibility() {

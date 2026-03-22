@@ -447,6 +447,14 @@ async function loadDostatsPeriodRanking(supabase, server, type, period, limit) {
       duration: duration,
       count: top.length,
     });
+    // FIX 3 — enrichir le cache suivi (ranking-ui) sans fetch supplémentaire
+    try {
+      if (typeof window !== 'undefined' && typeof window.mergeFollowedPlayerStatsCacheFromRow === 'function') {
+        for (var _fci = 0; _fci < top.length; _fci++) {
+          window.mergeFollowedPlayerStatsCacheFromRow(top[_fci]);
+        }
+      }
+    } catch (_e) {}
     return top;
   } catch (e) {
     Logger.warn('[Ranking] loadDostatsPeriodRanking exception:', e?.message);

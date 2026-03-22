@@ -195,6 +195,9 @@ function writeJsonFile(targetPath, payload) {
 }
 
 async function createDostatsWindow() {
+  // Session isolée par fenêtre : plusieurs scrapes IPC en parallèle partageaient le même
+  // stockage par défaut et pouvaient se gêner (chargements / cookies / état DOSTATS).
+  const partition = `temp:dostats-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
   const win = new BrowserWindow({
     show: false,
     width: 1280,
@@ -204,6 +207,7 @@ async function createDostatsWindow() {
       contextIsolation: true,
       sandbox: true,
       webSecurity: true,
+      partition,
     },
   });
   const ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -819,88 +823,105 @@ async function runDostatsRankingScraper(options = {}) {
     });
   }
 
-  let win = null;
   try {
     sendLog('info', `Démarrage scraping DOSTATS — ${servers.length} serveur(s): ${servers.join(', ')}`);
-    win = await createDostatsWindow();
     const results = [];
     const serverConcurrency = getServerConcurrency();
     let index = 0;
     while (index < servers.length) {
       const batch = servers.slice(index, index + serverConcurrency);
       index += serverConcurrency;
+      // Une fenêtre par serveur du batch : une seule WebContents ne peut charger qu’une URL à la fois ;
+      // partager une fenêtre entre Promise.all provoquait des courses (0 entrées / faux négatifs).
       // eslint-disable-next-line no-await-in-loop
-      await Promise.all(
-        batch.map(async (serverCode) => {
-          for (const typeDef of TYPES) {
-            for (const periodDef of PERIODS) {
-              if (periodDef.key === 'last_365d' && SERVERS_SKIP_365.includes(serverCode)) continue;
-              await waitIfPaused();
-              if (typeof global.scraperShouldStop === 'boolean' && global.scraperShouldStop) {
-                return;
+      const wins =
+        batch.length === 1
+          ? [await createDostatsWindow()]
+          : await Promise.all(batch.map(() => createDostatsWindow()));
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        await Promise.all(
+          batch.map(async (srvCode, i) => {
+            const win = wins[i];
+            if (!win || win.isDestroyed()) return;
+            try {
+              for (const typeDef of TYPES) {
+                for (const periodDef of PERIODS) {
+                  if (periodDef.key === 'last_365d' && SERVERS_SKIP_365.includes(srvCode)) continue;
+                  await waitIfPaused();
+                  if (typeof global.scraperShouldStop === 'boolean' && global.scraperShouldStop) {
+                    return;
+                  }
+                  const startTime = Date.now();
+                  let r = null;
+                  const maxRetries = getRetries();
+                  let attempt = 0;
+                  // eslint-disable-next-line no-constant-condition
+                  while (true) {
+                    // eslint-disable-next-line no-await-in-loop
+                    r = await fetchHallOfFameForServer(win, srvCode, typeDef, periodDef);
+                    if (r || attempt >= maxRetries) break;
+                    attempt += 1;
+                  }
+                  const durationMs = Date.now() - startTime;
+                  const waitMs = Math.max(0, getRateLimitDelayMs() - durationMs);
+                  if (r) results.push({ serverCode: srvCode, type: typeDef.key, period: periodDef.key, ...r });
+                  if (mainWindowRef?.webContents) {
+                    const count = r ? r.count : 0;
+                    const url = r?.url ?? null;
+                    const upperServer = (srvCode || '').toString().toUpperCase();
+                    const typeLabelMap = {
+                      leaderboard: 'Leaderboard',
+                      top_user: 'Top User',
+                      experience: 'Experience',
+                      honor: 'Honor',
+                      ship_kills: 'Ship Kills',
+                      alien_kills: 'NPC Kills',
+                    };
+                    const periodLabelMap = {
+                      current: 'Current',
+                      last_24h: '24h',
+                      last_7d: '7j',
+                      last_30d: '30j',
+                      last_90d: '90j',
+                      last_365d: '365j',
+                    };
+                    const typeLabel = typeLabelMap[typeDef.key] || typeDef.key;
+                    const periodLabel = periodLabelMap[periodDef.key] || periodDef.key;
+                    const baseMsg = `[${upperServer}] ${typeLabel} - ${periodLabel} → `;
+                    const ok = !!r && count > 0;
+                    const message = ok
+                      ? `${baseMsg}${count} entrées ✔`
+                      : `${baseMsg}${count} entrées ✖`;
+                    const logType = !r ? 'warning' : count === 0 ? 'error' : 'success';
+                    mainWindowRef.webContents.send('dostats:log', {
+                      type: logType,
+                      server: srvCode,
+                      metric_type: typeDef.key,
+                      period: periodDef.key,
+                      message,
+                      url: count === 0 ? url : undefined,
+                      at: getNowIso(),
+                      count,
+                      durationMs,
+                    });
+                  }
+                  if (waitMs > 0) {
+                    // eslint-disable-next-line no-await-in-loop
+                    await new Promise((resolve) => setTimeout(resolve, waitMs));
+                  }
+                }
               }
-              const startTime = Date.now();
-              let r = null;
-              const maxRetries = getRetries();
-              let attempt = 0;
-              // eslint-disable-next-line no-constant-condition
-              while (true) {
-                // eslint-disable-next-line no-await-in-loop
-                r = await fetchHallOfFameForServer(win, serverCode, typeDef, periodDef);
-                if (r || attempt >= maxRetries) break;
-                attempt += 1;
-              }
-              const durationMs = Date.now() - startTime;
-              const waitMs = Math.max(0, getRateLimitDelayMs() - durationMs);
-              if (r) results.push({ serverCode, type: typeDef.key, period: periodDef.key, ...r });
-              if (mainWindowRef?.webContents) {
-                const count = r ? r.count : 0;
-                const url = r?.url ?? null;
-                const upperServer = (serverCode || '').toString().toUpperCase();
-                const typeLabelMap = {
-                  leaderboard: 'Leaderboard',
-                  top_user: 'Top User',
-                  experience: 'Experience',
-                  honor: 'Honor',
-                  ship_kills: 'Ship Kills',
-                  alien_kills: 'NPC Kills',
-                };
-                const periodLabelMap = {
-                  current: 'Current',
-                  last_24h: '24h',
-                  last_7d: '7j',
-                  last_30d: '30j',
-                  last_90d: '90j',
-                  last_365d: '365j',
-                };
-                const typeLabel = typeLabelMap[typeDef.key] || typeDef.key;
-                const periodLabel = periodLabelMap[periodDef.key] || periodDef.key;
-                const baseMsg = `[${upperServer}] ${typeLabel} - ${periodLabel} → `;
-                const ok = !!r && count > 0;
-                const message = ok
-                  ? `${baseMsg}${count} entrées ✔`
-                  : `${baseMsg}${count} entrées ✖`;
-                const logType = !r ? 'warning' : count === 0 ? 'error' : 'success';
-                mainWindowRef.webContents.send('dostats:log', {
-                  type: logType,
-                  server: serverCode,
-                  metric_type: typeDef.key,
-                  period: periodDef.key,
-                  message,
-                  url: count === 0 ? url : undefined,
-                  at: getNowIso(),
-                  count,
-                  durationMs,
-                });
-              }
-              if (waitMs > 0) {
-                // eslint-disable-next-line no-await-in-loop
-                await new Promise((resolve) => setTimeout(resolve, waitMs));
-              }
+            } catch (err) {
+              console.warn('[dostats-scraper] Erreur scrape serveur', srvCode, err?.message || err);
             }
-          }
-        }),
-      );
+          }),
+        );
+      } finally {
+        wins.forEach((w) => {
+          if (w && !w.isDestroyed()) w.destroy();
+        });
+      }
       if (typeof global.scraperShouldStop === 'boolean' && global.scraperShouldStop) {
         sendLog('info', 'Scraping DOSTATS arrêté par l’utilisateur.');
         return { ok: true, groupId, resultsCount: results.length, results, stopped: true };
@@ -911,10 +932,6 @@ async function runDostatsRankingScraper(options = {}) {
   } catch (e) {
     sendLog('error', `Erreur scraping DOSTATS: ${e?.message || String(e)}`);
     return { ok: false, error: e?.message || 'Erreur scraping DOSTATS' };
-  } finally {
-    if (win && !win.isDestroyed()) {
-      win.destroy();
-    }
   }
 }
 

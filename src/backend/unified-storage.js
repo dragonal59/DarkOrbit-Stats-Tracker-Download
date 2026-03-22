@@ -14,6 +14,80 @@ window.UnifiedStorage = window.UnifiedStorage || {
     warningSize: 4 * 1024 * 1024, // 4MB
     maxSize: 5 * 1024 * 1024 // 5MB
   },
+
+  // FIX 9 — merge local pour suivis (clé user_id|server, pas d’écrasement par null)
+  _followedEntryKey(entry) {
+    if (!entry || typeof entry !== 'object') return '';
+    var uid = (entry.userId != null ? String(entry.userId) : (entry.user_id != null ? String(entry.user_id) : '')) || '';
+    var server = ((entry._server || entry.server || '') + '').toLowerCase().trim();
+    return uid + '|' + server;
+  },
+  _isEmptyFollowedMergeValue(v) {
+    if (v === null || v === undefined) return true;
+    if (typeof v === 'string' && v.trim() === '') return true;
+    return false;
+  },
+  _mergeFollowedEntryFields(a, b) {
+    var out = {};
+    if (a && typeof a === 'object') {
+      for (var k in a) {
+        if (Object.prototype.hasOwnProperty.call(a, k)) out[k] = a[k];
+      }
+    }
+    if (!b || typeof b !== 'object') return out;
+    for (var k2 in b) {
+      if (!Object.prototype.hasOwnProperty.call(b, k2)) continue;
+      var v = b[k2];
+      if (this._isEmptyFollowedMergeValue(v)) continue;
+      out[k2] = v;
+    }
+    return out;
+  },
+  _mergeFollowedPlayersArrayOnSet(nextList) {
+    var sk = (typeof window !== 'undefined' && window.APP_KEYS && window.APP_KEYS.STORAGE_KEYS) ? window.APP_KEYS.STORAGE_KEYS : null;
+    if (!sk) return nextList;
+    var key = sk.FOLLOWED_PLAYERS;
+    var prev = this.get(key, []) || [];
+    if (!Array.isArray(prev)) prev = [];
+    if (!Array.isArray(nextList)) return prev;
+    var prevByKey = {};
+    for (var i = 0; i < prev.length; i++) {
+      var fk = this._followedEntryKey(prev[i]);
+      if (fk) prevByKey[fk] = prev[i];
+    }
+    var out = [];
+    for (var j = 0; j < nextList.length; j++) {
+      var nk = this._followedEntryKey(nextList[j]);
+      if (!nk) {
+        out.push(nextList[j]);
+        continue;
+      }
+      out.push(this._mergeFollowedEntryFields(prevByKey[nk] || {}, nextList[j]));
+    }
+    return out;
+  },
+  _mergeFollowedStatsMapOnSet(nextMap) {
+    var sk = (typeof window !== 'undefined' && window.APP_KEYS && window.APP_KEYS.STORAGE_KEYS) ? window.APP_KEYS.STORAGE_KEYS : null;
+    if (!sk) return nextMap;
+    var key = sk.FOLLOWED_PLAYERS_STATS;
+    var prev = this.get(key, {}) || {};
+    if (!prev || typeof prev !== 'object' || Array.isArray(prev)) prev = {};
+    if (!nextMap || typeof nextMap !== 'object' || Array.isArray(nextMap)) return prev;
+    var out = {};
+    for (var k in prev) {
+      if (Object.prototype.hasOwnProperty.call(prev, k)) out[k] = Object.assign({}, prev[k]);
+    }
+    for (var k2 in nextMap) {
+      if (!Object.prototype.hasOwnProperty.call(nextMap, k2)) continue;
+      var inc = nextMap[k2];
+      if (!inc || typeof inc !== 'object' || Array.isArray(inc)) {
+        out[k2] = inc;
+        continue;
+      }
+      out[k2] = this._mergeFollowedEntryFields(out[k2] || {}, inc);
+    }
+    return out;
+  },
   
   /**
    * GET - Récupère depuis cache OU localStorage
@@ -60,6 +134,12 @@ window.UnifiedStorage = window.UnifiedStorage || {
    */
   set(key, value) {
     try {
+      var sk = (typeof window !== 'undefined' && window.APP_KEYS && window.APP_KEYS.STORAGE_KEYS) ? window.APP_KEYS.STORAGE_KEYS : null;
+      if (sk && key === sk.FOLLOWED_PLAYERS && Array.isArray(value)) {
+        value = this._mergeFollowedPlayersArrayOnSet(value);
+      } else if (sk && key === sk.FOLLOWED_PLAYERS_STATS && value && typeof value === 'object' && !Array.isArray(value)) {
+        value = this._mergeFollowedStatsMapOnSet(value);
+      }
       const jsonData = JSON.stringify(value);
       const originalSize = new Blob([jsonData]).size;
       

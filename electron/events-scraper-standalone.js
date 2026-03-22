@@ -247,7 +247,7 @@ async function runEventsScraping(options = {}) {
     }
 
     console.log(`[EventsScraper] ${filtered.length} événements enregistrés`);
-    return { ok: true, eventsCount: filtered.length };
+    return { ok: true, eventsCount: filtered.length, events: filtered };
   } catch (e) {
     global.scrapingState.running = false;
     if (mainWindowRef?.webContents) {

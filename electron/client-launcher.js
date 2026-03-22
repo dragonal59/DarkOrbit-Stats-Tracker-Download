@@ -448,10 +448,29 @@ const JS_EXTRACT_HOME_STATS = (() => {
 
 const JS_EXTRACT_RANK_PAGE = `(function(){
   try {
-    function getText(el){ return el ? (el.textContent || '').trim() : ''; }
+    function getText(el){ return el ? (el.textContent || '').trim().replace(/\\s+/g, ' ') : ''; }
     function parseNum(s){ if (s == null || s === '') return null; var n = parseInt(String(s).replace(/\\s/g,'').replace(/[.,]/g,''), 10); return isNaN(n) ? null : n; }
+    function rankFromImgSrc(src) {
+      if (!src) return null;
+      var m = String(src).match(/\\/ranks\\/(rank_\\d+|[a-zA-Z0-9_-]+)\\./i);
+      return m ? m[1].replace(/-/g,'_') : null;
+    }
+    function maxNumInString(txt) {
+      var best = null;
+      var rx = /\\d[\\d\\s.,]*/g;
+      var m;
+      while ((m = rx.exec(txt)) !== null) {
+        var n = parseNum(m[0]);
+        if (n !== null && n >= 100) { if (best === null || n > best) best = n; }
+      }
+      return best;
+    }
+    var BELOW_RX = /au-dessous|en dessous|juste au-dessous|just below|rank below|grade below|lower rank|darunter|rang darunter|rang en dessous|inferior|inferior rank|debajo|rango inferior|ниже|звание ниже|derecesinin altında|rütbesinin altında|ünvanının altında/i;
+    var ENV_RX = /environ|approximately|approx\\.\\s*|~|ungefähr|ca\\.\\s*|circa|aprox|\\bca\\b|около|примерно|yaklaşık|yaklasik/i;
+
     var body = (document.body && document.body.innerText) || document.documentElement.innerText || '';
     var initial_rank_points = null, next_rank_points = null, initial_rank = null;
+    var below_rank_raw = null, below_rank_points = null;
 
     var amountCells = document.querySelectorAll('td.hof_units_amount');
     if (amountCells.length >= 1) initial_rank_points = parseNum(getText(amountCells[0]));
@@ -492,8 +511,50 @@ const JS_EXTRACT_RANK_PAGE = `(function(){
       if (nextM) next_rank_points = parseNum(nextM[1]);
     }
 
-    return { initial_rank_points: initial_rank_points, next_rank_points: next_rank_points, initial_rank: initial_rank };
-  } catch(e) { return { initial_rank_points: null, next_rank_points: null, initial_rank: null, _error: e.message }; }
+    var rankParagraphs = [];
+    for (var pj = 0; pj < pNodes.length; pj++) {
+      var p = pNodes[pj];
+      var im = p.querySelector('img[src*="/ranks/"], img[src*="do_img/global/ranks/"]');
+      if (!im) continue;
+      rankParagraphs.push({ text: getText(p), img: im });
+    }
+    var belowIdx = -1;
+    for (var ri = 0; ri < rankParagraphs.length; ri++) {
+      if (!BELOW_RX.test(rankParagraphs[ri].text)) continue;
+      belowIdx = ri;
+      var t = rankParagraphs[ri].text;
+      var em = ENV_RX.exec(t);
+      var bp = null;
+      if (em) {
+        var sub = t.slice(em.index + em[0].length);
+        var nm = sub.match(/([\\d\\s.,]{3,})/);
+        if (nm) bp = parseNum(nm[1]);
+      }
+      if (bp === null) bp = maxNumInString(t);
+      if (bp !== null) {
+        below_rank_points = bp;
+        below_rank_raw = rankFromImgSrc(rankParagraphs[ri].img.getAttribute('src') || rankParagraphs[ri].img.src || '');
+      }
+      break;
+    }
+    if (next_rank_points === null) {
+      for (var ri2 = 0; ri2 < rankParagraphs.length; ri2++) {
+        if (ri2 === belowIdx) continue;
+        var best = maxNumInString(rankParagraphs[ri2].text);
+        if (best !== null && best >= 1000) { next_rank_points = best; break; }
+      }
+    }
+
+    return {
+      initial_rank_points: initial_rank_points,
+      next_rank_points: next_rank_points,
+      initial_rank: initial_rank,
+      below_rank_raw: below_rank_raw,
+      below_rank_points: below_rank_points
+    };
+  } catch(e) {
+    return { initial_rank_points: null, next_rank_points: null, initial_rank: null, below_rank_raw: null, below_rank_points: null, _error: e.message };
+  }
 })()`;
 
 /**
@@ -1372,6 +1433,8 @@ async function collectPlayerStats(opts = {}) {
       initial_honor: home.initial_honor != null ? home.initial_honor : null,
       initial_rank_points: rank.initial_rank_points != null ? rank.initial_rank_points : null,
       next_rank_points: rank.next_rank_points != null ? rank.next_rank_points : null,
+      below_rank_raw: rank.below_rank_raw != null ? rank.below_rank_raw : null,
+      below_rank_points: rank.below_rank_points != null ? rank.below_rank_points : null,
     };
     console.log('[ClientLauncher] Scan terminé — données fusionnées:', JSON.stringify(data, null, 2));
     result = { ok: true, data };

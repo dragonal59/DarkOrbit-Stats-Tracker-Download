@@ -65,18 +65,13 @@ contextBridge.exposeInMainWorld('electronApp', {
 });
 
 contextBridge.exposeInMainWorld('electronAppUpdater', {
-  onChecking: (cb) => { ipcRenderer.on('update-checking', () => { try { cb(); } catch (e) {} }); },
-  onUpdateAvailable: (cb) => { ipcRenderer.on('update-available', (_e, d) => { try { cb(d); } catch (e) {} }); },
-  onUpdateNotAvailable: (cb) => { ipcRenderer.on('update-not-available', () => { try { cb(); } catch (e) {} }); },
-  onDownloadProgress: (cb) => { ipcRenderer.on('update-download-progress', (_e, d) => { try { cb(d); } catch (e) {} }); },
-  onUpdateDownloaded: (cb) => { ipcRenderer.on('update-downloaded', (_e, d) => { try { cb(d); } catch (e) {} }); },
+  onUpdateReadyToInstall: (cb) => { ipcRenderer.on('update-ready-to-install', (_e, d) => { try { cb(d); } catch (e) {} }); },
+  onUpdateNotAvailable: (cb) => { ipcRenderer.on('update-not-available', (_e, d) => { try { cb(d); } catch (e) {} }); },
   onUpdateError: (cb) => { ipcRenderer.on('update-error', (_e, d) => { try { cb(d); } catch (e) {} }); },
-  onCriticalAvailable: (cb) => { ipcRenderer.on('update-critical-available', (_e, d) => { try { cb(d); } catch (e) {} }); },
-  // update:installing : émis par auto-updater.js juste avant quitAndInstall()
-  // pour laisser le renderer afficher un message avant la fermeture de la fenêtre.
-  onInstalling: (cb) => { ipcRenderer.on('update:installing', (_e, d) => { try { cb(d); } catch (e) {} }); },
-  startCriticalDownload: () => { ipcRenderer.send('update:startCriticalDownload'); },
-  checkForUpdates: () => { ipcRenderer.send('update:check'); }
+  checkForUpdates: () => { ipcRenderer.send('update:check'); },
+  checkBlockingOperations: () => ipcRenderer.invoke('update:check-blocking-operations'),
+  quitAndInstall: () => ipcRenderer.invoke('update:quit-and-install'),
+  quitAndInstallConfirmed: () => ipcRenderer.invoke('update:quit-and-install-confirmed'),
 });
 
 contextBridge.exposeInMainWorld('electronSessionScraper', {
@@ -118,6 +113,7 @@ contextBridge.exposeInMainWorld('electronPlayerStatsCredentials', {
   getAll: () => ipcRenderer.invoke('player-stats-credentials:getAll'),
   getActive: () => ipcRenderer.invoke('player-stats-credentials:getActive'),
   getActiveWithPassword: () => ipcRenderer.invoke('player-stats-credentials:getActiveWithPassword'),
+  getByIdWithPassword: (id) => ipcRenderer.invoke('player-stats-credentials:getByIdWithPassword', id),
   add: (account) => ipcRenderer.invoke('player-stats-credentials:add', account),
   setActive: (id) => ipcRenderer.invoke('player-stats-credentials:setActive', id),
   remove: (id) => ipcRenderer.invoke('player-stats-credentials:remove', id),

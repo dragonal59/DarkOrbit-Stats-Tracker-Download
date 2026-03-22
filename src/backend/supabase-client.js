@@ -64,10 +64,42 @@ function initSupabaseClient() {
     window.SUPABASE_CONFIG.anonKey
   );
 
+  /** Une entrée d’historique « connexion » par session navigateur (fenêtre Electron), pas à chaque rechargement F5. */
+  var RECORD_SESSION_KEY = 'darkorbit_record_user_login_done_uid';
+
+  function recordUserLoginOncePerAppSession() {
+    var supabase = window.supabaseClient;
+    if (!supabase) return;
+    supabase.auth.getSession().then(function (r) {
+      var sess = r.data && r.data.session;
+      if (!sess || !sess.user) return;
+      var uid = sess.user.id;
+      try {
+        if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(RECORD_SESSION_KEY) === uid) {
+          return;
+        }
+      } catch (_) {}
+      supabase.rpc('record_user_login').then(function (res) {
+        if (res.error) {
+          Logger.warn('[SUPABASE] record_user_login:', res.error.message || res.error);
+          return;
+        }
+        try {
+          if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(RECORD_SESSION_KEY, uid);
+        } catch (_) {}
+      });
+    });
+  }
+
   const { data: { subscription } } = window.supabaseClient.auth.onAuthStateChange((event, session) => {
     if (event === 'SIGNED_OUT') {
       Logger.warn('[SUPABASE] Session terminée.');
+      try {
+        if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(RECORD_SESSION_KEY);
+      } catch (_) {}
       stopProfileBadgeRealtime();
+    } else if ((event === 'INITIAL_SESSION' || event === 'SIGNED_IN') && session && session.user) {
+      recordUserLoginOncePerAppSession();
     }
   });
   _authSubscription = subscription;

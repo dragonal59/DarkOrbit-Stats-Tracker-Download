@@ -224,7 +224,7 @@ function showToast(message, type = 'success', duration) {
 }
 
 // ==========================================
-// WEEK START (lundi) — partagé par progression.js et history.js
+// WEEK START (lundi) — partagé notamment par history.js
 // ==========================================
 
 /**
@@ -242,7 +242,7 @@ function getWeekStart(date) {
 }
 
 // ==========================================
-// NUMBER FORMATTING (centralisé — remplace les doublons dans stats/history/progression)
+// NUMBER FORMATTING (centralisé — remplace les doublons dans stats/history)
 // ==========================================
 
 /**
