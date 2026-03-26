@@ -30,11 +30,13 @@ function saveCollapsedValue(groupId, collapsed) {
 
 export function ServerGroup({
   group,
+  allGroups,
   searchQuery,
   timeAgo,
   timeUntil,
   toggleServer,
   onStartScrape,
+  onScrapeGroup,
   onSelectServer,
   selectedServerId,
 }) {
@@ -44,6 +46,12 @@ export function ServerGroup({
   });
 
   const runningCount = group.servers.filter((s) => s.status === 'running').length;
+
+  const fullGroup = (allGroups || []).find((g) => g.id === group.id);
+  const serversForGroupScrape =
+    fullGroup && fullGroup.servers && fullGroup.servers.length
+      ? fullGroup.servers
+      : group.servers;
 
   const matchesSearch = (server) => {
     const q = (searchQuery || '').toLowerCase();
@@ -110,6 +118,18 @@ export function ServerGroup({
             }}
           >
             Tout désactiver
+          </button>
+          <button
+            type="button"
+            className="group-action-btn group-action-btn--scrape"
+            title="Lancer un scrape DOSTATS pour chaque serveur du groupe (mis en file)"
+            onClick={() => {
+              if (typeof onScrapeGroup === 'function') {
+                onScrapeGroup(serversForGroupScrape);
+              }
+            }}
+          >
+            Scraper ce groupe
           </button>
         </div>
       </button>

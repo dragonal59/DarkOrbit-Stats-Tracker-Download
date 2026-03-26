@@ -63,7 +63,8 @@ async function updateActiveAccountDisplay() {
     }
     if (active && (active.player_pseudo || active.player_id)) {
       var server = (active.player_server || '').toUpperCase();
-      el.textContent = 'Connecté : ' + (active.player_pseudo || active.player_id || '—') + (server ? ' — ' + server : '');
+      var prefix = (typeof window.i18nT === 'function') ? window.i18nT('header_connected_prefix') : 'Connecté :';
+      el.textContent = prefix + ' ' + (active.player_pseudo || active.player_id || '—') + (server ? ' — ' + server : '');
       el.style.display = '';
     } else {
       el.style.display = 'none';
@@ -287,11 +288,14 @@ function initMainButtons() {
       });
       const selected = document.getElementById('selected');
       if (selected) {
-        selected.innerHTML = '<span>Sélectionner votre grade actuel</span>';
+        var sg = (typeof window.i18nT === 'function') ? window.i18nT('select_grade') : 'Sélectionner votre grade actuel';
+        var esc = (typeof escapeHtml === 'function') ? escapeHtml(sg) : sg;
+        selected.innerHTML = '<span data-i18n="select_grade">' + esc + '</span>';
       }
       saveCurrentStats();
       updateStatsDisplay();
-      showToast('🔄 Formulaire réinitialisé', 'success');
+      var toastReset = (typeof window.i18nT === 'function') ? window.i18nT('stats_form_reset_toast') : 'Formulaire réinitialisé';
+      showToast('🔄 ' + toastReset, 'success');
     });
   }
   

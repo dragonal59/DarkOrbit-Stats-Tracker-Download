@@ -4,7 +4,9 @@ import { makeLog, AVAILABLE_COMMANDS, LOG_TYPES, CONSOLE_COMMANDS_HELP } from '.
 const DEFAULT_MAX_LOGS = 2000;
 
 function formatLogLine(l) {
-  return l.message || '';
+  const sym =
+    l.symbol === 'check' ? ' ✔' : l.symbol === 'cross' ? ' ✗' : '';
+  return (l.message || '') + sym;
 }
 
 export function useConsoleLogs(scraperLogs = [], options = {}) {
@@ -187,20 +189,23 @@ export function useConsoleLogs(scraperLogs = [], options = {}) {
   }, [visibleLogs]);
 
   const copyLog = useCallback((log) => {
+    const sym =
+      log.symbol === 'check' ? ' ✔' : log.symbol === 'cross' ? ' ✗' : '';
     const text = `[${log.timestamp}] [${log.type.toUpperCase()}]${
       log.server ? ` [${log.server}]` : ''
-    } ${log.message}`;
+    } ${log.message}${sym}`;
     window.navigator.clipboard?.writeText(text);
   }, []);
 
   const copyAllLogs = useCallback(() => {
     const text = visibleLogs
-      .map(
-        (l) =>
-          `[${l.timestamp}] [${l.type.toUpperCase()}]${
-            l.server ? ` [${l.server}]` : ''
-          } ${l.message}`,
-      )
+      .map((l) => {
+        const sym =
+          l.symbol === 'check' ? ' ✔' : l.symbol === 'cross' ? ' ✗' : '';
+        return `[${l.timestamp}] [${l.type.toUpperCase()}]${
+          l.server ? ` [${l.server}]` : ''
+        } ${l.message}${sym}`;
+      })
       .join('\n');
     window.navigator.clipboard?.writeText(text);
   }, [visibleLogs]);

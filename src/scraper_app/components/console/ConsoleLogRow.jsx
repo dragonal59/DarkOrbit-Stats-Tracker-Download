@@ -58,9 +58,23 @@ export function ConsoleLogRow({ log, isNew, onCopy }) {
       <span
         className={`log-message ${
           isCommand ? 'log-message--command' : ''
-        } ${isResult ? 'log-message--result' : ''}`}
+        } ${isResult ? 'log-message--result' : ''} ${
+          log.multiline ? 'log-message--multiline' : ''
+        }`}
       >
         {log.message}
+        {log.symbol === 'check' && (
+          <span className="log-symbol log-symbol--ok" aria-hidden>
+            {' '}
+            ✔
+          </span>
+        )}
+        {log.symbol === 'cross' && (
+          <span className="log-symbol log-symbol--cross" aria-hidden>
+            {' '}
+            ✗
+          </span>
+        )}
       </span>
       {log.duration && (
         <span className="log-duration">{log.duration}ms</span>

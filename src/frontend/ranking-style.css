@@ -141,6 +141,19 @@
   justify-content: center;
 }
 
+#ranking-player-search {
+  width: 100%;
+  min-width: 180px;
+  padding: 0.5rem 0.75rem;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  align-self: center;
+  text-align-last: center;
+}
+
 /* Placement grille pour l'onglet classement :
    - Serveur + Période en haut
    - Firme en bas à droite
@@ -290,6 +303,8 @@
 .ranking-table th[data-col="npc_kills"],
 .ranking-table th[data-col="ship_kills"],
 .ranking-table th[data-col="galaxy_gates"] { text-align: right; width: 200px; }
+.ranking-table th[data-col="delta_24h"] { text-align: center; width: 110px; text-transform: none; }
+.ranking-table td.ranking-delta24h-cell { text-align: center; width: 110px; vertical-align: middle; }
 .ranking-table th.ranking-col-sorted { color: var(--accent); }
 .ranking-table th.ranking-col-hidden,
 .ranking-table td.ranking-col-hidden { display: none; }
@@ -1530,5 +1545,27 @@
   align-items: center;
   justify-content: center;
   gap: 12px;
+}
+
+/* Colonne delta 24h : flèche centrée + tooltip coloré selon le signe */
+.ranking-delta24h-cell {
+  vertical-align: middle;
+  text-align: center;
+}
+
+.ranking-delta24h-arrow {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.watched-player-tooltip-wrap.delta24h-tooltip-wrap--pos::after {
+  color: var(--success, #22c55e);
+}
+
+.watched-player-tooltip-wrap.delta24h-tooltip-wrap--neg::after {
+  color: var(--danger, #ef4444);
 }
 

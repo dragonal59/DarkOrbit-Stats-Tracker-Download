@@ -354,6 +354,20 @@
   padding-left: 8px;
 }
 
+.log-message--multiline {
+  white-space: pre-line;
+}
+
+.log-symbol--ok {
+  color: var(--accent-emerald);
+  font-weight: 600;
+}
+
+.log-symbol--cross {
+  color: var(--accent-rose);
+  font-weight: 600;
+}
+
 .log-duration {
   font-size: 10px;
   color: var(--text-muted);

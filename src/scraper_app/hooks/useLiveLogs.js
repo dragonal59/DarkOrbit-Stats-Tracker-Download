@@ -9,10 +9,33 @@ export function useLiveLogs() {
     if (!window.electronDostatsScraper?.onLog) return;
     const handler = (evt) => {
       const log = evt || {};
+      if (log.silent) return;
       const id = _nextId++;
       const type = log.type || 'info';
       let message = log.message || '';
       const metricType = log.metric_type || '';
+
+      if (
+        metricType === 'rankings_summary' ||
+        metricType === 'rankings_batch_start' ||
+        metricType === 'player_profile_batch_start' ||
+        metricType === 'player_profile_batch_end' ||
+        metricType === 'player_profile_failures_list'
+      ) {
+        setLogs((prev) => [
+          {
+            id,
+            type,
+            message,
+            timestamp: log.at || new Date().toISOString(),
+            context: '',
+            symbol: log.symbol || null,
+            multiline: metricType === 'player_profile_failures_list',
+          },
+          ...prev,
+        ].slice(0, 50));
+        return;
+      }
 
       if (['top_user', 'experience', 'honor', 'alien_kills', 'ship_kills'].includes(metricType) && log.server) {
         const serverCode = String(log.server || '').toUpperCase();
@@ -48,10 +71,17 @@ export function useLiveLogs() {
       } else {
         message = message.replace(/^\[[^\]]*]\s*\[[^\]]*]\s*\[[^\]]*]\s*/, '');
       }
-      const ts = '';
+      const ts = log.at || new Date().toISOString();
       const context = '';
       setLogs((prev) => [
-        { id, type, message, timestamp: ts, context },
+        {
+          id,
+          type,
+          message,
+          timestamp: ts,
+          context,
+          symbol: log.symbol || null,
+        },
         ...prev,
       ].slice(0, 50));
     };

@@ -127,7 +127,21 @@ function LogItem({ log }) {
     >
       <span style={{ color }}>{icon}</span>
       <div style={{ flex: 1 }}>
-        <div style={{ color: 'var(--text-primary)', marginBottom: 2 }}>{log.message}</div>
+        <div
+        style={{
+          color: 'var(--text-primary)',
+          marginBottom: 2,
+          whiteSpace: log.multiline ? 'pre-line' : 'normal',
+        }}
+      >
+        {log.message}
+        {log.symbol === 'check' && (
+          <span style={{ color: '#4ade80', fontWeight: 600 }}> ✔</span>
+        )}
+        {log.symbol === 'cross' && (
+          <span style={{ color: '#f87171', fontWeight: 600 }}> ✗</span>
+        )}
+      </div>
         <div
           style={{
             display: 'flex',

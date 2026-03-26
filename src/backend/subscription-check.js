@@ -76,6 +76,55 @@
     }
   }
 
+  /**
+   * - [data-open-upgrade-pro-modal] : ouvre le modal Passez PRO (sidebar booster).
+   * - [data-paypal-pro-subscribe] : ouvre le checkout PayPal (ex. bouton du modal).
+   * - [data-subscription-nav] : page d’abonnement (clé d’essai, etc.).
+   * Délégation sur document : fiable même si le DOM est rempli après subscription-check.js.
+   */
+  document.addEventListener(
+    'click',
+    function (e) {
+      var upgradeModalEl = e.target && e.target.closest && e.target.closest('[data-open-upgrade-pro-modal]');
+      if (upgradeModalEl) {
+        e.preventDefault();
+        if (typeof window.openUpgradeProModal === 'function') {
+          window.openUpgradeProModal();
+        }
+        return;
+      }
+      var paypalEl = e.target && e.target.closest && e.target.closest('[data-paypal-pro-subscribe]');
+      if (paypalEl) {
+        e.preventDefault();
+        if (typeof window.closeUpgradeProModal === 'function') {
+          window.closeUpgradeProModal();
+        }
+        setTimeout(function () {
+          if (typeof window.openPayPalProSubscribeUrl === 'function') {
+            window.openPayPalProSubscribeUrl();
+          } else {
+            window.open(
+              'https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-3GJ89847YV064064ANHCILLQ',
+              '_blank',
+              'noopener,noreferrer'
+            );
+          }
+        }, 0);
+        return;
+      }
+      var el = e.target && e.target.closest && e.target.closest('[data-subscription-nav]');
+      if (!el) return;
+      e.preventDefault();
+      if (typeof window.closeUpgradeProModal === 'function') {
+        window.closeUpgradeProModal();
+      }
+      setTimeout(function () {
+        goToSubscription();
+      }, 0);
+    },
+    true
+  );
+
   window.SubscriptionCheck = {
     check: checkSubscriptionAccess,
     goToSubscription: goToSubscription,

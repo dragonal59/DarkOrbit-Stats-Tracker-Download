@@ -4,6 +4,7 @@
  */
 
 const { BrowserWindow } = require('electron');
+const { applyScraperSessionProxyPolicy } = require('./scraper-app-settings');
 
 const PARTITION = 'persist:player-stats-scraper';
 const HOME_DOM_READY_MS = 4000;
@@ -304,7 +305,7 @@ function jsLogin(username, password) {
 
 let _win = null;
 
-function createWindow(visible) {
+async function createWindow(visible) {
   _win = new BrowserWindow({
     show: !!visible,
     width: 1280,
@@ -315,6 +316,7 @@ function createWindow(visible) {
       partition: PARTITION,
     },
   });
+  await applyScraperSessionProxyPolicy(_win.webContents.session);
   _win.on('closed', () => { _win = null; });
   return _win;
 }
@@ -364,7 +366,7 @@ async function _collectPlayerStatsWithLogin(opts) {
   try {
     onProgress({ step: 'init', percent: 5, label: 'Démarrage…' });
     console.log('[PlayerStatsScraper] Démarrage', serverId);
-    createWindow();
+    await createWindow();
     const baseUrl = `https://${serverId}.darkorbit.com`;
     onProgress({ step: 'page', percent: 10, label: 'Chargement de la page…' });
     console.log('[PlayerStatsScraper] Chargement', baseUrl);
@@ -467,7 +469,7 @@ async function _collectPlayerStatsManual(opts) {
   const serverId = (opts && opts.serverId) ? String(opts.serverId).trim() : 'gbl5';
   try {
     console.log('[PlayerStatsScraper] Mode manuel', serverId);
-    createWindow(true);
+    await createWindow(true);
     const baseUrl = `https://${serverId}.darkorbit.com`;
     await navigateTo(baseUrl);
     await new Promise((r) => setTimeout(r, 2000));

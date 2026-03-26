@@ -48,6 +48,8 @@ export const DEFAULT_SETTINGS = {
     rotateOnError: true,
     rotateEvery: 50,
     cooldownMs: 2000,
+    /** true = forcer la connexion directe (session Electron `direct://`), persisté dans scraper-app-settings.json */
+    scrapeWithoutProxy: false,
   },
 
   // ── Scraper / Puppeteer ───────────────────────────

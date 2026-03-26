@@ -7,7 +7,10 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { ProxyRow } from '../ProxyRow';
-import { ROTATION_MODES } from '../../../data/defaultSettings';
+import {
+  DEFAULT_SETTINGS,
+  ROTATION_MODES,
+} from '../../../data/defaultSettings';
 
 export function SectionProxies({
   settings,
@@ -96,6 +99,34 @@ export function SectionProxies({
             onClick={() => setShowAddForm((v) => !v)}
           >
             <Plus size={13} /> Ajouter
+          </button>
+        </div>
+      </div>
+
+      <div className="settings-group proxy-direct-toggle">
+        <div className="toggle-row">
+          <div className="toggle-row-text">
+            <span className="toggle-row-label">
+              Scraper sans proxy
+            </span>
+            <span className="toggle-row-desc">
+              Connexion directe uniquement (ignore les proxies pour les fenêtres de
+              scraping Electron). Sauvegardé automatiquement avec les autres paramètres.
+            </span>
+          </div>
+          <button
+            type="button"
+            className={`toggle-switch ${
+              p.scrapeWithoutProxy ? 'on' : ''
+            }`}
+            onClick={() =>
+              patch('proxies', {
+                scrapeWithoutProxy: !p.scrapeWithoutProxy,
+              })
+            }
+            aria-pressed={!!p.scrapeWithoutProxy}
+          >
+            <div className="toggle-thumb" />
           </button>
         </div>
       </div>
@@ -385,6 +416,8 @@ export function SectionProxies({
                   DEFAULT_SETTINGS.proxies.rotateEvery,
                 cooldownMs:
                   DEFAULT_SETTINGS.proxies.cooldownMs,
+                scrapeWithoutProxy:
+                  DEFAULT_SETTINGS.proxies.scrapeWithoutProxy,
               })
             }
           >

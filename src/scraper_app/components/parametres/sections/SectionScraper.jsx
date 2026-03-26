@@ -11,7 +11,10 @@ export function SectionScraper({ settings, patch, resetSection }) {
         <div>
           <h2 className="section-title">Scraper &amp; Puppeteer</h2>
           <p className="section-desc">
-            Configuration du moteur de scraping et des navigateurs headless
+            Le scraper DOStats intégré (Electron) lit{' '}
+            <strong>scraper-app-settings.json</strong> au lancement de chaque page : workers,
+            timeout, délai, retries, profils concurrents, User-Agent. Les options « Puppeteer »
+            ci-dessous ne sont pas encore branchées sur ce moteur.
           </p>
         </div>
         <button
@@ -30,7 +33,7 @@ export function SectionScraper({ settings, patch, resetSection }) {
             <div className="setting-card-header">
               <span
                 className="setting-card-label"
-                title="Nombre de workers utilisés en parallèle pour le scraping (augmenter = plus rapide mais plus de charge CPU)."
+                title="Nombre de fenêtres DOSTATS Hall of Fame en parallèle (un serveur par fenêtre dans chaque lot). Plus haut = plus rapide, plus de CPU / réseau."
               >
                 Workers parallèles
               </span>
@@ -81,14 +84,9 @@ export function SectionScraper({ settings, patch, resetSection }) {
               max={10}
               step={1}
               value={s.profilesConcurrency}
-              onChange={(e) => {
-                const v = Number(e.target.value);
-                patch('scraper', { profilesConcurrency: v });
-                if (window.electronDostatsProfilesScraper?.start) {
-                  // No-op call just to ensure API exists; real concurrency is read in main via global.dostatsProfilesConcurrency.
-                  // We avoid triggering any scraping here.
-                }
-              }}
+              onChange={(e) =>
+                patch('scraper', { profilesConcurrency: Number(e.target.value) })
+              }
               className="range-input"
             />
             <div className="range-labels">
@@ -136,7 +134,7 @@ export function SectionScraper({ settings, patch, resetSection }) {
             <div className="setting-card-header">
               <span
                 className="setting-card-label"
-                title="Pause (en millisecondes) entre deux chargements de pages DOSTATS pour éviter de les enchaîner trop vite."
+                title="Pause fixe (ms) après chaque chargement HoF (en plus du temps de chargement). 0 = aucune pause. Les valeurs sont lues depuis scraper-app-settings.json à chaque requête."
               >
                 Délai rate limit
               </span>
@@ -150,7 +148,7 @@ export function SectionScraper({ settings, patch, resetSection }) {
             </div>
             <input
               type="range"
-              min={500}
+              min={0}
               max={10000}
               step={100}
               value={s.rateLimitDelay}
@@ -162,7 +160,7 @@ export function SectionScraper({ settings, patch, resetSection }) {
               className="range-input"
             />
             <div className="range-labels">
-              <span>500ms</span>
+              <span>0ms</span>
               <span>10s</span>
             </div>
           </div>
@@ -171,7 +169,7 @@ export function SectionScraper({ settings, patch, resetSection }) {
             <div className="setting-card-header">
               <span
                 className="setting-card-label"
-                title="Nombre de nouvelles tentatives automatiques quand un chargement de page échoue (erreur réseau, timeout, etc.)."
+                title="Nombre de nouvelles tentatives si un chargement HoF ou profil échoue. Plafonné à 5 côté moteur même si une ancienne config en avait plus."
               >
                 Tentatives (retries)
               </span>
@@ -179,15 +177,15 @@ export function SectionScraper({ settings, patch, resetSection }) {
                 className="setting-card-value"
                 style={{ color: 'var(--accent-emerald)' }}
               >
-                {s.retries}
+                {Math.min(5, s.retries)}
               </span>
             </div>
             <input
               type="range"
               min={0}
-              max={10}
+              max={5}
               step={1}
-              value={s.retries}
+              value={Math.min(5, s.retries)}
               onChange={(e) =>
                 patch('scraper', {
                   retries: Number(e.target.value),
@@ -197,7 +195,7 @@ export function SectionScraper({ settings, patch, resetSection }) {
             />
             <div className="range-labels">
               <span>0</span>
-              <span>10</span>
+              <span>5</span>
             </div>
           </div>
         </div>
@@ -205,6 +203,10 @@ export function SectionScraper({ settings, patch, resetSection }) {
 
       <div className="settings-group">
         <h3 className="group-title">Puppeteer</h3>
+        <p className="section-desc" style={{ marginTop: '-0.25rem', marginBottom: '0.75rem' }}>
+          Réservé à un usage futur ou à un autre moteur : le scraper DOStats Electron n’applique pas
+          encore ces interrupteurs (fenêtre cachée avec rendu normal).
+        </p>
         <div className="toggle-list">
           {[
             {
@@ -273,7 +275,10 @@ export function SectionScraper({ settings, patch, resetSection }) {
           }}
         >
           <h3 className="group-title">User-Agent</h3>
-          <span className="ua-preview">
+          <span
+            className="ua-preview"
+            title="Chaîne envoyée aux requêtes HoF et profils DOSTATS (Electron)."
+          >
             {s.userAgent.slice(0, 50)}
             ...
           </span>

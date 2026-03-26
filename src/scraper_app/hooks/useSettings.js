@@ -1,9 +1,12 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { DEFAULT_SETTINGS } from '../data/defaultSettings';
 
 function deepEqual(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
+
+/** Debounce pour éviter les courses (saving === true qui bloquait les saves suivantes) et garantir la dernière valeur. */
+const AUTOSAVE_DEBOUNCE_MS = 450;
 
 export function useSettings() {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
@@ -11,6 +14,8 @@ export function useSettings() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const [activeSection, setActiveSection] = useState('proxies');
+  const settingsRef = useRef(DEFAULT_SETTINGS);
+  settingsRef.current = settings;
 
   useEffect(() => {
     (async () => {
@@ -54,25 +59,35 @@ export function useSettings() {
     }));
   }, []);
 
-  const save = useCallback(async () => {
+  const persistToDisk = useCallback(async (payload) => {
+    if (!window.electronAPI?.saveSettings) {
+      setSaveError('IPC Electron indisponible — les réglages ne sont pas enregistrés sur disque.');
+      return false;
+    }
     setSaving(true);
     setSaveError(null);
     try {
-      const result = await window.electronAPI?.saveSettings?.(settings);
+      const result = await window.electronAPI.saveSettings(payload);
       if (result && result.ok) {
-        setSaved(settings);
-        if (settings.appearance && typeof window.dispatchEvent === 'function') {
-          window.dispatchEvent(new CustomEvent('appearance-changed', { detail: settings.appearance }));
+        setSaved(payload);
+        if (payload.appearance && typeof window.dispatchEvent === 'function') {
+          window.dispatchEvent(new CustomEvent('appearance-changed', { detail: payload.appearance }));
         }
-      } else {
-        setSaveError(result?.error || 'Erreur de sauvegarde');
+        return true;
       }
+      setSaveError(result?.error || 'Erreur de sauvegarde');
+      return false;
     } catch (e) {
       setSaveError(e?.message || 'Erreur de sauvegarde');
+      return false;
     } finally {
       setSaving(false);
     }
-  }, [settings]);
+  }, []);
+
+  const save = useCallback(async () => {
+    return persistToDisk(settingsRef.current);
+  }, [persistToDisk]);
 
   const discard = useCallback(() => {
     setSettings(saved);
@@ -85,16 +100,13 @@ export function useSettings() {
     }));
   }, []);
 
-  // Auto-save: dès qu'un réglage change, on persiste immédiatement.
   useEffect(() => {
-    if (!deepEqual(settings, saved) && !saving) {
-      // Lancer la sauvegarde en arrière-plan, sans bloquer l'UI.
-      // eslint-disable-next-line no-void
-      void (async () => {
-        await save();
-      })();
-    }
-  }, [settings, saved, saving, save]);
+    if (deepEqual(settings, saved)) return;
+    const t = setTimeout(() => {
+      void persistToDisk(settingsRef.current);
+    }, AUTOSAVE_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [settings, saved, persistToDisk]);
 
   const addProxy = useCallback(
     (proxy) => {
@@ -197,4 +209,3 @@ export function useSettings() {
     testAllProxies,
   };
 }
-

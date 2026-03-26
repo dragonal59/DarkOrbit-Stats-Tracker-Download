@@ -144,7 +144,19 @@ const AuthManager = {
 
   async logout() {
     const supabase = getSupabaseClient();
-    if (supabase) await supabase.auth.signOut();
+    var userId = null;
+    if (supabase) {
+      try {
+        const r = await supabase.auth.getUser();
+        userId = r && r.data && r.data.user ? r.data.user.id : null;
+      } catch (_) {}
+      try {
+        if (userId && typeof window !== 'undefined' && typeof window.persistBelowRankCacheForUser === 'function') {
+          window.persistBelowRankCacheForUser(userId);
+        }
+      } catch (_) {}
+      await supabase.auth.signOut();
+    }
     if (typeof UnifiedStorage !== 'undefined') {
       const sk = window.APP_KEYS?.STORAGE_KEYS || {};
       // Ne rien garder par défaut : toutes les clés APP_KEYS.STORAGE_KEYS sont des données métier ou profil.
@@ -162,7 +174,9 @@ const AuthManager = {
     }
     if (typeof setSessionsCache === 'function') setSessionsCache([]);
     if (typeof UserPreferencesAPI !== 'undefined' && UserPreferencesAPI.invalidateCache) UserPreferencesAPI.invalidateCache();
-    if (typeof localStorage !== 'undefined') localStorage.removeItem('darkOrbit_lastUserId');
+    // Important : on ne supprime pas `darkOrbit_lastUserId`.
+    // `ensureUserDataIsolation()` l’utilise pour détecter un changement de compte et purger les données
+    // uniquement quand on n’est pas revenu au même user.
     if (typeof BackendAPI !== 'undefined') BackendAPI.invalidateProfileCache();
     if (typeof setProfileCache === 'function') setProfileCache(null);
     if (typeof window !== 'undefined') window.dispatchEvent(new Event('userLoggedOut'));
@@ -225,13 +239,18 @@ const AuthManager = {
     if (lastUserId !== currentUserId) {
       if (typeof UnifiedStorage !== 'undefined') {
         const sk = window.APP_KEYS?.STORAGE_KEYS || {};
-        const keepDeviceGlobal = new Set(
-          (typeof window.APP_KEYS?.LOGOUT_KEEP_STORAGE_KEYS === 'function')
-            ? window.APP_KEYS.LOGOUT_KEEP_STORAGE_KEYS()
-            : []
-        );
+        // Purger quoi qu'il arrive sur un changement de compte (zéro fuite),
+        // sauf les clés explicitement "machine".
+        const machineKeys = new Set([
+          sk.THEME,
+          sk.VIEW_MODE,
+          sk.THEME_AUTO,
+          sk.LANGUAGE,
+          sk.LAST_APP_VERSION_ACK
+        ]);
         Object.values(sk).forEach((key) => {
-          if (typeof key === 'string' && !keepDeviceGlobal.has(key)) UnifiedStorage.remove(key);
+          if (typeof key !== 'string') return;
+          if (!machineKeys.has(key)) UnifiedStorage.remove(key);
         });
       }
       if (typeof UserPreferencesAPI !== 'undefined' && UserPreferencesAPI.invalidateCache) UserPreferencesAPI.invalidateCache();

@@ -128,6 +128,53 @@ function mergeBelowRankFromStorage(stats) {
   return { ...stats, belowRankPoints: sbp, belowRankRaw: st.belowRankRaw };
 }
 
+/**
+ * Fallback : si belowRankRaw / belowRankPoints ne sont plus présents
+ * (ex: logout => nettoyage CURRENT_STATS), on les dérive depuis currentRank
+ * en utilisant la table RANKS_DATA (ordre des grades).
+ */
+function deriveBelowRankFromCurrentRank(stats) {
+  if (!stats || !stats.currentRank) return stats;
+
+  var bp = stats.belowRankPoints != null ? Number(stats.belowRankPoints) : NaN;
+  if (Number.isFinite(bp) && bp > 0 && stats.belowRankRaw) return stats;
+
+  var cr = stats.currentRank;
+  if (typeof cr === 'string' && cr.startsWith('rank_') && typeof RANK_KEY_TO_RANK_NAME !== 'undefined') {
+    cr = RANK_KEY_TO_RANK_NAME[cr] || cr;
+  }
+
+  var currentRankData = (typeof RANKS_DATA !== 'undefined' && Array.isArray(RANKS_DATA))
+    ? RANKS_DATA.find(r => r && (r.name === cr || r.rank === cr))
+    : null;
+
+  if (!currentRankData) return stats;
+
+  var idx = RANKS_DATA.indexOf(currentRankData);
+  if (idx <= 0) {
+    // Rang le plus bas => pas de grade en dessous.
+    return { ...stats, belowRankPoints: null, belowRankRaw: null };
+  }
+
+  var below = RANKS_DATA[idx - 1];
+  if (!below) return stats;
+
+  var next = (idx + 1 < RANKS_DATA.length) ? RANKS_DATA[idx + 1] : null;
+
+  // Quand on dérive belowRank*, on veut que le plafond (nextRankPoints) soit cohérent
+  // avec le même repère que belowRankPoints. Sinon le % et l'info "a environ X"
+  // deviennent faux.
+  var finalNextRankPoints = stats.nextRankPoints;
+  if (next && Number.isFinite(Number(next.rankPoints))) finalNextRankPoints = Number(next.rankPoints);
+
+  return {
+    ...stats,
+    belowRankPoints: Number.isFinite(Number(below.rankPoints)) ? Number(below.rankPoints) : null,
+    belowRankRaw: below.rank || null,
+    nextRankPoints: finalNextRankPoints
+  };
+}
+
 function getDisplayStats() {
   if (!isStatsFormEmpty()) {
     return getCurrentStats();
@@ -362,6 +409,45 @@ function updateBelowRankProgress(stats) {
   det.appendChild(rest);
 }
 
+/**
+ * Cache local (par user_id) des valeurs "below rank" afin que la barre
+ * "Progression du grade juste au dessous de vous" reste cohérente après logout/reconnexion.
+ * La raison : AuthManager.logout() supprime CURRENT_STATS (et donc belowRankRaw/Points).
+ */
+function persistBelowRankCacheForUser(userId) {
+  try {
+    if (!userId) return;
+    if (typeof localStorage === 'undefined') return;
+    var cur = SafeStorage.get(CONFIG.STORAGE_KEYS.CURRENT_STATS);
+    if (!cur) return;
+    var raw = cur.belowRankRaw;
+    var pts = cur.belowRankPoints != null ? Number(cur.belowRankPoints) : NaN;
+    if (!raw || !Number.isFinite(pts) || pts <= 0) return;
+    var key = 'darkOrbitBelowRankCache:' + String(userId);
+    localStorage.setItem(key, JSON.stringify({ belowRankRaw: raw, belowRankPoints: pts }));
+  } catch (_) {}
+}
+
+function restoreBelowRankCacheForUser(userId) {
+  try {
+    if (!userId) return;
+    if (typeof localStorage === 'undefined') return;
+    var key = 'darkOrbitBelowRankCache:' + String(userId);
+    var raw = localStorage.getItem(key);
+    if (!raw) return;
+    var payload = null;
+    try { payload = JSON.parse(raw); } catch (_) { payload = null; }
+    if (!payload || !payload.belowRankRaw) return;
+    var pts = payload.belowRankPoints != null ? Number(payload.belowRankPoints) : NaN;
+    if (!Number.isFinite(pts) || pts <= 0) return;
+    var cur = SafeStorage.get(CONFIG.STORAGE_KEYS.CURRENT_STATS) || {};
+    cur.belowRankRaw = String(payload.belowRankRaw).trim();
+    cur.belowRankPoints = pts;
+    SafeStorage.set(CONFIG.STORAGE_KEYS.CURRENT_STATS, cur);
+    if (typeof updateStatsDisplay === 'function') updateStatsDisplay();
+  } catch (_) {}
+}
+
 function updateStatsDisplay() {
   const headerStats = getHeaderStatsSource();
   var sessions = typeof getSessions === 'function' ? getSessions() : [];
@@ -369,6 +455,7 @@ function updateStatsDisplay() {
   let stats = (headerStats && hasSessions) ? headerStats : getDisplayStats();
   if (stats) {
     stats = mergeBelowRankFromStorage(normalizeStatsForDisplay(stats));
+    stats = deriveBelowRankFromCurrentRank(stats);
     stats = {
       ...stats,
       honor: Number(stats.honor) || 0,
@@ -799,6 +886,8 @@ function getNextRank(current) {
 if (typeof window !== 'undefined') window.numFormat = numFormat;
 
 if (typeof window !== 'undefined') {
+  window.persistBelowRankCacheForUser = persistBelowRankCacheForUser;
+  window.restoreBelowRankCacheForUser = restoreBelowRankCacheForUser;
   window.addEventListener('languageChanged', function () {
     try {
       if (typeof updateStatsDisplay === 'function') updateStatsDisplay();

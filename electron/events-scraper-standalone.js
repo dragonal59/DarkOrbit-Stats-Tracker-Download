@@ -4,9 +4,10 @@
  */
 const { BrowserWindow, app } = require('electron');
 const { createClient } = require('@supabase/supabase-js');
-const path = require('path');
+const { readMergedSupabaseConfigFromDisk } = require('./supabase-config-from-disk');
 const { getConfig } = require('./scraping-config');
 const { getDoEventsCredentials } = require('./do-events-credentials');
+const { applyScraperSessionProxyPolicy } = require('./scraper-app-settings');
 
 const SERVER_ID = 'fr1';
 const EVENTS_URL = `https://${SERVER_ID}.darkorbit.com/indexInternal.es?action=internalStart&prc=100`;
@@ -19,11 +20,9 @@ function getSupabaseConfig() {
   let anonKey = process.env.SUPABASE_ANON_KEY || '';
   if (url && anonKey) return { url, anonKey };
   try {
-    const configPath = app.isPackaged
-      ? app.getSrcPath('config.supabase.prod.js')
-      : path.join(__dirname, '..', 'build', 'src', 'config.supabase.prod.js');
-    const cfg = require(configPath);
-    if (cfg) { url = cfg.url || url; anonKey = cfg.anonKey || anonKey; }
+    const disk = readMergedSupabaseConfigFromDisk(app.isPackaged, app);
+    url = disk.url || url;
+    anonKey = disk.anonKey || anonKey;
   } catch (_) {}
   return { url, anonKey };
 }
@@ -157,6 +156,7 @@ async function runEventsScraping(options = {}) {
       // par le sandbox. Cohérent avec le défaut Electron 20+.
       webPreferences: { nodeIntegration: false, contextIsolation: true, webSecurity: true, sandbox: true }
     });
+    await applyScraperSessionProxyPolicy(win.webContents.session);
 
     const loadUrl = (url) => new Promise((resolve) => {
       const wc = win.webContents;
@@ -288,6 +288,7 @@ async function loginAndExtractEventsOnly(options = {}) {
       height: 768,
       webPreferences: { nodeIntegration: false, contextIsolation: true, webSecurity: true, sandbox: true }
     });
+    await applyScraperSessionProxyPolicy(win.webContents.session);
 
     const loadUrl = (url) => new Promise((resolve) => {
       const wc = win.webContents;

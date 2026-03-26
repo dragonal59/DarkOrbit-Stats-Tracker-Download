@@ -56,6 +56,7 @@ export default function ScraperUI() {
       : null;
     if (!onLog) return;
     const handler = (evt) => {
+      if (evt?.silent) return;
       setScraperLogs((prev) =>
         [
           ...prev,
@@ -65,6 +66,9 @@ export default function ScraperUI() {
             message: evt.message || '',
             timestamp: evt.at || new Date().toISOString(),
             server: evt.server ?? null,
+            symbol: evt.symbol || null,
+            metric_type: evt.metric_type || null,
+            multiline: evt.metric_type === 'player_profile_failures_list',
           },
         ].slice(-MAX_SCRAPER_LOGS)
       );

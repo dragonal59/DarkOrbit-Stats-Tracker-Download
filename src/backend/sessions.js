@@ -170,6 +170,14 @@ async function addSessionFromScan(data) {
       curPayload.belowRankRaw = null;
     }
     SafeStorage.set(CONFIG.STORAGE_KEYS.CURRENT_STATS, curPayload);
+    // IMPORTANT : garder la cohérence exacte avec ce que le scraping a extrait
+    // (belowRankRaw/belowRankPoints) pour que la barre "grade juste au dessous"
+    // reste identique après logout/reconnexion.
+    try {
+      if (user && user.id && typeof window !== 'undefined' && typeof window.persistBelowRankCacheForUser === 'function') {
+        window.persistBelowRankCacheForUser(user.id);
+      }
+    } catch (_) {}
     await refreshSessionsFromSupabase();
     if (typeof renderHistory === 'function') renderHistory();
     if (typeof window.maybeRefreshProgression === 'function') window.maybeRefreshProgression();

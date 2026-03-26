@@ -10,6 +10,7 @@ var _lastRankingData = [];
 var _currentRankingDetailRow = null;
 var _playerMatchKey = null;
 var _hasScrolledToPlayer = false;
+var _rankingPlayerSearchTerm = '';
 
 // Init classement : une seule fois (évite listeners / onSaveSuccess dupliqués et reset du throttle)
 var _rankingTabInitialized = false;
@@ -290,6 +291,20 @@ function initRankingTab() {
   const filterPeriod = document.getElementById('ranking-filter-period');
   if (filterPeriod) filterPeriod.addEventListener('change', load);
 
+  // Filtre recherche joueur (client-side, sur les données déjà chargées)
+  const filterPlayerSearch = document.getElementById('ranking-player-search');
+  if (filterPlayerSearch) {
+    // Initialisation du terme (utile si une valeur est déjà présente via restore UI)
+    _rankingPlayerSearchTerm = (filterPlayerSearch.value || '').toString().trim().toLowerCase();
+    filterPlayerSearch.addEventListener('input', function () {
+      _rankingPlayerSearchTerm = (filterPlayerSearch.value || '').toString().trim().toLowerCase();
+      _hasScrolledToPlayer = false;
+      if (typeof _renderRankingFn === 'function' && Array.isArray(_lastRankingData) && _lastRankingData.length) {
+        _renderRankingFn(_lastRankingData, (_lastRankingFilters && _lastRankingFilters.type) || 'honor');
+      }
+    });
+  }
+
   // Filtre firme : géré par délégation document (IIFE en bas de fichier) pour garantir
   // que les clics fonctionnent même si initRankingTab() a retourné tôt (ex. #ranking-table absent).
 
@@ -310,7 +325,8 @@ function initRankingTab() {
   function setError(msg) {
     const tbody = table?.querySelector('tbody');
     if (tbody) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;opacity:0.6;">' +
+      const colCount = table?.querySelector('thead')?.querySelectorAll('th')?.length || 7;
+      tbody.innerHTML = '<tr><td colspan="' + colCount + '" style="text-align:center;padding:2rem;opacity:0.6;">' +
         (msg || 'Impossible de charger le classement. Réessayez.') + '</td></tr>';
     }
   }
@@ -417,36 +433,46 @@ function initRankingTab() {
       } else if (typeof loadRanking === 'function' && !filters.period && filters.server) {
         Logger.debug('[RankingUI] loadImpl today mode start', filters);
         try {
-          const [mainData, deltaData] = await Promise.all([
+          const [mainData, daily24hData] = await Promise.all([
             loadRanking(filters),
-            // '24h_today' = mode comparaison interne (snapshots) pour calculer la progression 24h
-            loadRanking(Object.assign({}, filters, { period: '24h_today' }))
+            // "24h" = période DOStats (Last 24 Hours) => modèle normalisé periodKey=daily
+            // On s'en sert uniquement pour la colonne "24h" (flèche + tooltip).
+            // Ne pas activer de "mode progression" sur la table principale (filters.period reste null).
+            (filters.type === 'galaxy_gates' || filters.type === 'npc_kills' || filters.type === 'ship_kills')
+              ? Promise.resolve([])
+              : loadRanking(Object.assign({}, filters, { period: '24h' }))
           ]);
           Logger.debug('[RankingUI] loadImpl today mode with delta', {
             filters,
             mainCount: Array.isArray(mainData) ? mainData.length : null,
-            deltaCount: Array.isArray(deltaData) ? deltaData.length : null
+            deltaCount: Array.isArray(daily24hData) ? daily24hData.length : null
           });
-          if (Array.isArray(mainData) && Array.isArray(deltaData) && deltaData.length > 0) {
-            const deltaMap = {};
-            deltaData.forEach(function (d) {
-              const key = ((d.game_pseudo || '') + '|' + ((d._server || d.server || '')).toString())
-                .toLowerCase()
-                .trim();
-              deltaMap[key] = d;
+          // Merge valeur "Last 24 Hours" dans les lignes principales (colonne 24h).
+          // On évite tout calcul de delta : on affiche directement la value daily (peut être négative si DOStats le fournit).
+          if (Array.isArray(mainData) && Array.isArray(daily24hData) && daily24hData.length > 0) {
+            const VALUE_COLS = ['honor', 'xp', 'rank_points', 'npc_kills', 'ship_kills', 'galaxy_gates'];
+            const typeCol = VALUE_COLS.includes(filters.type) ? filters.type : 'honor';
+            const valField = typeCol;
+
+            const mapById = {};
+            daily24hData.forEach(function (d) {
+              if (!d) return;
+              const uid = (d.userId != null ? String(d.userId) : (d.user_id != null ? String(d.user_id) : '')).trim();
+              const srv = ((d._server || d.server || '')).toString().trim();
+              const key = (uid ? ('uid:' + uid) : ('pseudo:' + (d.game_pseudo || d.name || ''))) + '|' + srv;
+              mapById[key] = d;
             });
+
             mainData.forEach(function (row) {
-              const key = ((row.game_pseudo || '') + '|' + ((row._server || row.server || '')).toString())
-                .toLowerCase()
-                .trim();
-              const delta = deltaMap[key];
-              if (delta) {
-                row._honor_delta = delta._honor_delta;
-                row._xp_delta = delta._xp_delta;
-                row._rp_delta = delta._rp_delta;
-                row._pos_delta = delta._pos_delta;
-                row._has_reference = delta._has_reference;
-              }
+              if (!row) return;
+              const uid = (row.userId != null ? String(row.userId) : (row.user_id != null ? String(row.user_id) : '')).trim();
+              const srv = ((row._server || row.server || '')).toString().trim();
+              const key = (uid ? ('uid:' + uid) : ('pseudo:' + (row.game_pseudo || row.name || ''))) + '|' + srv;
+              const dailyRow = mapById[key];
+              if (!dailyRow) return;
+              const raw = dailyRow[valField];
+              const n = raw != null ? Number(raw) : NaN;
+              row._daily_24h = Number.isFinite(n) ? n : null;
             });
           }
           data = mainData;
@@ -567,6 +593,9 @@ function renderRanking(data, sortType) {
   const VALUE_COLS = ['honor', 'xp', 'rank_points', 'npc_kills', 'ship_kills', 'galaxy_gates'];
   const typeCol = VALUE_COLS.includes(sortType) ? sortType : 'honor';
   var isAllServers = !_lastRankingFilters || !_lastRankingFilters.server;
+  var isTodayPeriodOnly = !_lastRankingFilters?.period;
+  var is24hTypeAllowed = (typeCol === 'honor' || typeCol === 'xp' || typeCol === 'rank_points');
+  var shouldShow24hCol = isTodayPeriodOnly && is24hTypeAllowed;
 
   if (thead) {
     var headerRow = thead.querySelector('tr');
@@ -594,6 +623,7 @@ function renderRanking(data, sortType) {
     if (th.dataset.col === typeCol) th.classList.add('ranking-col-sorted');
     th.classList.remove('ranking-col-hidden');
     if (th.dataset.col && VALUE_COLS.indexOf(th.dataset.col) !== -1 && th.dataset.col !== typeCol) th.classList.add('ranking-col-hidden');
+    if (th.dataset.col === 'delta_24h' && !shouldShow24hCol) th.classList.add('ranking-col-hidden');
   });
 
   var isProgressMode = Array.isArray(data) && data.length > 0 && data[0]._comparison_mode && _lastRankingFilters && _lastRankingFilters.period;
@@ -612,6 +642,16 @@ function renderRanking(data, sortType) {
     rows = rows.filter(function (row) {
       var c = (row && row.company != null ? String(row.company) : '').trim().toLowerCase();
       return c === cmp;
+    });
+  }
+  // Filtre recherche joueur (pseudo) : client-side, insensible à la casse
+  if (_rankingPlayerSearchTerm) {
+    var term = _rankingPlayerSearchTerm;
+    rows = rows.filter(function (row) {
+      if (!row) return false;
+      var pseudo = (row.game_pseudo || row.name || '').toString().trim().toLowerCase();
+      if (!pseudo) return false;
+      return pseudo.indexOf(term) !== -1;
     });
   }
   // Helper : tri par delta en mode progression
@@ -662,18 +702,28 @@ function renderRanking(data, sortType) {
     return `<small class="ranking-stat-delta ${cls}" title="Variation">${icon} ${_fmtDelta(delta)}</small>`;
   }
 
-  // Mode "Aujourd'hui" avec deltas 24h disponibles pour le type courant:
-  // on affiche la progression 24h comme valeur principale, mais on ne change pas l'ordre du classement.
-  var isTodayDeltaMode =
-    !_lastRankingFilters?.period &&
-    Array.isArray(rows) &&
-    rows.some(function (r) {
-      if (!r) return false;
-      if (typeCol === 'honor') return r._honor_delta != null;
-      if (typeCol === 'xp') return r._xp_delta != null;
-      if (typeCol === 'rank_points') return r._rp_delta != null;
-      return false;
-    });
+  // Colonne "24h" : valeur daily DOStats (Last 24 Hours) (peut être négative si DOStats le fournit)
+  function _fmtSignedAbs(v) {
+    if (v == null) return '';
+    var n = Number(v);
+    if (!Number.isFinite(n)) return '';
+    var abs = Math.abs(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return (n >= 0 ? '+ ' : '- ') + abs;
+  }
+
+  function _buildDaily24hArrowHtml(dailyVal) {
+    if (!shouldShow24hCol) return '<span>—</span>';
+    var n = Number(dailyVal);
+    if (!Number.isFinite(n) || n === 0) return '<span>—</span>';
+    var isPos = n > 0;
+    var wrapperClass = isPos ? 'delta24h-tooltip-wrap--pos' : 'delta24h-tooltip-wrap--neg';
+    var arrowSrc = isPos ? 'img/icon_btn/delta24h_arrow_green.png' : 'img/icon_btn/delta24h_arrow_red.png';
+    var tooltip = _fmtSignedAbs(n);
+    // Tooltip via CSS (couleur dépend du wrapperClass)
+    return '<span class="watched-player-tooltip-wrap ' + wrapperClass + '" data-tooltip="' + escapeHtml(tooltip) + '">' +
+      '<img class="ranking-delta24h-arrow" src="' + arrowSrc + '" alt="">' +
+      '</span>';
+  }
 
   rows.forEach((row, index) => {
     const pos = index + 1;
@@ -722,6 +772,10 @@ function renderRanking(data, sortType) {
     const xpDelta        = _statDeltaBadge(row._xp_delta);
     const rpDelta        = _statDeltaBadge(row._rp_delta);
     const posDeltaBadge  = _posDeltaBadge(row);
+
+    // 24h (Last 24 hours DOStats) basé sur la value daily déjà extraite en backend
+    var delta24hCellHtml = _buildDaily24hArrowHtml(row._daily_24h);
+    var delta24hHiddenClass = shouldShow24hCol ? '' : ' ranking-col-hidden';
     // Mode progression : delta principal
     function buildDeltaMain(deltaValue) {
       if (deltaValue == null) return '—';
@@ -733,23 +787,6 @@ function renderRanking(data, sortType) {
 
     var honorCellContent, xpCellContent, rpCellContent;
     if (isProgressMode) {
-      if (typeCol === 'honor') {
-        honorCellContent = buildDeltaMain(row._honor_delta);
-      } else {
-        honorCellContent = honor + (typeCol === 'honor' ? honorDelta : '');
-      }
-      if (typeCol === 'xp') {
-        xpCellContent = buildDeltaMain(row._xp_delta);
-      } else {
-        xpCellContent = xp + (typeCol === 'xp' ? xpDelta : '');
-      }
-      if (typeCol === 'rank_points') {
-        rpCellContent = buildDeltaMain(row._rp_delta);
-      } else {
-        rpCellContent = rankPoints + (typeCol === 'rank_points' ? rpDelta : '');
-      }
-    } else if (isTodayDeltaMode) {
-      // "Aujourd'hui" : afficher la progression 24h comme valeur principale pour le type courant
       if (typeCol === 'honor') {
         honorCellContent = buildDeltaMain(row._honor_delta);
       } else {
@@ -783,6 +820,7 @@ function renderRanking(data, sortType) {
       ${serverCellHtml}
       <td class="ranking-firme">${companyCellHtml}</td>
       <td class="ranking-grade" data-fallback="${escapeHtml(rankAlt || '—')}">${gradeCellContent}</td>
+      <td class="ranking-delta24h-cell${delta24hHiddenClass}">${delta24hCellHtml}</td>
       <td class="ranking-num ranking-col-honor${sortedClass('honor')}${hiddenClass('honor')}">${honorCellContent}</td>
       <td class="ranking-num ranking-col-xp${sortedClass('xp')}${hiddenClass('xp')}">${xpCellContent}</td>
       <td class="ranking-num ranking-col-rank_points${sortedClass('rank_points')}${hiddenClass('rank_points')}">${rpCellContent}</td>
@@ -1950,7 +1988,27 @@ if (typeof window !== 'undefined') {
   };
 }
 
+function _toastFreeRankingDetailsLocked(playerName) {
+  const badge = (typeof getCurrentBadge === 'function' ? getCurrentBadge() : null) || 'FREE';
+  if (badge !== 'FREE') return;
+
+  const p = playerName != null ? String(playerName) : '';
+  const name = p.trim() || 'le joueur';
+
+  var msg = (typeof window !== 'undefined' && typeof window.i18nT === 'function')
+    ? window.i18nT('upgrade_free_ranking_details_toast')
+    : 'Passer à PRO pour voir les détails du {{player}}';
+
+  if (typeof msg === 'string') msg = msg.replace('{{player}}', name);
+  if (typeof showToast === 'function') showToast(msg, 'warning');
+}
+
 function showPlayerDetails(row) {
+  if ((typeof getCurrentBadge === 'function' ? getCurrentBadge() : null) === 'FREE') {
+    const pseudo = row && (row.game_pseudo != null ? String(row.game_pseudo) : (row.name != null ? String(row.name) : ''));
+    _toastFreeRankingDetailsLocked(pseudo);
+    return;
+  }
   _currentRankingDetailRow = row;
   try {
     if (typeof _mergePersistedFollowedStatsFromRow === 'function') _mergePersistedFollowedStatsFromRow(row);
@@ -2297,6 +2355,11 @@ function showPlayerDetails(row) {
 }
 
 function showGalaxyGatesPopup(row) {
+  if ((typeof getCurrentBadge === 'function' ? getCurrentBadge() : null) === 'FREE') {
+    const pseudo = row && (row.game_pseudo != null ? String(row.game_pseudo) : (row.name != null ? String(row.name) : ''));
+    _toastFreeRankingDetailsLocked(pseudo);
+    return;
+  }
   const modal = document.getElementById('ranking-gg-modal');
   const overlay = document.getElementById('ranking-gg-overlay');
   if (!modal || !overlay) return;

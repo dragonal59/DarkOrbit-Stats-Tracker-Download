@@ -1,6 +1,6 @@
 // Preload Electron — expose config Supabase et IPC au renderer
 // Config injectée par main.js dans process.env AVANT création de la fenêtre
-// (main.js charge config.supabase.prod.js depuis app-src et injecte les valeurs)
+// (.env, puis build/src/config.supabase.prod.js ou config.supabase.local.js en dev)
 const { contextBridge, ipcRenderer } = require('electron');
 
 const supabaseConfig = {
@@ -168,6 +168,17 @@ contextBridge.exposeInMainWorld('electronDostatsScraper', {
 
 contextBridge.exposeInMainWorld('electronDostatsProfilesScraper', {
   start: (serverCode, userIds, concurrency) => ipcRenderer.invoke('dostats-profiles-scraper:start', { serverCode, userIds, concurrency }),
+  onProfileProgress: (cb) => {
+    const fn = (_e, d) => {
+      try {
+        cb(d);
+      } catch (e) {
+        /* ignore */
+      }
+    };
+    ipcRenderer.on('dostats:profile-progress', fn);
+    return () => ipcRenderer.removeListener('dostats:profile-progress', fn);
+  },
 });
 
 contextBridge.exposeInMainWorld('electronScrapingConfig', {

@@ -2,16 +2,38 @@
 // MODULE: HISTORY DISPLAY
 // ==========================================
 
+function historyT(key) {
+  return (typeof window.i18nT === 'function') ? window.i18nT(key) : key;
+}
+
+function historyBcp47Locale() {
+  try {
+    var k = localStorage.getItem('darkOrbitLanguage') || 'fr';
+    var map = { fr: 'fr-FR', de: 'de-DE', ru: 'ru-RU', es: 'es-ES', en: 'en-GB', tr: 'tr-TR' };
+    return map[k] || 'fr-FR';
+  } catch (e) {
+    return 'fr-FR';
+  }
+}
+
+function historyFormatMonthYear(date) {
+  var loc = historyBcp47Locale();
+  var raw = date.toLocaleDateString(loc, { month: 'long', year: 'numeric' });
+  if (!raw) return '';
+  return raw.charAt(0).toLocaleUpperCase(loc) + raw.slice(1);
+}
+
 function renderHistory() {
   const sessions = typeof getSessions === 'function' ? (getSessions() || []) : [];
   const historyList = document.getElementById("historyList");
   if (!historyList) return;
 
   if (!Array.isArray(sessions) || sessions.length === 0) {
+    var emptyMsg = (typeof escapeHtml === 'function') ? escapeHtml(historyT('no_sessions')) : historyT('no_sessions');
     historyList.innerHTML = `
       <div class="empty-state">
         <div class="empty-icon">📝</div>
-        <p>Aucune session sauvegardée pour le moment</p>
+        <p>${emptyMsg}</p>
       </div>
     `;
     return;
@@ -33,13 +55,14 @@ function renderHistory() {
   for (const [period, periodData] of Object.entries(grouped)) {
     const { label, sessions: periodSessions, totalHonor, totalXp } = periodData;
     const isCurrentPeriod = period === getCurrentPeriodKey();
+    const labelEsc = (typeof escapeHtml === 'function') ? escapeHtml(label) : label;
     
     html += `
       <div class="history-period ${isCurrentPeriod ? 'current' : ''}">
         <div class="history-period-header" onclick="toggleHistoryPeriod('${period}')">
           <div class="history-period-info">
             <span class="history-period-icon" id="period-icon-${period}">${isCurrentPeriod ? '▼' : '▶'}</span>
-            <span class="history-period-label">${label}</span>
+            <span class="history-period-label">${labelEsc}</span>
           </div>
           <div class="history-period-summary">
             <span class="period-stat">🏆 +${formatNumberCompact(totalHonor)}</span>
@@ -76,16 +99,15 @@ function groupSessionsByPeriod(sessions) {
     
     if (sessionDate >= thisWeekStart) {
       periodKey = 'this-week';
-      periodLabel = '📅 Cette semaine';
+      periodLabel = historyT('history_period_this_week');
     } else if (sessionDate >= lastWeekStart) {
       periodKey = 'last-week';
-      periodLabel = '📅 Semaine dernière';
+      periodLabel = historyT('history_period_last_week');
     } else {
       // Grouper par mois
       const monthKey = `${sessionDate.getFullYear()}-${String(sessionDate.getMonth() + 1).padStart(2, '0')}`;
-      const monthName = sessionDate.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
       periodKey = monthKey;
-      periodLabel = `📆 ${monthName.charAt(0).toUpperCase() + monthName.slice(1)}`;
+      periodLabel = '📆 ' + historyFormatMonthYear(sessionDate);
     }
     
     if (!groups[periodKey]) {
@@ -206,7 +228,16 @@ function renderPeriodSessions(sessions, gainsBySessionId) {
     const rankData = typeof RANKS_DATA !== 'undefined' ? RANKS_DATA.find(r => r.rank === rankKey || r.name === rankKey) : null;
     const rankImg = rankData ? rankData.img : '';
     const rankDisplay = rankData ? rankData.name : rankKey || session.currentRank || '';
+    const rankDisplayEsc = (typeof escapeHtml === 'function') ? escapeHtml(rankDisplay) : rankDisplay;
+    const dateEsc = (typeof escapeHtml === 'function') ? escapeHtml(session.date || '') : (session.date || '');
     const currentLevel = getCurrentLevel(session.xp);
+    const levelLine = historyT('level_with_number').replace(/\{\{n\}\}/g, String(currentLevel));
+    const lblRank = historyT('rank_name_label');
+    const lblLevel = historyT('level');
+    const lblHonor = historyT('honor');
+    const lblXp = historyT('xp');
+    const lblRp = historyT('points_rank');
+    const delTitle = (typeof escapeHtml === 'function') ? escapeHtml(historyT('coupons_delete')) : historyT('coupons_delete');
 
     // Gains du jour = somme des gains de toutes les sessions de ce jour,
     // basés sur computeGainsBySession.
@@ -225,49 +256,48 @@ function renderPeriodSessions(sessions, gainsBySessionId) {
       gains = { honor: null, xp: null, rankPoints: null };
     }
 
-    var baselineBadge = (hasBaseline && typeof window !== 'undefined' && typeof window.i18nT === 'function')
-      ? window.i18nT('baseline_label')
-      : (hasBaseline ? 'Seuil de départ' : '');
+    var baselineBadge = hasBaseline ? historyT('baseline_label') : '';
+    var baselineBadgeEsc = (typeof escapeHtml === 'function') ? escapeHtml(baselineBadge) : baselineBadge;
     return `
     <div class="session-card">
       <div class="session-header">
-        <div class="session-date">📅 ${session.date}${baselineBadge ? ' • <span class="session-baseline-badge">' + baselineBadge + '</span>' : ''}</div>
+        <div class="session-date">📅 ${dateEsc}${baselineBadge ? ' • <span class="session-baseline-badge">' + baselineBadgeEsc + '</span>' : ''}</div>
         <div class="session-actions">
-          <button class="session-btn error" onclick="deleteSession(${attrSessionId(session.id)})" title="Supprimer">🗑️</button>
+          <button class="session-btn error" onclick="deleteSession(${attrSessionId(session.id)})" title="${delTitle}">🗑️</button>
         </div>
       </div>
       <div class="session-stats">
         <div class="session-stat">
-          <div class="session-stat-label">Grade</div>
+          <div class="session-stat-label">${(typeof escapeHtml === 'function') ? escapeHtml(lblRank) : lblRank}</div>
           <div class="session-stat-main">
             <div class="grade-block grade-block--compact">
-              <div class="grade-block-name">${rankDisplay}</div>
+              <div class="grade-block-name">${rankDisplayEsc}</div>
               <div class="grade-block-icon">
-                ${rankImg ? `<img src="${rankImg}" alt="${rankDisplay}" class="grade-block-img">` : ''}
+                ${rankImg ? `<img src="${rankImg}" alt="${rankDisplayEsc}" class="grade-block-img">` : ''}
               </div>
             </div>
           </div>
         </div>
         <div class="session-stat">
-          <div class="session-stat-label">Niveau</div>
-          <div class="session-stat-main">Niveau ${currentLevel}</div>
+          <div class="session-stat-label">${(typeof escapeHtml === 'function') ? escapeHtml(lblLevel) : lblLevel}</div>
+          <div class="session-stat-main">${(typeof escapeHtml === 'function') ? escapeHtml(levelLine) : levelLine}</div>
         </div>
         <div class="session-stat">
-          <div class="session-stat-label"><img src="img/icon_btn/honor_icon.png" alt="" class="session-stat-icon"> Honneur</div>
+          <div class="session-stat-label"><img src="img/icon_btn/honor_icon.png" alt="" class="session-stat-icon"> ${(typeof escapeHtml === 'function') ? escapeHtml(lblHonor) : lblHonor}</div>
           <div class="session-stat-values">
             <div class="session-stat-main">${formatNumberDisplay(session.honor)}</div>
             <div class="session-stat-gain session-gain ${getGainClass(gains.honor, 'pn')}">${formatSignedGain(gains.honor, true)}</div>
           </div>
         </div>
         <div class="session-stat">
-          <div class="session-stat-label"><img src="img/icon_btn/xp_icon.png" alt="" class="session-stat-icon"> XP</div>
+          <div class="session-stat-label"><img src="img/icon_btn/xp_icon.png" alt="" class="session-stat-icon"> ${(typeof escapeHtml === 'function') ? escapeHtml(lblXp) : lblXp}</div>
           <div class="session-stat-values">
             <div class="session-stat-main">${formatNumberDisplay(session.xp)}</div>
             <div class="session-stat-gain session-gain ${getGainClass(gains.xp, 'pn')}">${formatSignedGain(gains.xp, true)}</div>
           </div>
         </div>
         <div class="session-stat">
-          <div class="session-stat-label"><img src="img/icon_btn/rp_icon.png" alt="" class="session-stat-icon"> Points de grade</div>
+          <div class="session-stat-label"><img src="img/icon_btn/rp_icon.png" alt="" class="session-stat-icon"> ${(typeof escapeHtml === 'function') ? escapeHtml(lblRp) : lblRp}</div>
           <div class="session-stat-values">
             <div class="session-stat-main">${formatNumberDisplay(session.rankPoints)}</div>
             <div class="session-stat-gain session-gain ${getGainClass(gains.rankPoints, 'pn')}">${formatSignedGain(gains.rankPoints, true)}</div>
@@ -300,4 +330,10 @@ function toggleHistoryPeriod(periodId) {
 // Make functions globally available
 window.toggleHistoryPeriod = toggleHistoryPeriod;
 window.attrSessionId = attrSessionId;
+
+window.addEventListener('languageChanged', function () {
+  try {
+    if (typeof renderHistory === 'function') renderHistory();
+  } catch (e) {}
+});
 

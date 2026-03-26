@@ -71,7 +71,15 @@
    * N’y ajouter que des clés réellement « machine » (ex. jamais de données d’un utilisateur A visibles par B).
    */
   function LOGOUT_KEEP_STORAGE_KEYS() {
-    return [STORAGE_KEYS.LAST_APP_VERSION_ACK];
+    // Confort : si on revient au même compte après logout,
+    // on garde les sessions et la UI "stats actuelles" (CURRENT_STATS).
+    // Sécurité : en cas de changement de compte, `ensureUserDataIsolation()`
+    // purgera quand même les données user-scoped.
+    return [
+      STORAGE_KEYS.LAST_APP_VERSION_ACK,
+      STORAGE_KEYS.SESSIONS,
+      STORAGE_KEYS.CURRENT_STATS
+    ];
   }
 
   window.APP_KEYS = {

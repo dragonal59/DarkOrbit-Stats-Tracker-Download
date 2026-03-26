@@ -8,6 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 const { initAutoUpdater } = require('./electron/auto-updater');
+const { readMergedSupabaseConfigFromDisk } = require('./electron/supabase-config-from-disk');
 
 Menu.setApplicationMenu(null);
 
@@ -48,26 +49,18 @@ ipcMain.handle('pythscrap:launch', async () => {
 /** Injecte config Supabase dans process.env AVANT création de la fenêtre (pour que le preload lise process.env). */
 function loadSupabaseConfigIntoEnv() {
   if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) return;
-  let configPath;
-  if (app.isPackaged) {
-    configPath = path.join(app.getAppPath(), 'src', 'config.supabase.prod.js');
-  } else {
-    configPath = path.join(__dirname, 'build', 'src', 'config.supabase.prod.js');
-  }
   try {
-    if (fs.existsSync(configPath)) {
-      const config = require(configPath);
-      if (config && (config.url || config.anonKey)) {
-        process.env.SUPABASE_URL = config.url || process.env.SUPABASE_URL;
-        process.env.SUPABASE_ANON_KEY = config.anonKey || process.env.SUPABASE_ANON_KEY;
-        process.env.AUTH_REDIRECT_BASE = config.authRedirectBase || process.env.AUTH_REDIRECT_BASE;
-      }
-      if (config && (config.paypalClientId || config.paypalPlanId)) {
-        process.env.PAYPAL_CLIENT_ID = config.paypalClientId || process.env.PAYPAL_CLIENT_ID;
-        process.env.PAYPAL_PLAN_ID = config.paypalPlanId || process.env.PAYPAL_PLAN_ID;
-      }
+    const disk = readMergedSupabaseConfigFromDisk(app.isPackaged, app);
+    if (disk.url || disk.anonKey) {
+      process.env.SUPABASE_URL = disk.url || process.env.SUPABASE_URL;
+      process.env.SUPABASE_ANON_KEY = disk.anonKey || process.env.SUPABASE_ANON_KEY;
+      if (disk.authRedirectBase) process.env.AUTH_REDIRECT_BASE = disk.authRedirectBase || process.env.AUTH_REDIRECT_BASE;
     }
-  } catch (e) {}
+    if (disk.paypalClientId || disk.paypalPlanId) {
+      process.env.PAYPAL_CLIENT_ID = disk.paypalClientId || process.env.PAYPAL_CLIENT_ID;
+      process.env.PAYPAL_PLAN_ID = disk.paypalPlanId || process.env.PAYPAL_PLAN_ID;
+    }
+  } catch (_e) {}
 }
 loadSupabaseConfigIntoEnv();
 
@@ -96,7 +89,7 @@ const SessionScraper = require('./electron/session-scraper');
 const ClientLauncher = require('./electron/client-launcher');
 const PlayerStatsScraper = require('./electron/player-stats-scraper');
 const PlayerStatsCredentials = require('./electron/player-stats-credentials');
-const { runDostatsRankingScraper, getLatestRanking, checkDostatsHealth, measureDostatsLatency, measureDostatsLatencyAndScanProfiles } = require('./electron/dostats-scraper');
+const { DOSTATS_GROUPS, runDostatsRankingScraper, getLatestRanking, checkDostatsHealth, measureDostatsLatency, measureDostatsLatencyAndScanProfiles } = require('./electron/dostats-scraper');
 const { runDostatsProfilesScraper, getLatestProfile } = require('./electron/dostats-profile-scraper');
 const { loginAndExtractEventsOnly, runEventsScraping } = require('./electron/events-scraper-standalone');
 
@@ -421,6 +414,77 @@ function handleDeepLink(url) {
   }
 }
 
+/** Ouvre une URL http(s) dans le navigateur par défaut du système (pas dans Electron). */
+function openHttpUrlInSystemBrowser(url) {
+  if (typeof url !== 'string') return false;
+  const u = url.trim();
+  if (!u.startsWith('https://') && !u.startsWith('http://')) return false;
+  try {
+    shell.openExternal(u);
+    return true;
+  } catch (e) {
+    console.warn('[Main] shell.openExternal:', e?.message || e);
+    return false;
+  }
+}
+
+function isPayPalHost(hostname) {
+  if (!hostname || typeof hostname !== 'string') return false;
+  const h = hostname.toLowerCase();
+  return h === 'paypal.com' || h.endsWith('.paypal.com') || h === 'paypal.cn' || h.endsWith('.paypal.cn');
+}
+
+/**
+ * PayPal (boutons / abonnement) : popups et redirections vers le navigateur par défaut,
+ * pas une fenêtre Chromium intégrée à l’app.
+ */
+function setupPayPalAndExternalPopupsInBrowserWindow(browserWindow) {
+  if (!browserWindow || browserWindow.isDestroyed()) return;
+  const wc = browserWindow.webContents;
+
+  wc.setWindowOpenHandler((details) => {
+    const url = details.url || '';
+    if (openHttpUrlInSystemBrowser(url)) {
+      return { action: 'deny' };
+    }
+    return {
+      action: 'allow',
+      overrideBrowserWindowOptions: {
+        parent: browserWindow,
+        show: false,
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true
+        }
+      }
+    };
+  });
+
+  wc.on('did-create-window', (childWindow) => {
+    if (!childWindow || childWindow.isDestroyed()) return;
+    const childWc = childWindow.webContents;
+    const redirectPopupToBrowser = (event, navigationUrl) => {
+      if (!openHttpUrlInSystemBrowser(navigationUrl)) return;
+      if (event && typeof event.preventDefault === 'function') event.preventDefault();
+      try {
+        if (!childWindow.isDestroyed()) childWindow.close();
+      } catch (_) {}
+    };
+    childWc.on('will-navigate', redirectPopupToBrowser);
+    childWc.on('will-redirect', redirectPopupToBrowser);
+  });
+
+  wc.on('will-navigate', (event, navigationUrl) => {
+    if (!navigationUrl || navigationUrl.startsWith('file:')) return;
+    try {
+      if (isPayPalHost(new URL(navigationUrl).hostname)) {
+        event.preventDefault();
+        openHttpUrlInSystemBrowser(navigationUrl);
+      }
+    } catch (_) {}
+  });
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -443,6 +507,7 @@ function createWindow() {
 
   mainWindow.loadFile(getSrcPath('auth.html'));
   mainWindow.setTitle(`DO Stats Tracker v${app.getVersion()}`);
+  setupPayPalAndExternalPopupsInBrowserWindow(mainWindow);
   if (autoUpdateManager && autoUpdateManager.setWindowRef) autoUpdateManager.setWindowRef(mainWindow);
   // FIX 1 — affichage uniquement après ready-to-show (évite flash si quitAndInstall au prochain boot)
   mainWindow.once('ready-to-show', () => {
@@ -738,22 +803,104 @@ function setupScraper() {
       try {
       const groupId = payload && payload.groupId ? String(payload.groupId) : null;
       const serverCode = payload && payload.serverCode ? String(payload.serverCode) : null;
-      const scrapeProfiles = !!(payload && payload.scrapeProfiles);
-      const scrapeRankings = (payload && Object.prototype.hasOwnProperty.call(payload, 'scrapeRankings'))
-        ? !!payload.scrapeRankings
-        : true;
-
-      if (!scrapeRankings) {
-        return { ok: true, skipped: 'rankings_disabled' };
-      }
+      const serverCodes = Array.isArray(payload?.serverCodes)
+        ? payload.serverCodes.map((s) => String(s || '').trim().toLowerCase()).filter(Boolean)
+        : null;
+      const payloadServerConfigs = payload && payload.serverConfigs && typeof payload.serverConfigs === 'object'
+        ? payload.serverConfigs
+        : null;
       const targetWin = event.sender && BrowserWindow.fromWebContents(event.sender);
+      const logWin = targetWin || mainWindow;
+
+      function readServerConfigFromSettings(code) {
+        try {
+          if (!code) return { enabled: true, scrapeRankings: true, scrapeProfiles: false };
+          if (!fs.existsSync(SCRAPER_APP_SETTINGS_PATH)) return { enabled: true, scrapeRankings: true, scrapeProfiles: false };
+          const raw = fs.readFileSync(SCRAPER_APP_SETTINGS_PATH, 'utf8');
+          const data = JSON.parse(raw);
+          const profilesMap = data && typeof data.scrapeProfilesByServer === 'object' ? data.scrapeProfilesByServer : {};
+          const rankingsMap = data && typeof data.scrapeRankingsByServer === 'object' ? data.scrapeRankingsByServer : {};
+          const enabledMap = data && typeof data.serverEnabledByServer === 'object' ? data.serverEnabledByServer : {};
+          return {
+            enabled: Object.prototype.hasOwnProperty.call(enabledMap, code) ? !!enabledMap[code] : true,
+            scrapeRankings: Object.prototype.hasOwnProperty.call(rankingsMap, code) ? !!rankingsMap[code] : true,
+            scrapeProfiles: !!profilesMap[code],
+          };
+        } catch (_) {
+          return { enabled: true, scrapeRankings: true, scrapeProfiles: false };
+        }
+      }
+
+      function resolveConfigForServer(code) {
+        const fromPayload = payloadServerConfigs && payloadServerConfigs[code] && typeof payloadServerConfigs[code] === 'object'
+          ? payloadServerConfigs[code]
+          : null;
+        const fromSettings = readServerConfigFromSettings(code);
+        const cfg = {
+          enabled: fromSettings.enabled,
+          scrapeRankings: fromSettings.scrapeRankings,
+          scrapeProfiles: fromSettings.scrapeProfiles,
+        };
+        if (fromPayload) {
+          if (typeof fromPayload.enabled === 'boolean') cfg.enabled = fromPayload.enabled;
+          if (typeof fromPayload.scrapeRankings === 'boolean') cfg.scrapeRankings = fromPayload.scrapeRankings;
+          if (typeof fromPayload.scrapeProfiles === 'boolean') cfg.scrapeProfiles = fromPayload.scrapeProfiles;
+        } else if (serverCode && code === String(serverCode).trim().toLowerCase()) {
+          if (payload && Object.prototype.hasOwnProperty.call(payload, 'enabled')) cfg.enabled = !!payload.enabled;
+          if (payload && Object.prototype.hasOwnProperty.call(payload, 'scrapeRankings')) cfg.scrapeRankings = !!payload.scrapeRankings;
+          if (payload && Object.prototype.hasOwnProperty.call(payload, 'scrapeProfiles')) cfg.scrapeProfiles = !!payload.scrapeProfiles;
+        }
+        if (!cfg.scrapeRankings) cfg.scrapeProfiles = false;
+        return cfg;
+      }
+
+      const requestedServerCodes = (serverCodes && serverCodes.length)
+        ? serverCodes
+        : (serverCode
+          ? [String(serverCode).trim().toLowerCase()]
+          : (groupId && DOSTATS_GROUPS && DOSTATS_GROUPS[groupId]
+            ? DOSTATS_GROUPS[groupId].map((s) => String(s || '').trim().toLowerCase()).filter(Boolean)
+            : []));
+      const enabledRequestedServerCodes = requestedServerCodes.filter((code) => resolveConfigForServer(code).enabled !== false);
+      if (requestedServerCodes.length && !enabledRequestedServerCodes.length) {
+        sendDostatsSupabaseLog(logWin, null, 'warning', 'Tous les serveurs ciblés sont désactivés.');
+        return { ok: true, skipped: 'all_target_servers_disabled' };
+      }
+
       const rankingResult = await runDostatsRankingScraper({
         groupId,
         serverCode,
+        serverCodes: enabledRequestedServerCodes.length ? enabledRequestedServerCodes : serverCodes,
         mainWindowRef: targetWin || mainWindow,
       });
-      if (!scrapeProfiles || !rankingResult || !rankingResult.ok) {
-        return rankingResult;
+      if (!rankingResult || !rankingResult.ok) return rankingResult;
+
+      const targetServersOrdered = [];
+      (rankingResult.results || []).forEach((r) => {
+        const s = r && r.serverCode ? String(r.serverCode).trim().toLowerCase() : null;
+        if (!s) return;
+        if (targetServersOrdered.indexOf(s) === -1) targetServersOrdered.push(s);
+      });
+      if (serverCodes && serverCodes.length) {
+        serverCodes.forEach((s) => {
+          if (targetServersOrdered.indexOf(s) === -1) targetServersOrdered.push(s);
+        });
+      }
+
+      const serverConfigByCode = {};
+      targetServersOrdered.forEach((code) => {
+        serverConfigByCode[code] = resolveConfigForServer(code);
+      });
+
+      const enabledServers = targetServersOrdered.filter((code) => serverConfigByCode[code]?.enabled !== false);
+      if (!enabledServers.length) {
+        sendDostatsSupabaseLog(logWin, null, 'warning', 'Aucun serveur activé pour ce lancement (tout est désactivé).');
+        return { ok: true, skipped: 'all_servers_disabled' };
+      }
+
+      const serversForRankings = enabledServers.filter((code) => serverConfigByCode[code]?.scrapeRankings !== false);
+      if (!serversForRankings.length) {
+        return { ok: true, skipped: 'rankings_disabled' };
       }
 
       const perServerUserIds = new Map(); // server -> Set(userId)
@@ -762,6 +909,7 @@ function setupScraper() {
       (rankingResult.results || []).forEach((r) => {
         if (!r || !r.path || !r.serverCode) return;
         const key = String(r.serverCode).trim().toLowerCase() || 'unknown';
+        if (serversForRankings.indexOf(key) === -1) return;
         try {
           const raw = fs.readFileSync(r.path, 'utf8');
           const json = JSON.parse(raw);
@@ -786,32 +934,30 @@ function setupScraper() {
         }
       });
 
-      const logWin = targetWin || mainWindow;
-      let supabase = null;
-      try {
-        supabase = await requireSuperadminSupabaseClient(logWin);
-      } catch (e) {
-        sendDostatsSupabaseLog(logWin, null, 'warning', 'DOStats → Supabase désactivé : ' + (e?.message || e));
-      }
+      if (enabledServers.some((code) => serverConfigByCode[code]?.scrapeProfiles)) {
+        let concurrency;
+        try {
+          if (fs.existsSync(SCRAPER_APP_SETTINGS_PATH)) {
+            const raw = fs.readFileSync(SCRAPER_APP_SETTINGS_PATH, 'utf8');
+            const data = JSON.parse(raw);
+            const v = data && data.scraper && typeof data.scraper.profilesConcurrency === 'number'
+              ? data.scraper.profilesConcurrency
+              : 3;
+            const n = Math.floor(Number.isFinite(v) ? v : 3);
+            concurrency = Math.max(1, Math.min(10, n));
+          }
+        } catch (e) {
+          concurrency = undefined;
+        }
 
-      for (const [server, combos] of dostatsCombosByServer.entries()) {
-        const idsSet = perServerUserIds.get(server);
-        const ids = idsSet ? Array.from(idsSet) : [];
-
-        if (ids.length) {
-          let concurrency;
-          try {
-            if (fs.existsSync(SCRAPER_APP_SETTINGS_PATH)) {
-              const raw = fs.readFileSync(SCRAPER_APP_SETTINGS_PATH, 'utf8');
-              const data = JSON.parse(raw);
-              const v = data && data.scraper && typeof data.scraper.profilesConcurrency === 'number'
-                ? data.scraper.profilesConcurrency
-                : 3;
-              const n = Math.floor(Number.isFinite(v) ? v : 3);
-              concurrency = Math.max(1, Math.min(10, n));
-            }
-          } catch (e) {
-            concurrency = undefined;
+        // Cycle 2 : profils/gates, seulement après avoir fini les classements.
+        for (const server of enabledServers) {
+          if (!serverConfigByCode[server]?.scrapeProfiles) continue;
+          const idsSet = perServerUserIds.get(server);
+          const ids = idsSet ? Array.from(idsSet) : [];
+          if (!ids.length) {
+            sendDostatsSupabaseLog(logWin, server, 'warning', 'Aucun user_id HoF pour ce serveur (profiles skip).');
+            continue;
           }
           // eslint-disable-next-line no-await-in-loop
           await runDostatsProfilesScraper({
@@ -820,11 +966,19 @@ function setupScraper() {
             mainWindowRef: targetWin || mainWindow,
             concurrency,
           });
-        } else {
-          sendDostatsSupabaseLog(logWin, server, 'warning', 'Aucun user_id HoF pour ce serveur (profiles skip).');
         }
+      }
 
-        if (supabase) {
+      let supabase = null;
+      try {
+        supabase = await requireSuperadminSupabaseClient(logWin);
+      } catch (e) {
+        sendDostatsSupabaseLog(logWin, null, 'warning', 'DOStats → Supabase désactivé : ' + (e?.message || e));
+      }
+
+      if (supabase) {
+        for (const server of serversForRankings) {
+          const combos = dostatsCombosByServer.get(server) || [];
           // eslint-disable-next-line no-await-in-loop
           await pushDostatsServerToSupabase({
             logWin,
@@ -1071,10 +1225,12 @@ async function pushDostatsServerToSupabase({ logWin, server, combos }) {
 
     sendDostatsSupabaseLog(logWin, serverNorm, 'info', 'DOStats → Supabase : push profiles (overwrite strict)...');
     const profilesPath = getDostatsProfilesJsonPath(serverNorm);
+    let profileEntries = [];
     if (fs.existsSync(profilesPath)) {
       const rawProfiles = fs.readFileSync(profilesPath, 'utf8');
       const json = JSON.parse(rawProfiles);
       const entries = Array.isArray(json?.entries) ? json.entries : [];
+      profileEntries = entries;
 
       // Overwrite strict via RPC dédié (évite de casser les RPC utilisées par le client launcher).
       const RPC = 'overwrite_player_profile_from_dostats';
@@ -1084,6 +1240,7 @@ async function pushDostatsServerToSupabase({ logWin, server, combos }) {
         // eslint-disable-next-line no-await-in-loop
         const results = await Promise.allSettled(chunk.map((e) => {
           if (!e || typeof e !== 'object') return Promise.resolve({ status: 'skipped' });
+          // IMPORTANT : conserver la casse brute DOStats (BjYYD != BjYYd).
           const userId = e.user_id != null ? String(e.user_id).trim() : null;
           if (!userId) return Promise.resolve({ status: 'skipped' });
 
@@ -1100,7 +1257,7 @@ async function pushDostatsServerToSupabase({ logWin, server, combos }) {
           const gatesJson = Object.keys(gateObj).length ? gateObj : null;
 
           const lastUpdate = e.last_update != null ? String(e.last_update).trim() : null;
-          const companyUpdatedAt = lastUpdate && /^\\d{4}-\\d{2}-\\d{2}$/.test(lastUpdate)
+          const companyUpdatedAt = lastUpdate && /^\d{4}-\d{2}-\d{2}$/.test(lastUpdate)
             ? (lastUpdate + 'T00:00:00.000Z')
             : (e.company_updated_at != null ? e.company_updated_at : null);
 
@@ -1173,7 +1330,9 @@ async function pushDostatsServerToSupabase({ logWin, server, combos }) {
           name,
           company_from_dostats: company,
           company,
-          grade: rank,
+          // Position dans le tableau DOStats (1-based). Ne jamais la mettre dans `grade` :
+          // le frontend interprète `grade` comme grade militaire (IDs 1–21, clés, etc.).
+          dostats_table_rank: rank != null ? Number(rank) : null,
         };
         obj[metricField] = points;
         dostatsPlayers.push(obj);
@@ -1235,6 +1394,179 @@ async function pushDostatsServerToSupabase({ logWin, server, combos }) {
       sendDostatsSupabaseLog(logWin, serverNorm, 'success',
         `shared_rankings_snapshots OK — ${currentPlayers.length} joueurs.`);
     }
+
+    // ── Phase 2 (transition) : nouveau modèle normalisé ─────────────────
+    // On écrit en parallèle :
+    // - player_rankings
+    // - player_profiles.rankings_json
+    // via la RPC upsert_player_full.
+    sendDostatsSupabaseLog(logWin, serverNorm, 'info', 'DOStats → Supabase : upsert_player_full (new model)...');
+
+    var NEW_HOF_TYPES = ['topuser', 'experience', 'honor', 'ships', 'aliens'];
+    var NEW_PERIOD_KEYS = ['alltime', 'daily', 'weekly', 'monthly', 'last_90d'];
+
+    function makeEmptyRankingsJson() {
+      var out = {};
+      NEW_HOF_TYPES.forEach(function(t) {
+        out[t] = {};
+        NEW_PERIOD_KEYS.forEach(function(p) {
+          out[t][p] = { rank: null, value: null };
+        });
+      });
+      return out;
+    }
+
+    function mapDostatsPeriodKeyToNewPeriodKey(periodKey) {
+      var k = (periodKey || '').toString().trim().toLowerCase();
+      if (k === 'current') return 'alltime';
+      if (k === 'last_24h') return 'daily';
+      if (k === 'last_7d') return 'weekly';
+      if (k === 'last_30d') return 'monthly';
+      if (k === 'last_90d') return 'last_90d';
+      if (k === 'last_365d') return null; // ignoré pour l'instant
+      return null;
+    }
+
+    // IMPORTANT : conserver la casse brute DOStats sur user_id/userId.
+    var playersByUid = new Map(); // uidRaw -> player object for upsert_player_full
+
+    function ensurePlayer(uidRaw) {
+      if (!uidRaw) return null;
+      if (playersByUid.has(uidRaw)) return playersByUid.get(uidRaw);
+      var p = {
+        user_id: uidRaw,
+        userId: uidRaw,
+        pseudo: null,
+        company: null,
+        company_updated_at: null,
+        estimated_rp: null,
+        total_hours: null,
+        registered: null,
+        npc_kills: null,
+        ship_kills: null,
+        galaxy_gates: null,
+        galaxy_gates_json: null,
+        grade: null,
+        level: null,
+        top_user: null,
+        experience: null,
+        honor: null,
+        dostats_updated_at: null,
+        rankings_json: makeEmptyRankingsJson()
+      };
+      playersByUid.set(uidRaw, p);
+      return p;
+    }
+
+    // 1) Pré-remplissage scalaires depuis le profil scraper (quand disponible)
+    (profileEntries || []).forEach(function(e) {
+      if (!e || !e.user_id) return;
+      var uidRaw = String(e.user_id).trim();
+      if (!uidRaw) return;
+      var p = ensurePlayer(uidRaw);
+
+      var galaxy = e.galaxy_gates && typeof e.galaxy_gates === 'object' ? e.galaxy_gates : null;
+      var total = galaxy && galaxy.total != null ? Number(galaxy.total) : null;
+      var gateKeys = ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'kappa', 'lambda', 'kronos', 'hades', 'other'];
+      var gateObj = {};
+      if (galaxy) {
+        gateKeys.forEach(function(k) {
+          var v = galaxy[k];
+          if (v != null) gateObj[k] = v;
+        });
+      }
+      var gatesJson = Object.keys(gateObj).length ? gateObj : null;
+
+      var lastUpdate = e.last_update != null ? String(e.last_update).trim() : null;
+      var companyUpdatedAt = lastUpdate && /^\d{4}-\d{2}-\d{2}$/.test(lastUpdate)
+        ? (lastUpdate + 'T00:00:00.000Z')
+        : (e.company_updated_at != null ? e.company_updated_at : null);
+
+      p.pseudo = e.name != null ? String(e.name) : null;
+      p.company = e.company != null ? String(e.company) : null;
+      p.company_updated_at = companyUpdatedAt;
+      p.estimated_rp = e.estimated_rp != null ? Number(e.estimated_rp) : null;
+      p.total_hours = e.total_hours != null ? Number(e.total_hours) : null;
+      p.registered = e.registered != null ? String(e.registered) : null;
+      p.npc_kills = e.npc_kills != null ? Number(e.npc_kills) : null;
+      p.ship_kills = e.ship_kills != null ? Number(e.ship_kills) : null;
+      p.galaxy_gates = total != null ? Number(total) : null;
+      p.galaxy_gates_json = gatesJson;
+      p.grade = e.grade != null ? String(e.grade) : null;
+      p.level = e.level != null ? Number(e.level) : null;
+      p.top_user = e.top_user != null ? Number(e.top_user) : null;
+      p.experience = e.experience != null ? Number(e.experience) : null;
+      p.honor = e.honor != null ? Number(e.honor) : null;
+      p.dostats_updated_at = companyUpdatedAt;
+    });
+
+    // 2) Remplissage rankings_json depuis les HoF scrapés
+    (combos || []).forEach(function(c) {
+      if (!c || !Array.isArray(c.entries)) return;
+      var hofType = mapDostatsTypeKeyToHofType(c.typeKey);
+      var newPeriod = mapDostatsPeriodKeyToNewPeriodKey(c.periodKey);
+      if (!hofType || !newPeriod) return;
+
+      c.entries.forEach(function(e) {
+        if (!e || !e.user_id) return;
+        var uidRaw = String(e.user_id).trim();
+        if (!uidRaw) return;
+
+        var p = ensurePlayer(uidRaw);
+        var rank = e.rank != null ? Number(e.rank) : null;
+        var points = e.points != null ? Number(e.points) : null;
+
+        // Rang/points explicitement NULL quand hors top
+        p.rankings_json[hofType][newPeriod] = { rank: rank, value: points };
+      });
+    });
+
+    // 3) Push atomique (remplacement complet par server)
+    var p_players = Array.from(playersByUid.values());
+    var fullErr = null;
+    try {
+      const res = await supabase.rpc('upsert_player_full', {
+        p_server: serverNorm,
+        p_players: p_players,
+        p_snapshot_hof: null,
+        p_snapshot_stats: null,
+        p_scraped_at: new Date().toISOString()
+      });
+      fullErr = res?.error || null;
+    } catch (e) {
+      fullErr = e;
+    }
+
+    if (fullErr) {
+      const msg = String(fullErr?.message || fullErr || '');
+      const isSchemaCacheProblem = msg.toLowerCase().includes('schema cache') &&
+        msg.toLowerCase().includes('upsert_player_full');
+
+      // Si la fonction vient d'être ajoutée (migrations récentes), le SDK
+      // peut encore avoir un schéma cache incomplet dans ce process.
+      if (isSchemaCacheProblem) {
+        const supFresh2 = await getFreshSupabaseClientForDostatsPush(logWin);
+        if (supFresh2) supabase = supFresh2;
+
+        fullErr = null;
+        try {
+          const res2 = await supabase.rpc('upsert_player_full', {
+            p_server: serverNorm,
+            p_players: p_players,
+            p_snapshot_hof: null,
+            p_snapshot_stats: null,
+            p_scraped_at: new Date().toISOString()
+          });
+          fullErr = res2?.error || null;
+        } catch (e2) {
+          fullErr = e2;
+        }
+      }
+    }
+
+    if (fullErr) throw new Error('upsert_player_full: ' + (fullErr?.message || fullErr));
+    sendDostatsSupabaseLog(logWin, serverNorm, 'success',
+      `upsert_player_full OK — ${p_players.length} joueurs.`);
   } catch (e) {
     sendDostatsSupabaseLog(logWin, serverNorm, 'error', 'DOStats → Supabase push error: ' + (e?.message || e));
   }
@@ -2151,12 +2483,14 @@ app.on('ready', async () => {
       const code = serverCode != null ? String(serverCode).trim().toLowerCase() : '';
       if (!code) {
         return {
+          enabled: true,
           scrapeRankings: true,
           scrapeProfiles: false,
         };
       }
       if (!fs.existsSync(SCRAPER_APP_SETTINGS_PATH)) {
         return {
+          enabled: true,
           scrapeRankings: true,
           scrapeProfiles: false,
         };
@@ -2165,19 +2499,22 @@ app.on('ready', async () => {
       const data = JSON.parse(raw);
       const profilesMap = data && typeof data.scrapeProfilesByServer === 'object' ? data.scrapeProfilesByServer : {};
       const rankingsMap = data && typeof data.scrapeRankingsByServer === 'object' ? data.scrapeRankingsByServer : {};
+      const enabledMap = data && typeof data.serverEnabledByServer === 'object' ? data.serverEnabledByServer : {};
       return {
+        enabled: Object.prototype.hasOwnProperty.call(enabledMap, code) ? !!enabledMap[code] : true,
         scrapeRankings: Object.prototype.hasOwnProperty.call(rankingsMap, code) ? !!rankingsMap[code] : true,
         scrapeProfiles: !!profilesMap[code],
       };
     } catch (e) {
       return {
+        enabled: true,
         scrapeRankings: true,
         scrapeProfiles: false,
       };
     }
   });
 
-  ipcMain.handle('scraper-app:set-server-scrape-config', (_, { serverCode, scrapeRankings, scrapeProfiles }) => {
+  ipcMain.handle('scraper-app:set-server-scrape-config', (_, { serverCode, scrapeRankings, scrapeProfiles, enabled }) => {
     try {
       const code = serverCode != null ? String(serverCode).trim().toLowerCase() : '';
       if (!code) return { ok: true };
@@ -2189,11 +2526,15 @@ app.on('ready', async () => {
       if (!data || typeof data !== 'object') data = {};
       if (typeof data.scrapeProfilesByServer !== 'object') data.scrapeProfilesByServer = {};
       if (typeof data.scrapeRankingsByServer !== 'object') data.scrapeRankingsByServer = {};
+      if (typeof data.serverEnabledByServer !== 'object') data.serverEnabledByServer = {};
       if (typeof scrapeProfiles === 'boolean') {
         data.scrapeProfilesByServer[code] = scrapeProfiles;
       }
       if (typeof scrapeRankings === 'boolean') {
         data.scrapeRankingsByServer[code] = scrapeRankings;
+      }
+      if (typeof enabled === 'boolean') {
+        data.serverEnabledByServer[code] = enabled;
       }
       fs.writeFileSync(SCRAPER_APP_SETTINGS_PATH, JSON.stringify(data, null, 2), 'utf8');
       return { ok: true };

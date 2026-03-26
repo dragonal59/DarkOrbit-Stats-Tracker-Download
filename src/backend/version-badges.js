@@ -279,7 +279,17 @@ function canAccessTab(badge, tabId) {
  */
 function currentCanAccessTab(tabId) {
   if (_permissionsCache?.tabs && Array.isArray(_permissionsCache.tabs)) {
-    return _permissionsCache.tabs.includes(tabId);
+    if (_permissionsCache.tabs.includes(tabId)) return true;
+
+    // Cas réel observé : le RPC peut renvoyer une liste de tabs incomplète pour FREE,
+    // ce qui cache 'classement' alors que l'app doit y donner accès.
+    // On ne corrige que ce cas précis (sinon on garderait la vérité RPC).
+    const badge = getCurrentBadge();
+    if (badge === BADGES.FREE && tabId === TABS.CLASSEMENT) {
+      return canAccessTab(badge, tabId);
+    }
+
+    return false;
   }
   return canAccessTab(getCurrentBadge(), tabId);
 }

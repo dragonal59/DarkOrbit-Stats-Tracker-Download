@@ -15,6 +15,8 @@ const { BrowserWindow, app } = require('electron');
 const { createClient } = require('@supabase/supabase-js');
 const path = require('path');
 const fs = require('fs');
+const { readMergedSupabaseConfigFromDisk } = require('./supabase-config-from-disk');
+const { applyScraperSessionProxyPolicy } = require('./scraper-app-settings');
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -77,14 +79,9 @@ function getSupabaseConfig() {
   let anonKey = process.env.SUPABASE_ANON_KEY || '';
   if (url && anonKey) return { url, anonKey };
   try {
-    const configPath = app.isPackaged
-      ? app.getSrcPath('config.supabase.prod.js')
-      : path.join(__dirname, '..', 'build', 'src', 'config.supabase.prod.js');
-    const cfg = require(configPath);
-    if (cfg) {
-      url = cfg.url || url;
-      anonKey = cfg.anonKey || anonKey;
-    }
+    const disk = readMergedSupabaseConfigFromDisk(app.isPackaged, app);
+    url = disk.url || url;
+    anonKey = disk.anonKey || anonKey;
   } catch (_e) { /* fichier absent, on garde process.env */ }
   return { url, anonKey };
 }
@@ -182,6 +179,7 @@ async function createWindow() {
       partition:        PARTITION,
     },
   });
+  await applyScraperSessionProxyPolicy(_window.webContents.session);
   _window.on('closed', () => { _window = null; });
   return _window;
 }

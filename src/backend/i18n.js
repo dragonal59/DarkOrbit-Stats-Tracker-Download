@@ -95,6 +95,11 @@
         window.dispatchEvent(new CustomEvent('languageChanged', { detail: { lang: lang } }));
       }
     } catch (e) {}
+    try {
+      if (typeof window.updateActiveAccountDisplay === 'function') {
+        window.updateActiveAccountDisplay();
+      }
+    } catch (e2) {}
   }
 
   function initLanguageButton() {

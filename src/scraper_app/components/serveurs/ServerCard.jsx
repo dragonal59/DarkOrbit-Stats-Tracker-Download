@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Pause, Settings } from 'lucide-react';
 import { ServerStatusDot } from './ServerStatusDot';
@@ -31,7 +31,39 @@ export function ServerCard({
   const [hovered, setHovered] = useState(false);
   const [scrapeProfiles, setScrapeProfiles] = useState(false);
   const [scrapeRankings, setScrapeRankings] = useState(true);
+  const [serverEnabled, setServerEnabled] = useState(true);
   const [showConfig, setShowConfig] = useState(false);
+  const [profileProgress, setProfileProgress] = useState(null);
+  const profileProgressHideTimerRef = useRef(null);
+
+  useEffect(() => {
+    const api = typeof window !== 'undefined' && window.electronDostatsProfilesScraper;
+    if (!api || typeof api.onProfileProgress !== 'function') return undefined;
+    const off = api.onProfileProgress((evt) => {
+      if (!evt || String(evt.server || '').toLowerCase() !== server.code.toLowerCase()) return;
+      if (profileProgressHideTimerRef.current) {
+        clearTimeout(profileProgressHideTimerRef.current);
+        profileProgressHideTimerRef.current = null;
+      }
+      setProfileProgress({
+        current: Number(evt.current) || 0,
+        total: Number(evt.total) || 0,
+        active: !!evt.active,
+      });
+      if (!evt.active) {
+        profileProgressHideTimerRef.current = setTimeout(() => {
+          setProfileProgress(null);
+          profileProgressHideTimerRef.current = null;
+        }, 1800);
+      }
+    });
+    return () => {
+      if (profileProgressHideTimerRef.current) {
+        clearTimeout(profileProgressHideTimerRef.current);
+      }
+      if (typeof off === 'function') off();
+    };
+  }, [server.code]);
 
   useEffect(() => {
     const api = window.electronAPI;
@@ -41,6 +73,7 @@ export function ServerCard({
           if (!cfg || typeof cfg !== 'object') return;
           if (typeof cfg.scrapeProfiles === 'boolean') setScrapeProfiles(cfg.scrapeProfiles);
           if (typeof cfg.scrapeRankings === 'boolean') setScrapeRankings(cfg.scrapeRankings);
+          if (typeof cfg.enabled === 'boolean') setServerEnabled(cfg.enabled);
         })
         .catch(() => {});
       return;
@@ -53,6 +86,7 @@ export function ServerCard({
   }, [server.code]);
 
   const handleToggleScrapeProfiles = () => {
+    if (!serverEnabled) return;
     const next = !scrapeProfiles;
     setScrapeProfiles(next);
     if (typeof window.electronAPI?.setServerScrapeConfig === 'function') {
@@ -131,16 +165,19 @@ export function ServerCard({
                 className="card-action-btn"
                 title="Lancer le scrape (classements / profils)"
                 onClick={() => {
+                  if (!serverEnabled) return;
                   if (!scrapeRankings && !scrapeProfiles) return;
                   toggleServer(server.id, 'start');
                   if (typeof window.electronScraper?.pause === 'function') {
                     window.electronScraper.pause(false);
                   }
                   onStartScrape?.(server.code, {
+                    enabled: serverEnabled,
                     scrapeProfiles,
                     scrapeRankings,
                   });
                 }}
+                disabled={!serverEnabled}
               >
                 <Play size={12} />
               </button>
@@ -237,6 +274,42 @@ export function ServerCard({
                 </button>
               </div>
               <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 8,
+                  fontSize: 11,
+                  marginBottom: 6,
+                }}
+              >
+                <span>Serveur actif (manuel/groupe/scheduler)</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !serverEnabled;
+                    setServerEnabled(next);
+                    toggleServer(server.id, next ? 'pause' : 'disable');
+                    if (typeof window.electronAPI?.setServerScrapeConfig === 'function') {
+                      window.electronAPI
+                        .setServerScrapeConfig(server.code, { enabled: next })
+                        .catch(() => {});
+                    }
+                  }}
+                  style={{
+                    padding: '2px 10px',
+                    borderRadius: 999,
+                    border: '1px solid rgba(148,163,184,0.8)',
+                    background: serverEnabled ? 'var(--accent-emerald)' : 'transparent',
+                    color: serverEnabled ? '#0f172a' : 'var(--text-secondary)',
+                    fontSize: 10,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {serverEnabled ? 'Activé' : 'Désactivé'}
+                </button>
+              </div>
+              <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -291,7 +364,7 @@ export function ServerCard({
                 type="button"
                 disabled={!scrapeRankings}
                 onClick={() => {
-                  if (!scrapeRankings) return;
+                  if (!serverEnabled || !scrapeRankings) return;
                   const next = !scrapeProfiles;
                   setScrapeProfiles(next);
                   if (typeof window.electronAPI?.setServerScrapeConfig === 'function') {
@@ -396,6 +469,31 @@ export function ServerCard({
             {server.errorCount.toLocaleString()}
           </span>
         </div>
+        {profileProgress && profileProgress.total > 0 && (
+          <div className="bar-row server-card-profile-scrape">
+            <span className="bar-label">Profils</span>
+            <div className="bar-track">
+              <motion.div
+                className="bar-fill server-card-profile-scrape-fill"
+                initial={{ width: 0 }}
+                animate={{
+                  width: `${Math.min(
+                    100,
+                    (profileProgress.current / profileProgress.total) * 100,
+                  )}%`,
+                }}
+                transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+              />
+            </div>
+            <span className="bar-count server-card-profile-scrape-pct">
+              {Math.min(
+                100,
+                Math.round((profileProgress.current / profileProgress.total) * 100),
+              )}
+              %
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="card-divider" />

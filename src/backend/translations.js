@@ -400,6 +400,13 @@
     clear_history: { fr: 'Effacer l\'historique', de: 'Verlauf löschen', ru: 'Очистить историю', es: 'Borrar historial', en: 'Clear history', tr: 'Geçmişi temizle' },
     export_data: { fr: 'Exporter les données', de: 'Daten exportieren', ru: 'Экспорт данных', es: 'Exportar datos', en: 'Export data', tr: 'Verileri dışa aktar' },
     no_sessions: { fr: 'Aucune session sauvegardée pour le moment', de: 'Noch keine Sitzungen gespeichert', ru: 'Пока нет сохранённых сессий', es: 'Ninguna sesión guardada aún', en: 'No sessions saved yet', tr: 'Henüz kaydedilmiş oturum yok' },
+    header_connected_prefix: { fr: 'Connecté :', de: 'Angemeldet:', ru: 'Вход:', es: 'Conectado:', en: 'Signed in:', tr: 'Giriş:' },
+    rank_name_label: { fr: 'Nom du grade', de: 'Rangname', ru: 'Название ранга', es: 'Nombre del rango', en: 'Rank name', tr: 'Rütbe adı' },
+    history_period_this_week: { fr: '📅 Cette semaine', de: '📅 Diese Woche', ru: '📅 На этой неделе', es: '📅 Esta semana', en: '📅 This week', tr: '📅 Bu hafta' },
+    history_period_last_week: { fr: '📅 Semaine dernière', de: '📅 Letzte Woche', ru: '📅 Прошлая неделя', es: '📅 Semana pasada', en: '📅 Last week', tr: '📅 Geçen hafta' },
+    level_with_number: { fr: 'Niveau {{n}}', de: 'Stufe {{n}}', ru: 'Уровень {{n}}', es: 'Nivel {{n}}', en: 'Level {{n}}', tr: 'Seviye {{n}}' },
+    dropdown_aria_grades_list: { fr: 'Sélectionner un grade', de: 'Rang wählen', ru: 'Выберите ранг', es: 'Seleccionar rango', en: 'Select a rank', tr: 'Rütbe seçin' },
+    stats_form_reset_toast: { fr: 'Formulaire réinitialisé', de: 'Formular zurückgesetzt', ru: 'Форма сброшена', es: 'Formulario restablecido', en: 'Form reset', tr: 'Form sıfırlandı' },
 
     // ----- Événements -----
     events_calendar: { fr: 'Calendrier des événements DarkOrbit', de: 'DarkOrbit Ereigniskalender', ru: 'Календарь событий DarkOrbit', es: 'Calendario de eventos DarkOrbit', en: 'DarkOrbit events calendar', tr: 'DarkOrbit etkinlik takvimi' },
@@ -429,12 +436,23 @@
     events_remettre_en_cours: { fr: 'Remettre en cours', de: 'Wieder aktivieren', ru: 'Вернуть в активные', es: 'Reactivar', en: 'Mark as current', tr: 'Yeniden etkinleştir' },
     events_remettre_ok: { fr: 'Événement remis en cours.', de: 'Ereignis wieder aktiviert.', ru: 'Событие возвращено в активные.', es: 'Evento reactivado.', en: 'Event marked as current.', tr: 'Etkinlik yeniden etkinleştirildi.' },
     support_developer: { fr: 'Soutenir le développeur', en: 'Support the developer', de: 'Entwickler unterstützen', es: 'Apoyar al desarrollador', ru: 'Поддержать разработчика', tr: 'Geliştiriciye destek ol' },
-    support_short: { fr: 'Payer un café', en: 'Pay for a coffee', de: 'Einen Kaffee spendieren', es: 'Invitar un café', ru: 'Угостить кофе', tr: 'Kahve ısmarla' },
+    support_short: { fr: '❤️ Payer un café', en: '❤️ Buy me a coffee', de: '❤️ Einen Kaffee spendieren', es: '❤️ Invitar un café', ru: '❤️ Угостить кофе', tr: '❤️ Kahve ısmarla' },
+    passer_pro_btn: { fr: '✨ Passer PRO', en: '✨ Go PRO', de: '✨ PRO werden', es: '✨ Pasar a PRO', ru: '✨ Стать PRO', tr: '✨ PRO’ya geç' },
+    booster_free_promo_cta: { fr: 'Passer en PRO', en: 'Upgrade to PRO', de: 'Auf PRO upgraden', es: 'Pasar a PRO', ru: 'Оформить PRO', tr: "PRO'ya geç" },
     buy_pro: { fr: 'Acheter PRO', en: 'Buy PRO', de: 'PRO kaufen', es: 'Comprar PRO', ru: 'Купить PRO', tr: 'PRO satın al' },
 
     // ----- Classement -----
     ranking_top100: { fr: 'Classement Top 100', de: 'Top-100-Rangliste', ru: 'Рейтинг Топ 100', es: 'Clasificación Top 100', en: 'Top 100 Ranking', tr: 'İlk 100 Sıralama' },
     ranking_subtitle: { fr: 'Consultez les meilleurs joueurs par serveur', de: 'Beste Spieler pro Server', ru: 'Лучшие игроки по серверам', es: 'Consulta los mejores jugadores por servidor', en: 'View top players per server', tr: 'Sunucuya göre en iyi oyuncular' },
+    ranking_player_search_label: { fr: 'Rechercher', de: 'Suchen', ru: 'Поиск', es: 'Buscar', en: 'Search', tr: 'Arama' },
+    ranking_player_search_placeholder: {
+      fr: 'Rechercher un joueur',
+      de: 'Spieler suchen',
+      ru: 'Поиск игрока',
+      es: 'Buscar un jugador',
+      en: 'Search for a player',
+      tr: 'Bir oyuncu ara'
+    },
     ranking_import_replace_confirm: {
       fr: 'Un classement fusion existe déjà pour le serveur « {{server}} » ({{count}} joueur(s)). Le fichier en contient {{newcount}}. Remplacer les données importées pour ce serveur ?',
       de: 'Für Server „{{server}}“ existiert bereits ein Fusion-Ranking ({{count}} Spieler). Die Datei enthält {{newcount}}. Importierte Daten für diesen Server ersetzen?',
@@ -661,6 +679,43 @@
       tr: 'Otomatik tarama için Hesabım > DarkOrbit hesabı bölümünde DarkOrbit hesabınızı girin.\n\nİstatistik takibi için her gün 23:50\'de (yerel saat) sistematik bir tarama yapılır. Bu, oyundan yaklaşık 30 saniye bağlantı kesilmesine neden olur.\n\nDarkOrbit kimlik bilgileri şifrelenir ve yerel olarak saklanır. Geliştirici dahil hiç kimsenin bu verilere erişimi yoktur.'
     },
     manage_subscription: { fr: 'Gérer mon abonnement', en: 'Manage my subscription', de: 'Abonnement verwalten', es: 'Gestionar mi suscripción', ru: 'Управление подпиской', tr: 'Aboneliği yönet' },
+    upgrade_pro_paypal_banner: {
+      fr: 'Paiement sécurisé via PayPal — abonnement avec renouvellement automatique.',
+      en: 'Secure payment via PayPal — subscription with automatic renewal.',
+      de: 'Sichere Zahlung über PayPal — Abo mit automatischer Verlängerung.',
+      es: 'Pago seguro con PayPal — suscripción con renovación automática.',
+      ru: 'Безопасная оплата через PayPal — подписка с автопродлением.',
+      tr: 'PayPal ile güvenli ödeme — otomatik yenilenen abonelik.'
+    },
+    upgrade_pro_paypal_cta: {
+      fr: 'S\'abonner avec PayPal',
+      en: 'Subscribe with PayPal',
+      de: 'Mit PayPal abonnieren',
+      es: 'Suscribirse con PayPal',
+      ru: 'Подписаться через PayPal',
+      tr: 'PayPal ile abone ol'
+    },
+    upgrade_cmp_free_1: { fr: '✅ Accès aux classements', en: '✅ Rankings access', de: '✅ Zugang zu Ranglisten', es: '✅ Acceso a clasificaciones', ru: '✅ Доступ к рейтингам', tr: '✅ Sıralamalara erişim' },
+    upgrade_cmp_free_2: { fr: '✅ Accès au suivi personnel', en: '✅ Personal tracking access', de: '✅ Persönliche Verfolgung', es: '✅ Acceso al seguimiento personal', ru: '✅ Доступ к личному отслеживанию', tr: '✅ Kişisel takibe erişim' },
+    upgrade_cmp_free_3: { fr: '✅ Scan automatique', en: '✅ Automatic scan', de: '✅ Automatischer Scan', es: '✅ Escaneo automático', ru: '✅ Автосканирование', tr: '✅ Otomatik tarama' },
+    upgrade_cmp_free_4: { fr: '❌ Alerte booster', en: '❌ Booster alerts', de: '❌ Booster-Hinweise', es: '❌ Alertas de booster', ru: '❌ Уведомления о бустерах', tr: '❌ Booster uyarıları' },
+    upgrade_cmp_free_5: { fr: '❌ Vue des événements DO', en: '❌ DO events view', de: '❌ DO-Events-Ansicht', es: '❌ Vista de eventos DO', ru: '❌ Просмотр событий DO', tr: '❌ DO etkinlik görünümü' },
+    upgrade_cmp_free_6: { fr: '❌ Suivi de joueur', en: '❌ Player tracking', de: '❌ Spielerüberwachung', es: '❌ Seguimiento de jugadores', ru: '❌ Отслеживание игроков', tr: '❌ Oyuncu takibi' },
+    upgrade_cmp_pro_1: { fr: '✅ Accès aux classements', en: '✅ Rankings access', de: '✅ Zugang zu Ranglisten', es: '✅ Acceso a clasificaciones', ru: '✅ Доступ к рейтингам', tr: '✅ Sıralamalara erişim' },
+    upgrade_cmp_pro_2: { fr: '✅ Accès au suivi personnel', en: '✅ Personal tracking access', de: '✅ Persönliche Verfolgung', es: '✅ Acceso al seguimiento personal', ru: '✅ Доступ к личному отслеживанию', tr: '✅ Kişisel takibe erişim' },
+    upgrade_cmp_pro_3: { fr: '✅ Scan automatique', en: '✅ Automatic scan', de: '✅ Automatischer Scan', es: '✅ Escaneo automático', ru: '✅ Автосканирование', tr: '✅ Otomatik tarama' },
+    upgrade_cmp_pro_4: { fr: '✅ Alerte booster', en: '✅ Booster alerts', de: '✅ Booster-Hinweise', es: '✅ Alertas de booster', ru: '✅ Уведомления о бустерах', tr: '✅ Booster uyarıları' },
+    upgrade_cmp_pro_5: { fr: '✅ Vue des événements DO', en: '✅ DO events view', de: '✅ DO-Events-Ansicht', es: '✅ Vista de eventos DO', ru: '✅ Просмотр событий DO', tr: '✅ DO etkinlik görünümü' },
+    upgrade_cmp_pro_6: { fr: '✅ Suivi de joueur', en: '✅ Player tracking', de: '✅ Spielerüberwachung', es: '✅ Seguimiento de jugadores', ru: '✅ Отслеживание игроков', tr: '✅ Oyuncu takibi' },
+    upgrade_cmp_pro_7: { fr: '✅ Support prioritaire', en: '✅ Priority support', de: '✅ Prioritäts-Support', es: '✅ Soporte prioritario', ru: '✅ Приоритетная поддержка', tr: '✅ Öncelikli destek' },
+    upgrade_free_ranking_details_toast: {
+      fr: 'Passer à PRO pour voir les détails du {{player}}',
+      en: 'Switch to PRO to see the details of {{player}}',
+      de: 'Auf PRO wechseln, um die Details von {{player}} zu sehen',
+      es: 'Cambia a PRO para ver los detalles de {{player}}',
+      ru: 'Перейдите на PRO, чтобы увидеть детали {{player}}',
+      tr: 'PRO\'ya geçmek için {{player}} ayrıntılarını görüntüleyin'
+    },
     license_activation_success: { fr: '✅ Clé activée avec succès ! Votre compte est maintenant PRO.', en: '✅ Key activated successfully! Your account is now PRO.', de: '✅ Schlüssel erfolgreich aktiviert! Ihr Konto ist jetzt PRO.', es: '✅ ¡Clave activada con éxito! Su cuenta ahora es PRO.', ru: '✅ Ключ успешно активирован! Ваш аккаунт теперь PRO.', tr: '✅ Anahtar başarıyla etkinleştirildi! Hesabınız artık PRO.' },
     license_activation_error: { fr: '❌ Clé invalide ou déjà utilisée.', en: '❌ Invalid or already used key.', de: '❌ Ungültiger oder bereits verwendeter Schlüssel.', es: '❌ Clave inválida o ya utilizada.', ru: '❌ Неверный или уже использованный ключ.', tr: '❌ Geçersiz veya zaten kullanılmış anahtar.' },
     version: { fr: 'Version', de: 'Version', ru: 'Версия', es: 'Versión', en: 'Version', tr: 'Sürüm' },
@@ -769,7 +824,7 @@
     see_boosters: { fr: 'Voir les boosters', de: 'Boosters anzeigen', ru: 'Показать бустеры', es: 'Ver boosters', en: 'View boosters', tr: 'Boosterlara bak' },
     buy: { fr: 'Acheter', de: 'Kaufen', ru: 'Купить', es: 'Comprar', en: 'Buy', tr: 'Satın al' },
     pro_version: { fr: 'Version Pro', de: 'Pro-Version', ru: 'Версия Pro', es: 'Versión Pro', en: 'Pro version', tr: 'Pro sürüm' },
-    price_pro_month: { fr: '7.99€/mois', de: '7,99€/Monat', ru: '7.99€/мес', es: '7,99€/mes', en: '7.99€/month', tr: '7.99€/ay' },
+    price_pro_month: { fr: '2.99€/mois', de: '2,99€/Monat', ru: '2.99€/мес', es: '2,99€/mes', en: '2.99€/month', tr: '2.99€/ay' },
     subscription_title: { fr: 'Abonnement Pro', de: 'Pro-Abo', ru: 'Подписка Pro', es: 'Suscripción Pro', en: 'Pro Subscription', tr: 'Pro Abonelik' },
     subscription_subtitle: { fr: 'Accédez à toutes les fonctionnalités', de: 'Voller Zugang zu allen Funktionen', ru: 'Доступ ко всем функциям', es: 'Accede a todas las funciones', en: 'Access all features', tr: 'Tüm özelliklere erişin' },
     payment_received_activating: { fr: 'Paiement reçu, activation en cours...', de: 'Zahlung erhalten, Aktivierung läuft...', ru: 'Платёж получен, активация...', es: 'Pago recibido, activando...', en: 'Payment received, activating...', tr: 'Ödeme alındı, etkinleştiriliyor...' },

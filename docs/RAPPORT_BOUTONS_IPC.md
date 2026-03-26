@@ -19,7 +19,7 @@ Inventaire des boutons et toggles de l’application, avec indication de la liai
 | Infos légales | `btnLegal` | Non | `legal.js` | Ouvre la modal CGU/RGPD. **OK.** |
 | Payer un café (support) | `supportDeveloperBtnTopLeft` | **Oui** (optionnel) | `paypal-buttons.js` → `electronAPI.openExternal(url)` | Ouvre l’URL PayPal. **Lié.** |
 | Fermer modal upgrade PRO | `upgradeProModalClose` | Non | Ferme la modal. **OK.** |
-| CTA essai 1€ | `upgradeProCtaBtn` | Non | Ouvre PayPal / abonnement. **OK.** |
+| CTA PayPal (modal PRO) | `upgradeProCtaBtn` | Non | Fait défiler vers le bouton PayPal (abonnement). **OK.** |
 
 ### 1.2 Onglet Statistiques (saisie session)
 

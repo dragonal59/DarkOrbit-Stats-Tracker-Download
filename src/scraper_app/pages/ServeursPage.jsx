@@ -5,6 +5,61 @@ import { ServerGroup } from '../components/serveurs/ServerGroup';
 import { ServerDetailDrawer } from '../components/serveurs/ServerDetailDrawer';
 import '../serveurs.css';
 
+/**
+ * Scrape tous les serveurs du groupe : une file côté main (dostatsScraperStartQueue),
+ * mêmes options que chaque carte (getServerScrapeConfig par code).
+ */
+async function scrapeGroupServers(servers, toggleServer) {
+  if (!servers || !servers.length) return;
+  if (typeof window.electronDostatsScraper?.start !== 'function') return;
+  const api = window.electronAPI;
+  const configs = await Promise.all(
+    servers.map(async (server) => {
+      let scrapeProfiles = false;
+      let scrapeRankings = true;
+      let enabled = true;
+      if (typeof api?.getServerScrapeConfig === 'function') {
+        try {
+          const cfg = await api.getServerScrapeConfig(server.code);
+          if (cfg && typeof cfg === 'object') {
+            if (typeof cfg.scrapeProfiles === 'boolean') scrapeProfiles = cfg.scrapeProfiles;
+            if (typeof cfg.scrapeRankings === 'boolean') scrapeRankings = cfg.scrapeRankings;
+            if (typeof cfg.enabled === 'boolean') enabled = cfg.enabled;
+          }
+        } catch (_) {
+          /* ignore */
+        }
+      } else if (typeof api?.getScrapeProfilesPreference === 'function') {
+        try {
+          const v = await api.getScrapeProfilesPreference(server.code);
+          scrapeProfiles = !!v;
+        } catch (_) {
+          /* ignore */
+        }
+      }
+      return { server, scrapeProfiles, scrapeRankings, enabled };
+    }),
+  );
+  const active = configs.filter(({ enabled, scrapeProfiles, scrapeRankings }) => enabled && (scrapeRankings || scrapeProfiles));
+  if (!active.length) return;
+  active.forEach(({ server }) => toggleServer(server.id, 'start'));
+  if (typeof window.electronScraper?.pause === 'function') {
+    window.electronScraper.pause(false);
+  }
+  window.electronDostatsScraper.start({
+    serverCodes: active.map(({ server }) => server.code),
+    serverConfigs: active.reduce((acc, { server, scrapeProfiles, scrapeRankings, enabled }) => {
+      acc[server.code] = { enabled, scrapeProfiles, scrapeRankings };
+      return acc;
+    }, {}),
+  });
+}
+
+async function scrapeAllServers(groups, toggleServer) {
+  const servers = (groups || []).flatMap((g) => (g && Array.isArray(g.servers) ? g.servers : []));
+  await scrapeGroupServers(servers, toggleServer);
+}
+
 function startScrapeForServer(serverCode, options) {
   if (typeof window.electronDostatsScraper?.start !== 'function') return;
   const payload = { serverCode };
@@ -13,6 +68,9 @@ function startScrapeForServer(serverCode, options) {
   }
   if (options && Object.prototype.hasOwnProperty.call(options, 'scrapeRankings')) {
     payload.scrapeRankings = !!options.scrapeRankings;
+  }
+  if (options && Object.prototype.hasOwnProperty.call(options, 'enabled')) {
+    payload.enabled = !!options.enabled;
   }
   window.electronDostatsScraper.start(payload);
 }
@@ -58,6 +116,7 @@ export function ServeursPage({
             alignItems: 'center',
             justifyContent: 'space-between',
             marginBottom: 8,
+            gap: 8,
           }}
         >
           <div
@@ -68,22 +127,32 @@ export function ServeursPage({
           >
             Vue d’ensemble des serveurs DOStats (mock données locales).
           </div>
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Rechercher un serveur…"
-            style={{
-              borderRadius: 999,
-              border: '1px solid rgba(148,163,184,0.5)',
-              background: 'transparent',
-              color: 'var(--text-primary)',
-              fontSize: 12,
-              padding: '6px 12px',
-              outline: 'none',
-              minWidth: 180,
-            }}
-          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              type="button"
+              className="group-action-btn group-action-btn--scrape"
+              title="Lancer le scrape DOSTATS pour tous les serveurs activés (ordre des groupes conservé)"
+              onClick={() => scrapeAllServers(groups, toggleServer)}
+            >
+              Scraper tous les serveurs
+            </button>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Rechercher un serveur…"
+              style={{
+                borderRadius: 999,
+                border: '1px solid rgba(148,163,184,0.5)',
+                background: 'transparent',
+                color: 'var(--text-primary)',
+                fontSize: 12,
+                padding: '6px 12px',
+                outline: 'none',
+                minWidth: 180,
+              }}
+            />
+          </div>
         </div>
 
         <div className="server-groups-container">
@@ -100,11 +169,13 @@ export function ServeursPage({
             >
               <ServerGroup
                 group={group}
+                allGroups={groups}
                 searchQuery={searchQuery}
                 timeAgo={timeAgo}
                 timeUntil={timeUntil}
                 toggleServer={toggleServer}
                 onStartScrape={startScrapeForServer}
+                onScrapeGroup={(srv) => scrapeGroupServers(srv, toggleServer)}
                 onSelectServer={setSelectedServer}
                 selectedServerId={selectedServer?.id}
               />

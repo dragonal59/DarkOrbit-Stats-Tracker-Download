@@ -15,6 +15,47 @@ export function useServersState() {
     const onLog = typeof window !== 'undefined' && window.electronDostatsScraper?.onLog;
     if (!onLog) return;
     const handler = (evt) => {
+      if (evt?.metric_type === 'rankings_batch_stats' && Array.isArray(evt.servers)) {
+        const deltas = new Map();
+        evt.servers.forEach((row) => {
+          const serverCode =
+            row?.server && typeof row.server === 'string' ? row.server.trim().toLowerCase() : null;
+          if (!serverCode) return;
+          const sd = Number(row.successDelta) || 0;
+          const ed = Number(row.errorDelta) || 0;
+          if (sd === 0 && ed === 0) return;
+          deltas.set(serverCode, { sd, ed });
+        });
+        if (deltas.size === 0) return;
+        setGroups((prev) =>
+          prev.map((group) => ({
+            ...group,
+            servers: group.servers.map((s) => {
+              const d = deltas.get(s.code.toLowerCase());
+              if (!d) return s;
+              return {
+                ...s,
+                successCount: s.successCount + d.sd,
+                errorCount: s.errorCount + d.ed,
+                totalCount: s.totalCount + d.sd + d.ed,
+                lastScrape: Date.now(),
+              };
+            }),
+          }))
+        );
+        return;
+      }
+      if (evt?.silent) return;
+
+      const ignoreForKpi = new Set([
+        'rankings_batch_start',
+        'rankings_summary',
+        'player_profile_batch_start',
+        'player_profile_batch_end',
+        'player_profile_failures_list',
+      ]);
+      if (evt?.metric_type && ignoreForKpi.has(evt.metric_type)) return;
+
       const serverCode = evt?.server && typeof evt.server === 'string' ? evt.server.trim().toLowerCase() : null;
       if (!serverCode) return;
       const isSuccess = evt.type === 'success';

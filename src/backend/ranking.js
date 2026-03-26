@@ -3,6 +3,9 @@
 // Données publiques : profiles_public + dernière session par user
 // Fallback : shared_rankings_snapshots (classements scrapés partagés)
 // ==========================================
+// Empreinte debug : dans la console du classement, tapez window.__RANKING_ENGINE_BUILD_ID__
+// Si la valeur n’existe pas ou est différente, l’UI ne charge pas ce fichier (ex. exe issu de build/ obfusqué).
+var RANKING_ENGINE_BUILD_ID = 'player_rankings_v2+legacy_fallback_2026-03-23c';
 
 const RANKING_LIMIT_DEFAULT = 100;
 const RANKING_LIMIT_MAX = 100;
@@ -48,6 +51,7 @@ async function deleteOldSnapshotsForServer(supabase, serverId) {
 
 if (typeof window !== 'undefined') {
   window.deleteOldSnapshotsForServer = deleteOldSnapshotsForServer;
+  window.__RANKING_ENGINE_BUILD_ID__ = RANKING_ENGINE_BUILD_ID;
 }
 
 /**
@@ -83,6 +87,79 @@ function rankingDisplayToCode(display) {
 }
 
 /**
+ * Code serveur stable pour les requêtes (player_rankings, RPC).
+ * Le select UI utilise en général le code (gbl5) ; on tolère libellés et suffixes "(code)".
+ */
+function resolveRankingServerCode(raw) {
+  if (raw == null || raw === '') return null;
+  var s = String(raw).trim();
+  if (!s) return null;
+  var direct = s.toLowerCase();
+  if (/^[a-z0-9]{2,12}$/.test(direct)) return direct;
+  var viaMap = rankingDisplayToCode(s);
+  if (viaMap != null && typeof viaMap === 'string') {
+    var v = viaMap.trim().toLowerCase();
+    if (v) return v;
+  }
+  var m = s.match(/\(([a-z0-9]{2,12})\)\s*$/i);
+  if (m) return m[1].toLowerCase();
+  return direct;
+}
+
+/**
+ * Firme depuis une ligne player_profiles (colonne + profile_json racine + stats + alias scrapers).
+ */
+function companyFromPlayerProfile(pp) {
+  if (!pp || typeof pp !== 'object') return null;
+  if (pp.company != null && String(pp.company).trim() !== '') return String(pp.company).trim();
+  var pj = (pp.profile_json && typeof pp.profile_json === 'object') ? pp.profile_json : {};
+  var st = (pj.stats && typeof pj.stats === 'object') ? pj.stats : {};
+  var candidates = [
+    pj.company,
+    st.company,
+    pj.firme,
+    st.firme,
+    pj.firm,
+    st.firm,
+    pj.faction,
+    st.faction,
+    pj.clan,
+    st.clan
+  ];
+  for (var i = 0; i < candidates.length; i++) {
+    var v = candidates[i];
+    if (v != null && String(v).trim() !== '') return String(v).trim();
+  }
+  return null;
+}
+
+/**
+ * Firme depuis un objet joueur snapshot / RPC (champs racine + stats imbriqué).
+ */
+function companyFromRankingPlayerPayload(p) {
+  if (!p || typeof p !== 'object') return null;
+  var st = (p.stats && typeof p.stats === 'object') ? p.stats : {};
+  var candidates = [
+    p.company_from_dostats,
+    p.company,
+    st.company,
+    p.firme,
+    st.firme,
+    p.firm,
+    st.firm,
+    p.faction,
+    st.faction,
+    p.clan,
+    st.clan
+  ];
+  for (var i = 0; i < candidates.length; i++) {
+    var v = candidates[i];
+    if (v != null && String(v).trim() !== '') return String(v).trim();
+  }
+  return null;
+}
+
+/**
  * Lit le classement partagé depuis Supabase (table shared_rankings).
  * Accessible à tous les utilisateurs authentifiés peu importe le badge.
  * @param {Object} supabase - Client Supabase
@@ -92,14 +169,19 @@ function rankingDisplayToCode(display) {
  * @returns {Promise<Array>}
  */
 function transformPlayerToRow(p, rowServer, uploadedAt, index) {
-  var company =
-    (p.company_from_dostats && String(p.company_from_dostats).trim()) ? String(p.company_from_dostats).trim() :
-    (p.company && String(p.company).trim()) ? String(p.company).trim() :
-    (p.firme && String(p.firme).trim()) ? String(p.firme).trim() :
-    (p.firm && String(p.firm).trim()) ? String(p.firm).trim() :
-    (p.clan && String(p.clan).trim()) ? String(p.clan).trim() :
-    (p.faction && String(p.faction).trim()) ? String(p.faction).trim() :
-    null;
+  var company = companyFromRankingPlayerPayload(p);
+  // Ancien bug push Supabase : `grade` contenait la position HoF (1,2,3…) au lieu du grade militaire.
+  // Si `grade` === `dostats_table_rank`, on ignore `grade` pour l’affichage (le profil enrichit ensuite).
+  var rawGrade = (p.grade != null && p.grade !== '') ? p.grade : null;
+  var rawCurrent = (p.current_rank != null && p.current_rank !== '') ? p.current_rank : null;
+  var tr = (p.dostats_table_rank != null && p.dostats_table_rank !== '') ? Number(p.dostats_table_rank) : null;
+  if (tr != null && Number.isFinite(tr) && rawGrade != null && Number(rawGrade) === tr) {
+    rawGrade = null;
+  }
+  if (tr != null && Number.isFinite(tr) && rawCurrent != null && Number(rawCurrent) === tr) {
+    rawCurrent = null;
+  }
+  var effectiveGrade = rawGrade != null ? rawGrade : rawCurrent;
   return {
     id: 'shared-' + rowServer + '-' + index,
     game_pseudo: p.name || p.game_pseudo || '—',
@@ -113,12 +195,12 @@ function transformPlayerToRow(p, rowServer, uploadedAt, index) {
     xp: parseSharedNumber(p.experience ?? p.experience_value ?? p.experienceValue ?? p.xp ?? 0),
     rank_points: parseSharedNumber(p.top_user ?? p.top_user_value ?? p.topUserValue ?? p.rank_points ?? 0),
     next_rank_points: null,
-    current_rank: p.grade || p.current_rank || null,
-    grade: p.grade || p.current_rank || null,
+    current_rank: effectiveGrade,
+    grade: effectiveGrade,
     // grade/ current_rank can be a number (DOStats writes numbers),
     // so we coerce to string before calling .trim().
     grade_normalized: (() => {
-      const raw = (p.grade != null && p.grade !== '') ? p.grade : p.current_rank;
+      const raw = (effectiveGrade != null && effectiveGrade !== '') ? effectiveGrade : null;
       if (raw == null || raw === '') return null;
       try { return String(raw).trim() || null; } catch (_) { return null; }
     })(),
@@ -153,6 +235,456 @@ function periodToSince(period) {
 var PERIOD_TO_HOURS = { '24h': 24, '7j': 168, '30j': 720, '24h_today': 24 };
 
 var PERIOD_TO_DOSTATS_DURATION = { '24h': 1, '7j': 7, '30j': 30 };
+var UI_PERIOD_TO_NEW_PERIOD = {
+  '24h': 'daily',
+  '7j': 'weekly',
+  '30j': 'monthly',
+  '24h_today': 'daily'
+};
+
+function rankingTypeToHofType(type) {
+  if (type === 'xp') return 'experience';
+  if (type === 'rank_points') return 'topuser';
+  if (type === 'npc_kills') return 'aliens';
+  if (type === 'ship_kills') return 'ships';
+  if (type === 'honor') return 'honor';
+  return null;
+}
+
+function metricColumnForType(type) {
+  if (type === 'xp') return 'xp';
+  if (type === 'rank_points') return 'rank_points';
+  if (type === 'npc_kills') return 'npc_kills';
+  if (type === 'ship_kills') return 'ship_kills';
+  if (type === 'galaxy_gates') return 'galaxy_gates';
+  return 'honor';
+}
+
+async function loadProfilesOnlyRanking(supabase, server, type, limit) {
+  var serverNorm = server ? resolveRankingServerCode(server) : null;
+  var q = supabase
+    .from('player_profiles')
+    .select('user_id, server, pseudo, company, grade, level, top_user, experience, honor, npc_kills, ship_kills, galaxy_gates, galaxy_gates_json, estimated_rp, total_hours, registered, dostats_updated_at, profile_json');
+  if (serverNorm) q = q.eq('server', serverNorm);
+  var res = await q.limit(Math.max(limit * 5, 500));
+  if (res.error || !Array.isArray(res.data)) return [];
+  var rows = res.data.map(function(pp, i) {
+    var pj = (pp && pp.profile_json && typeof pp.profile_json === 'object') ? pp.profile_json : {};
+    var pjStats = (pj.stats && typeof pj.stats === 'object') ? pj.stats : {};
+    var company = companyFromPlayerProfile(pp);
+    var ggTotal = pp.galaxy_gates != null ? pp.galaxy_gates : (pjStats.galaxy_gates != null ? pjStats.galaxy_gates : null);
+    var ggDetail = pp.galaxy_gates_json != null ? pp.galaxy_gates_json : (pjStats.galaxy_gates_detail != null ? pjStats.galaxy_gates_detail : null);
+    return transformPlayerToRow({
+      name: pp.pseudo,
+      user_id: pp.user_id,
+      company: company,
+      grade: pp.grade,
+      level: pp.level,
+      top_user: pp.top_user,
+      experience: pp.experience,
+      honor: pp.honor,
+      npc_kills: pp.npc_kills,
+      ship_kills: pp.ship_kills,
+      galaxy_gates: ggTotal,
+      galaxy_gates_json: ggDetail,
+      estimated_rp: pp.estimated_rp,
+      total_hours: pp.total_hours,
+      registered: pp.registered,
+      dostats_updated_at: pp.dostats_updated_at
+    }, pp.server || serverNorm || '', pp.dostats_updated_at || null, i);
+  });
+  var col = metricColumnForType(type);
+  rows = rows.filter(function(r) {
+    var v = r[col];
+    return v != null && Number(v) > 0;
+  });
+  rows.sort(function(a, b) {
+    var va = a[col] != null ? Number(a[col]) : -Infinity;
+    var vb = b[col] != null ? Number(b[col]) : -Infinity;
+    return vb - va;
+  });
+  return rows.slice(0, limit);
+}
+
+async function loadFromNewModel(supabase, server, type, periodKey, limit) {
+  if (type === 'galaxy_gates') return await loadProfilesOnlyRanking(supabase, server, type, limit);
+  var hofType = rankingTypeToHofType(type);
+  if (!hofType) return [];
+  var serverNorm = server ? resolveRankingServerCode(server) : null;
+  if (!serverNorm) {
+    return [];
+  }
+
+  var q = supabase
+    .from('player_rankings')
+    .select('user_id, server, rank, points, value, scraped_at')
+    .eq('hof_type', hofType)
+    .eq('period', periodKey)
+    .eq('server', serverNorm);
+  q = q.order('rank', { ascending: true }).order('points', { ascending: false })
+    .limit(Math.max(limit * 5, 500));
+  var rr = await q;
+  if (rr.error) {
+    if (typeof Logger !== 'undefined' && Logger.warn) {
+      Logger.warn('[Ranking] player_rankings query error:', rr.error.message || String(rr.error));
+    }
+    return [];
+  }
+  if (!Array.isArray(rr.data) || rr.data.length === 0) return [];
+  var rankedRows = rr.data.filter(function(r) {
+    return r && r.rank != null && Number(r.rank) > 0;
+  });
+  var sourceRows = rankedRows.length ? rankedRows : rr.data;
+
+  var ids = [];
+  var servers = [];
+  sourceRows.forEach(function(r) {
+    if (r && r.user_id && ids.indexOf(String(r.user_id)) === -1) ids.push(String(r.user_id));
+    if (r && r.server && servers.indexOf(String(r.server)) === -1) servers.push(String(r.server));
+  });
+  if (!ids.length) return [];
+
+  var pq = supabase
+    .from('player_profiles')
+    .select('user_id, server, pseudo, company, grade, level, top_user, experience, honor, npc_kills, ship_kills, galaxy_gates, galaxy_gates_json, estimated_rp, total_hours, registered, dostats_updated_at, profile_json')
+    .in('user_id', ids)
+    .in('server', servers);
+  var pr = await pq;
+  var profileMap = {};
+  if (!pr.error && Array.isArray(pr.data)) {
+    pr.data.forEach(function(pp) {
+      if (pp && pp.server && pp.user_id) {
+        var k = String(pp.server).toLowerCase().trim() + ':' + String(pp.user_id).trim();
+        profileMap[k] = pp;
+      }
+    });
+  }
+
+  var rows = sourceRows.map(function(r, i) {
+    var key = String(r.server || '').toLowerCase().trim() + ':' + String(r.user_id || '').trim();
+    var pp = profileMap[key] || {};
+    var pj = (pp && pp.profile_json && typeof pp.profile_json === 'object') ? pp.profile_json : {};
+    var pjStats = (pj.stats && typeof pj.stats === 'object') ? pj.stats : {};
+    var points = r.points != null ? r.points : r.value;
+    var rankNum = (r.rank != null && Number.isFinite(Number(r.rank))) ? Number(r.rank) : null;
+    var honorRank = type === 'honor' ? rankNum : null;
+    var experienceRank = type === 'xp' ? rankNum : null;
+    var topUserRank = type === 'rank_points' ? rankNum : null;
+    var npcKillsRank = type === 'npc_kills' ? rankNum : null;
+    var shipKillsRank = type === 'ship_kills' ? rankNum : null;
+    var company = companyFromPlayerProfile(pp);
+    var ggTotal = pp.galaxy_gates != null ? pp.galaxy_gates : (pjStats.galaxy_gates != null ? pjStats.galaxy_gates : null);
+    var ggDetail = pp.galaxy_gates_json != null ? pp.galaxy_gates_json : (pjStats.galaxy_gates_detail != null ? pjStats.galaxy_gates_detail : null);
+    return transformPlayerToRow({
+      name: pp.pseudo,
+      user_id: r.user_id,
+      company: company,
+      honor_rank: honorRank,
+      experience_rank: experienceRank,
+      top_user_rank: topUserRank,
+      npc_kills_rank: npcKillsRank,
+      ship_kills_rank: shipKillsRank,
+      grade: pp.grade,
+      level: pp.level,
+      honor: type === 'honor' ? points : pp.honor,
+      experience: type === 'xp' ? points : pp.experience,
+      top_user: type === 'rank_points' ? points : pp.top_user,
+      npc_kills: type === 'npc_kills' ? points : pp.npc_kills,
+      ship_kills: type === 'ship_kills' ? points : pp.ship_kills,
+      galaxy_gates: ggTotal,
+      galaxy_gates_json: ggDetail,
+      estimated_rp: pp.estimated_rp,
+      total_hours: pp.total_hours,
+      registered: pp.registered,
+      dostats_updated_at: pp.dostats_updated_at
+    }, r.server || serverNorm || '', r.scraped_at || pp.dostats_updated_at || null, i);
+  });
+
+  var col = metricColumnForType(type);
+  if (['npc_kills', 'ship_kills', 'galaxy_gates'].indexOf(type) !== -1) {
+    rows = rows.filter(function(p) { var v = p[col]; return v != null && Number(v) > 0; });
+  }
+  rows.sort(function(a, b) {
+    var ra =
+      a && a.honor_rank != null ? Number(a.honor_rank) :
+      a && a.experience_rank != null ? Number(a.experience_rank) :
+      a && a.top_user_rank != null ? Number(a.top_user_rank) :
+      a && a.npc_kills_rank != null ? Number(a.npc_kills_rank) :
+      a && a.ship_kills_rank != null ? Number(a.ship_kills_rank) : null;
+    var rb =
+      b && b.honor_rank != null ? Number(b.honor_rank) :
+      b && b.experience_rank != null ? Number(b.experience_rank) :
+      b && b.top_user_rank != null ? Number(b.top_user_rank) :
+      b && b.npc_kills_rank != null ? Number(b.npc_kills_rank) :
+      b && b.ship_kills_rank != null ? Number(b.ship_kills_rank) : null;
+    if (ra != null && rb != null && Number.isFinite(ra) && Number.isFinite(rb)) return ra - rb;
+    var va = a[col] != null ? Number(a[col]) : -Infinity;
+    var vb = b[col] != null ? Number(b[col]) : -Infinity;
+    return vb - va;
+  });
+  return rows.slice(0, limit);
+}
+
+/**
+ * Fallback : RPC + snapshot courant (shared_rankings_snapshots), inchangé côté serveur.
+ */
+async function loadSharedRankingViaRpcOneServer(supabase, serverCode, type, limit, period) {
+  if (!supabase || !serverCode) return [];
+  try {
+    var params = { p_server: serverCode };
+    var since = periodToSince(period);
+    if (since) params.p_since = since;
+    var rpcRes = await supabase.rpc('get_ranking_with_profiles', params);
+    if (rpcRes.error || !rpcRes.data || !rpcRes.data.players) return [];
+    var players = Array.isArray(rpcRes.data.players) ? rpcRes.data.players : [];
+    var uploadedAt = rpcRes.data.scraped_at || null;
+    var allPlayers = players.map(function(p, i) {
+      return transformPlayerToRow(p, serverCode, uploadedAt, i);
+    });
+    var col = metricColumnForType(type);
+    if (['npc_kills', 'ship_kills', 'galaxy_gates'].indexOf(type) !== -1) {
+      allPlayers = allPlayers.filter(function(p) { var v = p[col]; return v != null && Number(v) > 0; });
+    }
+    allPlayers.sort(function(a, b) {
+      var va = a[col] != null ? Number(a[col]) : -Infinity;
+      var vb = b[col] != null ? Number(b[col]) : -Infinity;
+      return vb - va;
+    });
+    return allPlayers.slice(0, limit);
+  } catch (_e) {
+    return [];
+  }
+}
+
+/**
+ * Vue « tous les serveurs » : derniers snapshots par serveur + fusion player_profiles.
+ */
+async function loadSharedRankingAllServersSnapshots(supabase, type, limit, period) {
+  if (!supabase) return [];
+  try {
+    var rpcRes = await supabase.rpc('get_ranking_latest_per_server', { p_limit: 24 });
+    if (rpcRes.error) {
+      try {
+        Logger.error('[Ranking] get_ranking_latest_per_server ERROR:', JSON.stringify(rpcRes.error));
+      } catch (_e) {
+        Logger.error('[Ranking] get_ranking_latest_per_server ERROR:', rpcRes.error);
+      }
+    }
+    var data = rpcRes.data;
+    if (!data || !data.length) return [];
+
+    var profileMap = {};
+    var servers = [...new Set(data.map(function(r) { return r.server_id; }).filter(Boolean))];
+    if (servers.length) {
+      var ppRes = await supabase.from('player_profiles').select('user_id, server, npc_kills, ship_kills, galaxy_gates, galaxy_gates_json, estimated_rp, total_hours, registered, company, grade, level, top_user, experience, honor, dostats_updated_at, profile_json').in('server', servers);
+      if (!ppRes.error && ppRes.data) {
+        ppRes.data.forEach(function(pp) {
+          if (pp && pp.user_id && pp.server) {
+            var srvKey = String(pp.server).toLowerCase().trim();
+            var uidKey = String(pp.user_id).trim();
+            if (srvKey && uidKey) {
+              profileMap[srvKey + ':' + uidKey] = pp;
+            }
+          }
+        });
+      }
+    }
+
+    var allPlayers = [];
+    data.forEach(function(row) {
+      var players = Array.isArray(row.players_json) ? row.players_json : [];
+      var rowServer = row.server_id || row.server;
+      var rowServerKey = (rowServer != null ? String(rowServer) : '').toLowerCase().trim();
+      var rowTs = row.scraped_at || row.uploaded_at;
+      players.forEach(function(p, i) {
+        var uid = p.userId || p.user_id;
+        var key = null;
+        if (uid && rowServerKey) {
+          key = rowServerKey + ':' + String(uid).trim();
+        }
+        var pp = key && profileMap[key];
+        var pj = (pp && pp.profile_json && typeof pp.profile_json === 'object') ? pp.profile_json : {};
+        var merged = pp ? Object.assign({}, p, {
+          grade: (p.grade && String(p.grade).trim()) || pp.grade || p.grade,
+          level: pp.level ?? p.level,
+          honor: pp.honor ?? p.honor_value ?? p.honor,
+          experience: pp.experience ?? p.experience_value ?? p.xp ?? p.experience,
+          top_user: pp.top_user ?? p.top_user_value ?? p.rank_points ?? p.top_user,
+          npc_kills: pp.npc_kills ?? p.npc_kills_value,
+          ship_kills: pp.ship_kills ?? p.ship_kills_value,
+          galaxy_gates: pp.galaxy_gates ?? p.galaxy_gates,
+          galaxy_gates_json: pp.galaxy_gates_json ?? p.galaxy_gates_json,
+          estimated_rp: pp.estimated_rp ?? p.estimated_rp,
+          total_hours: pp.total_hours ?? p.total_hours,
+          registered: pp.registered ?? p.registered,
+          company_from_dostats: companyFromPlayerProfile(pp) || companyFromRankingPlayerPayload(p) || null,
+          dostats_updated_at: pp.dostats_updated_at ?? p.dostats_updated_at
+        }) : p;
+        allPlayers.push(transformPlayerToRow(merged, rowServer, rowTs, i));
+      });
+    });
+
+    var col = metricColumnForType(type);
+    if (['npc_kills', 'ship_kills', 'galaxy_gates'].indexOf(type) !== -1) {
+      allPlayers = allPlayers.filter(function(p) { var v = p[col]; return v != null && Number(v) > 0; });
+    }
+    allPlayers.sort(function(a, b) {
+      var va = a[col] != null ? Number(a[col]) : -Infinity;
+      var vb = b[col] != null ? Number(b[col]) : -Infinity;
+      return vb - va;
+    });
+    return allPlayers.slice(0, limit);
+  } catch (_e) {
+    return [];
+  }
+}
+
+/**
+ * Fallback périodes DOStats : shared_rankings_dostats_snapshots (comportement historique).
+ */
+async function loadDostatsPeriodRankingLegacy(supabase, server, type, period, limit) {
+  var duration = PERIOD_TO_DOSTATS_DURATION[period];
+  if (!duration) return [];
+  var hofType = type;
+  if (type === 'xp') hofType = 'experience';
+  else if (type === 'rank_points') hofType = 'topuser';
+  else if (type === 'npc_kills') hofType = 'aliens';
+  else if (type === 'ship_kills') hofType = 'ships';
+  else if (type === 'galaxy_gates') {
+    Logger.warn('[Ranking] loadDostatsPeriodRankingLegacy: aucun équivalent DOStats pour galaxy_gates');
+    return [];
+  }
+  var serverNorm = resolveRankingServerCode(server) || String(server || '').trim().toLowerCase();
+  if (!serverNorm) return [];
+
+  var res = await supabase
+    .from('shared_rankings_dostats_snapshots')
+    .select('server_id, scraped_at, players_json')
+    .eq('server_id', serverNorm)
+    .order('scraped_at', { ascending: false })
+    .limit(DOSTATS_PERIOD_SNAPSHOT_LOOKBACK);
+  var data = res.data;
+  var error = res.error;
+  if (error || !data || data.length === 0) return [];
+
+  var players = [];
+  var latestTs = null;
+  outer: for (var i = 0; i < data.length; i++) {
+    var row = data[i];
+    var arr = Array.isArray(row.players_json) ? row.players_json : [];
+    if (!arr.length) continue;
+    var filtered = arr.filter(function(p) {
+      var pType = (p.hof_type != null && p.hof_type !== '') ? String(p.hof_type).toLowerCase() : null;
+      var refType = (hofType != null && hofType !== '') ? String(hofType).toLowerCase() : null;
+      var pDur = (p.period != null && p.period !== '') ? Number(p.period) : null;
+      return pType === refType && pDur === duration;
+    });
+    if (filtered.length > 0) {
+      players = filtered;
+      latestTs = row.scraped_at || row.uploaded_at || null;
+      break outer;
+    }
+  }
+  if (!players.length) return [];
+
+  var rows = players.map(function(p, idx) {
+    return transformPlayerToRow(p, serverNorm, latestTs, idx);
+  });
+  try {
+    var userIds = [];
+    var pseudos = [];
+    rows.forEach(function(r) {
+      var uid = r.userId || r.user_id;
+      if (uid && userIds.indexOf(String(uid).trim()) === -1) userIds.push(String(uid).trim());
+      var pseudo = (r.game_pseudo || '').trim();
+      if (pseudo && pseudos.indexOf(pseudo) === -1) pseudos.push(pseudo);
+    });
+    var byUid = {};
+    var byPseudo = {};
+    if (userIds.length || pseudos.length) {
+      if (userIds.length) {
+        var ppResUid = await supabase
+          .from('player_profiles')
+          .select('user_id, server, pseudo, company, grade, level, estimated_rp, total_hours, registered, dostats_updated_at, profile_json')
+          .eq('server', serverNorm)
+          .in('user_id', userIds);
+        if (!ppResUid.error && ppResUid.data && ppResUid.data.length) {
+          ppResUid.data.forEach(function(pp) {
+            if (pp && pp.user_id && pp.server) {
+              var keySrv = String(pp.server).toLowerCase().trim();
+              var keyUid = String(pp.user_id).trim();
+              if (keySrv && keyUid) byUid[keySrv + ':' + keyUid] = pp;
+            }
+          });
+        }
+      }
+      if (pseudos.length) {
+        var ppResPseudo = await supabase
+          .from('player_profiles')
+          .select('user_id, server, pseudo, company, grade, level, estimated_rp, total_hours, registered, dostats_updated_at, profile_json')
+          .eq('server', serverNorm)
+          .in('pseudo', pseudos);
+        if (!ppResPseudo.error && ppResPseudo.data && ppResPseudo.data.length) {
+          ppResPseudo.data.forEach(function(pp) {
+            if (pp && pp.pseudo && pp.server) {
+              var keySrv = String(pp.server).toLowerCase().trim();
+              var keyPseudo = String(pp.pseudo).toLowerCase().trim();
+              if (keySrv && keyPseudo) byPseudo[keySrv + ':' + keyPseudo] = pp;
+            }
+          });
+        }
+      }
+      rows = rows.map(function(r) {
+        var s = (r._server || r.server || server || '').toString().toLowerCase().trim();
+        var uid = r.userId || r.user_id;
+        var pseudo = (r.game_pseudo || '').trim().toLowerCase();
+        var ppByUid = (uid && byUid[s + ':' + String(uid).trim()]) || null;
+        var ppByPseudo = (pseudo && byPseudo[s + ':' + pseudo]) || null;
+        var pp = ppByUid;
+        if (ppByUid && ppByPseudo) {
+          var ppPseudoOfUid = (ppByUid.pseudo != null ? String(ppByUid.pseudo) : '').trim().toLowerCase();
+          if (pseudo && ppPseudoOfUid && ppPseudoOfUid !== pseudo) pp = ppByPseudo;
+        }
+        if (!pp) pp = ppByPseudo;
+        if (!pp) return r;
+        var mergedGrade =
+          (pp.grade && String(pp.grade).trim()) ||
+          (r.grade && String(r.grade).trim()) ||
+          r.grade;
+        var mergedGradeNorm = (mergedGrade != null && mergedGrade !== '')
+          ? String(mergedGrade).trim()
+          : null;
+        return Object.assign({}, r, {
+          grade: mergedGrade,
+          current_rank: mergedGrade,
+          grade_normalized: mergedGradeNorm,
+          level: r.level != null ? r.level : (pp.level != null ? pp.level : null),
+          company: (r.company != null && String(r.company).trim() !== '') ? String(r.company).trim() : (companyFromPlayerProfile(pp) || null),
+          estimated_rp: r.estimated_rp != null ? r.estimated_rp : (pp.estimated_rp != null ? pp.estimated_rp : null),
+          total_hours: r.total_hours != null ? r.total_hours : (pp.total_hours != null ? pp.total_hours : null),
+          registered: r.registered != null ? r.registered : (pp.registered != null ? pp.registered : null),
+          dostats_updated_at: r.dostats_updated_at != null ? r.dostats_updated_at : (pp.dostats_updated_at != null ? pp.dostats_updated_at : null),
+        });
+      });
+    }
+  } catch (e) {
+    Logger.warn('[Ranking] loadDostatsPeriodRankingLegacy enrich profiles error:', e?.message);
+  }
+
+  var col = metricColumnForType(type);
+  if (['npc_kills', 'ship_kills', 'galaxy_gates'].indexOf(type) !== -1) {
+    rows = rows.filter(function(p) {
+      var v = p[col];
+      return v != null && Number(v) > 0;
+    });
+  }
+  rows.sort(function(a, b) {
+    var va = a[col] != null ? Number(a[col]) : -Infinity;
+    var vb = b[col] != null ? Number(b[col]) : -Infinity;
+    return vb - va;
+  });
+  return rows.slice(0, limit);
+}
 
 /**
  * Charge le classement en mode comparaison :
@@ -165,56 +697,30 @@ async function loadRankingComparison(supabase, server, type, period) {
   var hours = PERIOD_TO_HOURS[period];
   if (!hours) return [];
   try {
-    Logger.debug('[Ranking] get_ranking_comparison', {
+    Logger.debug('[Ranking] loadRankingComparison(new-model)', {
       server: server,
       type: type,
       period: period,
       hours: hours
     });
-    var rpcRes = await supabase.rpc('get_ranking_comparison', { p_server: server, p_hours: hours });
-    if (rpcRes.error) {
-      Logger.warn('[Ranking] get_ranking_comparison error:', rpcRes.error?.message || rpcRes.error);
-      return [];
-    }
-    var d = rpcRes.data;
-    if (!d || !d.success || !Array.isArray(d.players)) return [];
-
-    var latestAt    = d.latest_scraped_at || null;
-    var referenceAt = d.ref_scraped_at || null;
-    var hasRef      = !!d.has_reference;
-
-    var players = d.players.map(function(p, i) {
-      if (typeof window !== 'undefined' && window.DEBUG && i === 0) {
-        try {
-          Logger.warn('[Ranking][debug] get_ranking_comparison player keys:', Object.keys(p || {}));
-        } catch (_) {}
-      }
-      var row = transformPlayerToRow(p, server, latestAt, i);
-      row._comparison_mode  = true;
-      row._latest_at        = latestAt;
-      row._reference_at     = referenceAt;
-      row._has_reference    = hasRef && !!p._has_reference;
-      row._pos_current      = p._pos_current   != null ? Number(p._pos_current)   : null;
-      row._pos_reference    = p._pos_reference != null ? Number(p._pos_reference) : null;
-      row._pos_delta        = p._pos_delta      != null ? Number(p._pos_delta)     : null;
-      row._honor_delta      = p._honor_delta    != null ? Number(p._honor_delta)   : null;
-      row._xp_delta         = p._xp_delta       != null ? Number(p._xp_delta)      : null;
-      row._rp_delta         = p._rp_delta       != null ? Number(p._rp_delta)      : null;
-      return row;
+    var periodKey = UI_PERIOD_TO_NEW_PERIOD[period];
+    var players = await loadFromNewModel(supabase, server, type, periodKey, 100);
+    var latestAt = (players[0] && players[0]._uploaded_at) || null;
+    var top = players.map(function(row) {
+      var out = Object.assign({}, row);
+      out._comparison_mode = true;
+      out._latest_at = latestAt;
+      out._reference_at = null;
+      out._has_reference = false;
+      out._pos_current = null;
+      out._pos_reference = null;
+      out._pos_delta = null;
+      out._honor_delta = null;
+      out._xp_delta = null;
+      out._rp_delta = null;
+      return out;
     });
-
-    // Tri selon le type sélectionné
-    var col = type === 'xp' ? 'xp' : type === 'rank_points' ? 'rank_points'
-            : type === 'npc_kills' ? 'npc_kills' : type === 'ship_kills' ? 'ship_kills'
-            : type === 'galaxy_gates' ? 'galaxy_gates' : 'honor';
-    players.sort(function(a, b) {
-      var va = a[col] != null ? Number(a[col]) : -Infinity;
-      var vb = b[col] != null ? Number(b[col]) : -Infinity;
-      return vb - va;
-    });
-
-    var top = players.slice(0, 100);
-    Logger.debug('[Ranking] get_ranking_comparison result', {
+    Logger.debug('[Ranking] loadRankingComparison(new-model) result', {
       server: server,
       type: type,
       period: period,
@@ -236,215 +742,23 @@ async function loadDostatsPeriodRanking(supabase, server, type, period, limit) {
   var duration = PERIOD_TO_DOSTATS_DURATION[period];
   if (!duration) return [];
   try {
-    // Mapping type UI → type DOStats (hof_type)
-    var hofType = type;
-    if (type === 'xp') hofType = 'experience';
-    else if (type === 'rank_points') hofType = 'topuser';
-    else if (type === 'npc_kills') hofType = 'aliens';
-    else if (type === 'ship_kills') hofType = 'ships';
-    else if (type === 'galaxy_gates') {
-      // DOStats n'a pas de classement Galaxy Gates → pas de données duration
-      Logger.warn('[Ranking] loadDostatsPeriodRanking: aucun équivalent DOStats pour galaxy_gates');
-      return [];
-    }
-
-    // Cohérence avec le scraper : server_id stocké en minuscules (PostgreSQL sensible à la casse)
-    var serverNorm = (server || '').toString().trim().toLowerCase();
-    Logger.debug('[Ranking] loadDostatsPeriodRanking', {
+    var periodKey = UI_PERIOD_TO_NEW_PERIOD[period];
+    Logger.debug('[Ranking] loadDostatsPeriodRanking(new-model)', {
       server: server,
-      serverNorm: serverNorm,
       type: type,
-      hofType: hofType,
       period: period,
-      duration: duration,
+      periodKey: periodKey,
       limit: limit,
     });
-
-    var { data, error } = await supabase
-      .from('shared_rankings_dostats_snapshots')
-      .select('server_id, scraped_at, players_json')
-      .eq('server_id', serverNorm)
-      .order('scraped_at', { ascending: false })
-      .limit(DOSTATS_PERIOD_SNAPSHOT_LOOKBACK);
-
-    if (error || !data || data.length === 0) return [];
-
-    var players = [];
-    var latestTs = null;
-
-    // On cherche le snapshot le plus récent qui contient des joueurs pour ce hofType + duration.
-    // Comparaison tolérante : hof_type et period peuvent être string ou number côté JSONB.
-    outer: for (var i = 0; i < data.length; i++) {
-      var row = data[i];
-      var arr = Array.isArray(row.players_json) ? row.players_json : [];
-      if (!arr.length) continue;
-      var filtered = arr.filter(function(p) {
-        var pType = (p.hof_type != null && p.hof_type !== '') ? String(p.hof_type).toLowerCase() : null;
-        var refType = (hofType != null && hofType !== '') ? String(hofType).toLowerCase() : null;
-        var pDur = (p.period != null && p.period !== '') ? Number(p.period) : null;
-        return pType === refType && pDur === duration;
-      });
-      if (filtered.length > 0) {
-        players = filtered;
-        latestTs = row.scraped_at || row.uploaded_at || null;
-        break outer;
-      }
+    var top = await loadFromNewModel(supabase, server, type, periodKey, limit);
+    if (!top || top.length === 0) {
+      top = await loadDostatsPeriodRankingLegacy(supabase, server, type, period, limit);
     }
-
-    if (!players.length) {
-      var warnKey = serverNorm + '|' + type + '|' + period;
-      var now = Date.now();
-      if (warnKey !== _lastDostatsPeriodWarnKey || now - _lastDostatsPeriodWarnAt > DOSTATS_PERIOD_WARN_THROTTLE_MS) {
-        _lastDostatsPeriodWarnKey = warnKey;
-        _lastDostatsPeriodWarnAt = now;
-        Logger.warn('[Ranking] loadDostatsPeriodRanking: aucun joueur trouvé pour', {
-          server: server,
-          type: type,
-          hofType: hofType,
-          period: period,
-          duration: duration,
-        });
-      }
-      return [];
-    }
-
-    // Transforme vers le format de ligne standard.
-    // IMPORTANT : en mode période DOStats, on NE réécrit PAS les valeurs d'honneur/xp/top_user/npc_kills/ship_kills/galaxy_gates
-    // avec player_profiles, sinon on retomberait sur les valeurs "All Time".
-    var rows = players.map(function(p, idx) {
-      return transformPlayerToRow(p, server, latestTs, idx);
-    });
-
-    // Enrichissement léger avec player_profiles uniquement pour les métadonnées
-    // (grade, level, company, estimated_rp, total_hours, registered, dostats_updated_at),
-    // sans toucher aux compteurs de points déjà fournis par DOStats pour la période.
-    try {
-      // On récupère uniquement les profils correspondant aux joueurs présents dans ce snapshot
-      // pour éviter de rater des grades à cause d'une limite de lignes fixe.
-      var userIds = [];
-      var pseudos = [];
-      rows.forEach(function(r) {
-        var uid = r.userId || r.user_id;
-        if (uid && userIds.indexOf(String(uid)) === -1) userIds.push(String(uid));
-        var pseudo = (r.game_pseudo || '').trim();
-        if (pseudo && pseudos.indexOf(pseudo) === -1) pseudos.push(pseudo);
-      });
-
-      var byUid = {};
-      var byPseudo = {};
-
-      if (userIds.length || pseudos.length) {
-        var baseQuery = supabase
-          .from('player_profiles')
-          .select('user_id, server, pseudo, company, grade, level, estimated_rp, total_hours, registered, dostats_updated_at')
-          .eq('server', serverNorm);
-
-        // Priorité au matching par user_id
-        var ppResUid = null;
-        if (userIds.length) {
-          ppResUid = await baseQuery.in('user_id', userIds);
-          if (!ppResUid.error && ppResUid.data && ppResUid.data.length) {
-            ppResUid.data.forEach(function(pp) {
-              if (pp && pp.user_id && pp.server) {
-                var keySrv = String(pp.server).toLowerCase().trim();
-                var keyUid = String(pp.user_id).toLowerCase().trim();
-                if (keySrv && keyUid) {
-                  byUid[keySrv + ':' + keyUid] = pp;
-                }
-              }
-            });
-          }
-        }
-
-        // Complément par pseudo pour les joueurs sans userId connu
-        if (pseudos.length) {
-          var ppResPseudo = await baseQuery.in('pseudo', pseudos);
-          if (!ppResPseudo.error && ppResPseudo.data && ppResPseudo.data.length) {
-            ppResPseudo.data.forEach(function(pp) {
-              if (pp && pp.pseudo && pp.server) {
-                var keySrv = String(pp.server).toLowerCase().trim();
-                var keyPseudo = String(pp.pseudo).toLowerCase().trim();
-                if (keySrv && keyPseudo) {
-                  byPseudo[keySrv + ':' + keyPseudo] = pp;
-                }
-              }
-            });
-          }
-        }
-
-        rows = rows.map(function(r) {
-          var s = (r._server || r.server || server || '').toString().toLowerCase().trim();
-          var uid = r.userId || r.user_id;
-          var pseudo = (r.game_pseudo || '').trim().toLowerCase();
-          var ppByUid = (uid && byUid[s + ':' + String(uid).toLowerCase()]) || null;
-          var ppByPseudo = (pseudo && byPseudo[s + ':' + pseudo]) || null;
-          // Sécurité anti-mauvaise association :
-          // si le matching par user_id renvoie un pseudo différent, on préfère le matching par pseudo.
-          var pp = ppByUid;
-          if (ppByUid && ppByPseudo) {
-            var ppPseudoOfUid = (ppByUid.pseudo != null ? String(ppByUid.pseudo) : '').trim().toLowerCase();
-            if (pseudo && ppPseudoOfUid && ppPseudoOfUid !== pseudo) pp = ppByPseudo;
-          }
-          if (!pp) pp = ppByPseudo;
-          if (!pp) return r;
-          var mergedGrade =
-            (pp.grade && String(pp.grade).trim()) ||
-            (r.grade && String(r.grade).trim()) ||
-            r.grade;
-          var mergedGradeNorm = (mergedGrade != null && mergedGrade !== '')
-            ? String(mergedGrade).trim()
-            : null;
-          return Object.assign({}, r, {
-            // En mode période, la source de vérité pour le grade reste player_profiles si disponible.
-            grade: mergedGrade,
-            // IMPORTANT : le frontend affiche d’abord `current_rank`, donc on le synchronise
-            // avec le grade fusionné pour que l'image de grade apparaisse directement.
-            current_rank: mergedGrade,
-            grade_normalized: mergedGradeNorm,
-            level: r.level != null ? r.level : (pp.level != null ? pp.level : null),
-            company: r.company || pp.company || null,
-            estimated_rp: r.estimated_rp != null ? r.estimated_rp : (pp.estimated_rp != null ? pp.estimated_rp : null),
-            total_hours: r.total_hours != null ? r.total_hours : (pp.total_hours != null ? pp.total_hours : null),
-            registered: r.registered != null ? r.registered : (pp.registered != null ? pp.registered : null),
-            dostats_updated_at: r.dostats_updated_at != null ? r.dostats_updated_at : (pp.dostats_updated_at != null ? pp.dostats_updated_at : null),
-          });
-        });
-      }
-    } catch (e) {
-      Logger.warn('[Ranking] loadDostatsPeriodRanking enrich profiles error:', e?.message);
-    }
-
-    var col = type === 'xp'
-      ? 'xp'
-      : type === 'rank_points'
-      ? 'rank_points'
-      : type === 'npc_kills'
-      ? 'npc_kills'
-      : type === 'ship_kills'
-      ? 'ship_kills'
-      : type === 'galaxy_gates'
-      ? 'galaxy_gates'
-      : 'honor';
-
-    if (['npc_kills', 'ship_kills', 'galaxy_gates'].includes(type)) {
-      rows = rows.filter(function(p) {
-        var v = p[col];
-        return v != null && Number(v) > 0;
-      });
-    }
-
-    rows.sort(function(a, b) {
-      var va = a[col] != null ? Number(a[col]) : -Infinity;
-      var vb = b[col] != null ? Number(b[col]) : -Infinity;
-      return vb - va;
-    });
-
-    var top = rows.slice(0, limit);
     Logger.debug('[Ranking] loadDostatsPeriodRanking result', {
       server: server,
       type: type,
       period: period,
-      duration: duration,
+      periodKey: periodKey,
       count: top.length,
     });
     // FIX 3 — enrichir le cache suivi (ranking-ui) sans fetch supplémentaire
@@ -464,130 +778,39 @@ async function loadDostatsPeriodRanking(supabase, server, type, period, limit) {
 
 async function loadSharedRanking(supabase, server, type, limit, period) {
   try {
-    if (server) {
-      var params = { p_server: server };
-      var since = periodToSince(period);
-      if (since) params.p_since = since;
-      Logger.debug('[Ranking] get_ranking_with_profiles', {
-        server: server,
-        type: type,
-        since: since || null
-      });
-      var rpcRes = await supabase.rpc('get_ranking_with_profiles', params);
-      if (!rpcRes.error && rpcRes.data && rpcRes.data.players) {
-        var players = Array.isArray(rpcRes.data.players) ? rpcRes.data.players : [];
-        var uploadedAt = rpcRes.data.scraped_at || null;
-        var allPlayers = players.map(function(p, i) {
-          return transformPlayerToRow(p, server, uploadedAt, i);
-        });
-        var col = type === 'xp' ? 'xp' : type === 'rank_points' ? 'rank_points' : type === 'npc_kills' ? 'npc_kills' : type === 'ship_kills' ? 'ship_kills' : type === 'galaxy_gates' ? 'galaxy_gates' : 'honor';
-        if (['npc_kills', 'ship_kills', 'galaxy_gates'].includes(type)) {
-          allPlayers = allPlayers.filter(function(p) { var v = p[col]; return v != null && Number(v) > 0; });
-        }
-        allPlayers.sort(function(a, b) {
-          var va = a[col] != null ? Number(a[col]) : -Infinity;
-          var vb = b[col] != null ? Number(b[col]) : -Infinity;
-          return vb - va;
-        });
-        var topRpc = allPlayers.slice(0, limit);
-        Logger.debug('[Ranking] get_ranking_with_profiles result', {
-          server: server,
+    var periodKey = period ? (UI_PERIOD_TO_NEW_PERIOD[period] || null) : 'alltime';
+    if (!periodKey) periodKey = 'alltime';
+    var serverCode = server ? resolveRankingServerCode(server) : null;
+
+    if (serverCode) {
+      var topSnap = await loadFromNewModel(supabase, serverCode, type, periodKey, limit);
+      if (topSnap && topSnap.length > 0) {
+        Logger.debug('[Ranking] loadSharedRanking(new-model) result', {
+          server: serverCode,
           type: type,
-          since: since || null,
-          count: topRpc.length
+          period: periodKey,
+          count: topSnap.length
         });
-        return topRpc;
+        return topSnap;
       }
-    }
-
-    var data, error;
-    if (server) {
-      var q = supabase.from('shared_rankings_snapshots').select('server_id, scraped_at, players_json').eq('server_id', server);
-      var since = periodToSince(period);
-      if (since) q = q.gte('scraped_at', since);
-      var res = await q.order('scraped_at', { ascending: false }).limit(1);
-      data = res.data; error = res.error;
-    } else {
-      var rpcRes = await supabase.rpc('get_ranking_latest_per_server', { p_limit: 5 });
-      if (rpcRes.error) {
-        try {
-          Logger.error('[Ranking] get_ranking_latest_per_server ERROR (snapshots):', JSON.stringify(rpcRes.error));
-        } catch (_e) {
-          Logger.error('[Ranking] get_ranking_latest_per_server ERROR (snapshots):', rpcRes.error);
-        }
-      }
-      data = rpcRes.data; error = rpcRes.error;
-    }
-    if (error || !data || data.length === 0) return [];
-
-    var profileMap = {};
-    var servers = server ? [server] : [...new Set(data.map(function(r) { return r.server_id; }))].filter(Boolean);
-    if (servers.length) {
-      var ppRes = await supabase.from('player_profiles').select('user_id, server, npc_kills, ship_kills, galaxy_gates, galaxy_gates_json, estimated_rp, total_hours, registered, company, grade, level, top_user, experience, honor, dostats_updated_at').in('server', servers);
-      if (!ppRes.error && ppRes.data) {
-        ppRes.data.forEach(function(pp) {
-          if (pp && pp.user_id && pp.server) {
-            var srvKey = String(pp.server).toLowerCase().trim();
-            var uidKey = String(pp.user_id).toLowerCase().trim();
-            if (srvKey && uidKey) {
-              profileMap[srvKey + ':' + uidKey] = pp;
-            }
-          }
+      var legacyRpc = await loadSharedRankingViaRpcOneServer(supabase, serverCode, type, limit, period);
+      if (legacyRpc && legacyRpc.length > 0) {
+        Logger.debug('[Ranking] loadSharedRanking(legacy rpc) result', {
+          server: serverCode,
+          type: type,
+          count: legacyRpc.length
         });
+        return legacyRpc;
       }
+      return [];
     }
 
-    var allPlayers = [];
-    data.forEach(function(row) {
-        var players = Array.isArray(row.players_json) ? row.players_json : [];
-        var rowServer = row.server_id || row.server;
-        var rowServerKey = (rowServer != null ? String(rowServer) : '').toLowerCase().trim();
-      var rowTs = row.scraped_at || row.uploaded_at;
-      players.forEach(function(p, i) {
-        var uid = p.userId || p.user_id;
-          var key = null;
-          if (uid && rowServerKey) {
-            key = rowServerKey + ':' + String(uid).toLowerCase().trim();
-          }
-        var pp = key && profileMap[key];
-        var merged = pp ? Object.assign({}, p, {
-          grade: (p.grade && String(p.grade).trim()) || pp.grade || p.grade,
-          level: pp.level ?? p.level,
-          honor: pp.honor ?? p.honor_value ?? p.honor,
-          experience: pp.experience ?? p.experience_value ?? p.xp ?? p.experience,
-          top_user: pp.top_user ?? p.top_user_value ?? p.rank_points ?? p.top_user,
-          npc_kills: pp.npc_kills ?? p.npc_kills_value,
-          ship_kills: pp.ship_kills ?? p.ship_kills_value,
-          galaxy_gates: pp.galaxy_gates ?? p.galaxy_gates,
-          galaxy_gates_json: pp.galaxy_gates_json ?? p.galaxy_gates_json,
-          estimated_rp: pp.estimated_rp ?? p.estimated_rp,
-          total_hours: pp.total_hours ?? p.total_hours,
-          registered: pp.registered ?? p.registered,
-          company_from_dostats: pp.company ?? p.company,
-          dostats_updated_at: pp.dostats_updated_at ?? p.dostats_updated_at
-        }) : p;
-        allPlayers.push(transformPlayerToRow(merged, rowServer, rowTs, i));
-      });
-    });
-
-    var col = type === 'xp' ? 'xp' : type === 'rank_points' ? 'rank_points' : type === 'npc_kills' ? 'npc_kills' : type === 'ship_kills' ? 'ship_kills' : type === 'galaxy_gates' ? 'galaxy_gates' : 'honor';
-    if (['npc_kills', 'ship_kills', 'galaxy_gates'].includes(type)) {
-      allPlayers = allPlayers.filter(function(p) { var v = p[col]; return v != null && Number(v) > 0; });
-    }
-    allPlayers.sort(function(a, b) {
-      var va = a[col] != null ? Number(a[col]) : -Infinity;
-      var vb = b[col] != null ? Number(b[col]) : -Infinity;
-      return vb - va;
-    });
-
-    var topSnap = allPlayers.slice(0, limit);
-    Logger.debug('[Ranking] shared_rankings_snapshots result', {
-      server: server || 'all',
+    var allSrv = await loadSharedRankingAllServersSnapshots(supabase, type, limit, period);
+    Logger.debug('[Ranking] loadSharedRanking(all-servers) result', {
       type: type,
-      period: period || null,
-      count: topSnap.length
+      count: Array.isArray(allSrv) ? allSrv.length : 0
     });
-    return topSnap;
+    return allSrv || [];
   } catch (e) {
     return [];
   }
@@ -616,7 +839,7 @@ async function enrichImportedWithProfiles(rows, supabase) {
   if (servers.length === 0) return rows;
   var ppRes;
   try {
-    ppRes = await supabase.from('player_profiles').select('user_id, server, pseudo, npc_kills, ship_kills, galaxy_gates, galaxy_gates_json, estimated_rp, total_hours, registered, company, grade, level, top_user, experience, honor, dostats_updated_at').in('server', servers);
+    ppRes = await supabase.from('player_profiles').select('user_id, server, pseudo, npc_kills, ship_kills, galaxy_gates, galaxy_gates_json, estimated_rp, total_hours, registered, company, grade, level, top_user, experience, honor, dostats_updated_at, profile_json').in('server', servers);
   } catch (e) {
     Logger.error('[Ranking] enrichImportedWithProfiles error:', e?.message || e);
     return rows;
@@ -624,15 +847,17 @@ async function enrichImportedWithProfiles(rows, supabase) {
   if (ppRes.error || !ppRes.data) return rows;
   var byUid = {}, byPseudo = {};
   ppRes.data.forEach(function(pp) {
-    if (pp.user_id && pp.server) byUid[pp.server + ':' + String(pp.user_id).toLowerCase()] = pp;
-    if (pp.pseudo && pp.server) byPseudo[pp.server + ':' + String(pp.pseudo).toLowerCase()] = pp;
+    if (pp.user_id && pp.server) byUid[String(pp.server).toLowerCase().trim() + ':' + String(pp.user_id).trim()] = pp;
+    if (pp.pseudo && pp.server) byPseudo[String(pp.server).toLowerCase().trim() + ':' + String(pp.pseudo).toLowerCase()] = pp;
   });
   return rows.map(function(r) {
-    var s = r._server || '';
+    var s = String(r._server || '').toLowerCase().trim();
     var uid = r.userId || r.user_id;
     var pseudo = (r.game_pseudo || '').trim();
-    var pp = (uid && byUid[s + ':' + String(uid).toLowerCase()]) || (pseudo && byPseudo[s + ':' + pseudo.toLowerCase()]);
+    var pp = (uid && byUid[s + ':' + String(uid).trim()]) || (pseudo && byPseudo[s + ':' + pseudo.toLowerCase()]);
     if (!pp) return r;
+    var pj = (pp.profile_json && typeof pp.profile_json === 'object') ? pp.profile_json : {};
+    var pjStats = (pj.stats && typeof pj.stats === 'object') ? pj.stats : {};
     return Object.assign({}, r, {
       grade: (r.grade && String(r.grade).trim()) || pp.grade || r.grade,
       level: pp.level ?? r.level,
@@ -641,13 +866,13 @@ async function enrichImportedWithProfiles(rows, supabase) {
       rank_points: pp.top_user ?? r.rank_points,
       npc_kills: pp.npc_kills ?? r.npc_kills,
       ship_kills: pp.ship_kills ?? r.ship_kills,
-      galaxy_gates: pp.galaxy_gates ?? r.galaxy_gates,
-      galaxy_gates_json: pp.galaxy_gates_json ?? r.galaxy_gates_json,
+      galaxy_gates: pp.galaxy_gates ?? pjStats.galaxy_gates ?? r.galaxy_gates,
+      galaxy_gates_json: pp.galaxy_gates_json ?? pjStats.galaxy_gates_detail ?? r.galaxy_gates_json,
       estimated_rp: pp.estimated_rp ?? r.estimated_rp,
       total_hours: pp.total_hours ?? r.total_hours,
       registered: pp.registered ?? r.registered,
       dostats_updated_at: pp.dostats_updated_at ?? r.dostats_updated_at,
-      company: r.company || pp.company
+      company: (r.company != null && String(r.company).trim() !== '') ? String(r.company).trim() : (companyFromPlayerProfile(pp) || null)
     });
   });
 }
@@ -676,7 +901,7 @@ var RANKING_LOAD_ROUTE = {
 function normalizeRankingFilters(filters) {
   var displayServer = filters?.server && String(filters.server).trim() !== '' ? String(filters.server).trim() : null;
   var type = (filters?.type && RANKING_VALID_TYPES.indexOf(filters.type) !== -1) ? filters.type : 'honor';
-  var server = displayServer ? rankingDisplayToCode(displayServer) : null;
+  var server = displayServer ? resolveRankingServerCode(displayServer) : null;
   var limit = Math.min(RANKING_LIMIT_MAX, Math.max(1, parseInt(filters?.limit, 10) || RANKING_LIMIT_DEFAULT));
   var period = (filters?.period && RANKING_VALID_PERIODS.indexOf(filters.period) !== -1) ? filters.period : null;
   return { displayServer: displayServer, server: server, type: type, limit: limit, period: period };
@@ -702,7 +927,7 @@ function resolveRankingLoadRoute(norm) {
 
 /**
  * Charge le classement avec filtres.
- * La chaîne STANDARD est : import local → snapshots partagés ; RPC get_ranking uniquement si loadSharedRanking lève une exception.
+ * La chaîne STANDARD est : nouveau modèle (player_rankings) → RPC get_ranking_with_profiles → import local → get_ranking.
  * @param {Object} filters
  * @returns {Promise<Array>}
  */
@@ -736,6 +961,13 @@ async function loadRanking(filters) {
   }
 
   // --- STANDARD : pas de période ---
+  if (supabase) {
+    try {
+      // Priorité au nouveau modèle Supabase pour éviter les écarts avec les imports locaux legacy.
+      var primary = await loadSharedRanking(supabase, norm.server, norm.type, norm.limit, null);
+      if (primary && primary.length > 0) return primary;
+    } catch (_ePrimary) {}
+  }
 
   if (typeof getImportedRanking === 'function') {
     var imported = [];
@@ -774,28 +1006,15 @@ async function loadRanking(filters) {
   }
 
   if (!supabase) return [];
-
-  try {
-    var shared = await loadSharedRanking(supabase, norm.server, norm.type, norm.limit, null);
-    return shared.length > 0 ? shared : [];
-  } catch (e) {}
-
-  try {
-    const { data, error } = await supabase.rpc('get_ranking', {
-      p_server: norm.displayServer,
-      p_companies: null,
-      p_type: norm.type,
-      p_limit: norm.limit
-    });
-    if (error) return [];
-    return Array.isArray(data) ? data : [];
-  } catch (e) {
-    return [];
-  }
+  // IMPORTANT : on ne doit pas fallback sur `get_ranking` car ce RPC s'appuie sur
+  // `user_sessions` (stats utilisateur de l'app) et non sur DOStats/snapshots.
+  // Si les tables DOStats/models sont vides, le classement doit rester vide.
+  return [];
 }
 
 if (typeof window !== 'undefined' && window.DEBUG) {
   window.normalizeRankingFilters = normalizeRankingFilters;
   window.resolveRankingLoadRoute = resolveRankingLoadRoute;
   window.RANKING_LOAD_ROUTE = RANKING_LOAD_ROUTE;
+  window.resolveRankingServerCode = resolveRankingServerCode;
 }

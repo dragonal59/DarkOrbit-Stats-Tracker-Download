@@ -115,60 +115,13 @@ function getLatestProfile(serverCode, userId) {
   }
 }
 
-const SCRAPER_APP_SETTINGS_PATH = path.join(app.getPath('userData'), 'scraper-app-settings.json');
-
-function getScraperSettings() {
-  if (!fs.existsSync(SCRAPER_APP_SETTINGS_PATH)) return null;
-  try {
-    const raw = fs.readFileSync(SCRAPER_APP_SETTINGS_PATH, 'utf8');
-    const data = JSON.parse(raw);
-    return data && typeof data === 'object' ? data : null;
-  } catch (_) {
-    return null;
-  }
-}
-
-function getTimeoutMs() {
-  try {
-    const data = getScraperSettings();
-    if (!data) return 30000;
-    const v = data && data.scraper && typeof data.scraper.timeoutMs === 'number'
-      ? data.scraper.timeoutMs
-      : 30000;
-    const n = Math.floor(Number.isFinite(v) ? v : 30000);
-    return Math.max(5000, Math.min(60000, n));
-  } catch (_) {
-    return 30000;
-  }
-}
-
-function getRetries() {
-  try {
-    const data = getScraperSettings();
-    if (!data) return 0;
-    const v = data && data.scraper && typeof data.scraper.retries === 'number'
-      ? data.scraper.retries
-      : 0;
-    const n = Math.floor(Number.isFinite(v) ? v : 0);
-    return Math.max(0, Math.min(5, n));
-  } catch (_) {
-    return 0;
-  }
-}
-
-function getProfilesConcurrency() {
-  try {
-    const data = getScraperSettings();
-    if (!data) return 3;
-    const v = data && data.scraper && typeof data.scraper.profilesConcurrency === 'number'
-      ? data.scraper.profilesConcurrency
-      : 3;
-    const n = Math.floor(Number.isFinite(v) ? v : 3);
-    return Math.max(1, Math.min(10, n));
-  } catch (_) {
-    return 3;
-  }
-}
+const {
+  getTimeoutMs,
+  getRetries,
+  getProfilesConcurrency,
+  getUserAgentString,
+  applyScraperSessionProxyPolicy,
+} = require('./scraper-app-settings');
 
 /**
  * Harmonise les valeurs Galaxy Gates:
@@ -232,6 +185,8 @@ async function loadPlayerWindow(url) {
       sandbox: true,
     },
   });
+  win.webContents.setUserAgent(getUserAgentString());
+  await applyScraperSessionProxyPolicy(win.webContents.session);
 
   const ok = await new Promise((resolve) => {
     const wc = win.webContents;
@@ -600,6 +555,24 @@ async function extractPlayerProfile(win, meta, options) {
       var company = null;
       var companyGuess = (title.match(/\\b(MMO|EIC|VRU)\\b/i) || [])[1];
       if (companyGuess) company = companyGuess.toUpperCase();
+      // Souvent le h1 ne contient que le pseudo : la firme est dans le bloc sous le titre (texte collé « …Steam)MMOLevel ») ou en image.
+      if (!company && document.body) {
+        var bt = document.body.innerText || '';
+        var mCo = bt.match(/\\b(MMO|EIC|VRU)\\b/);
+        if (mCo) company = mCo[1].toUpperCase();
+      }
+      if (!company) {
+        var cimgs = document.querySelectorAll('img[src*="gfx"], img[alt*="MMO"], img[alt*="mmo"], img[alt*="EIC"], img[alt*="eic"], img[alt*="VRU"], img[alt*="vru"]');
+        for (var ci = 0; ci < cimgs.length; ci++) {
+          var ialt = (cimgs[ci].getAttribute('alt') || '').trim();
+          if (/^(MMO|EIC|VRU)$/i.test(ialt)) { company = ialt.toUpperCase(); break; }
+          var isrc = (cimgs[ci].getAttribute('src') || '').toLowerCase();
+          if (isrc.indexOf('avatar') !== -1 || isrc.indexOf('profile') !== -1) continue;
+          if (isrc.indexOf('/mmo') !== -1 || isrc.indexOf('mmo.png') !== -1) { company = 'MMO'; break; }
+          if (isrc.indexOf('/eic') !== -1 || isrc.indexOf('eic.png') !== -1) { company = 'EIC'; break; }
+          if (isrc.indexOf('/vru') !== -1 || isrc.indexOf('vru.png') !== -1) { company = 'VRU'; break; }
+        }
+      }
 
       var grade = findLabelValue('Rank') || findCardValue('Rank') || null;
       if (!grade) {
@@ -1166,7 +1139,8 @@ function mergeGalaxyGatesPatchIntoEntry(entry, patch) {
   }
 }
 
-async function scrapeOneProfile(serverCode, userId, mainWindowRef) {
+async function scrapeOneProfile(serverCode, userId, mainWindowRef, scrapeOpts = {}) {
+  const quietLogs = !!(scrapeOpts && scrapeOpts.quietLogs);
   const scrapedAt = getNowIso();
   const baseUrl = `${DOSTATS_PLAYER_URL}${encodeURIComponent(userId)}`;
   const url = serverCode ? `${baseUrl}?server=${encodeURIComponent(serverCode)}` : baseUrl;
@@ -1176,7 +1150,7 @@ async function scrapeOneProfile(serverCode, userId, mainWindowRef) {
     const { win: w, ok } = await loadPlayerWindow(url);
     win = w;
     if (!ok) {
-      if (mainWindowRef?.webContents) {
+      if (!quietLogs && mainWindowRef?.webContents) {
         mainWindowRef.webContents.send('dostats:log', {
           type: 'error',
           server: serverCode,
@@ -1192,7 +1166,7 @@ async function scrapeOneProfile(serverCode, userId, mainWindowRef) {
     // 1) Main Stats : HoF + Time Played ne sont pas dans le DOM si l’onglet Galaxy est actif.
     await activateMainStatsTab(win);
     const mainReady = await waitForMainStatsHoFReady(win);
-    if (!mainReady && mainWindowRef?.webContents) {
+    if (!mainReady && !quietLogs && mainWindowRef?.webContents) {
       mainWindowRef.webContents.send('dostats:log', {
         type: 'warning',
         server: serverCode,
@@ -1206,7 +1180,7 @@ async function scrapeOneProfile(serverCode, userId, mainWindowRef) {
     // 2) Galaxy Gates : onglet dédié, puis fusion dans l’entrée.
     await activateGalaxyGatesTab(win);
     const gatesReady = await waitForGalaxyGatesReady(win);
-    if (!gatesReady && mainWindowRef?.webContents) {
+    if (!gatesReady && !quietLogs && mainWindowRef?.webContents) {
       mainWindowRef.webContents.send('dostats:log', {
         type: 'warning',
         server: serverCode,
@@ -1230,7 +1204,7 @@ async function scrapeOneProfile(serverCode, userId, mainWindowRef) {
     if (hasEntry && data.entries[0]) {
       normalizeGalaxyGatesConsistency(data.entries[0]);
     }
-    if (mainWindowRef?.webContents) {
+    if (!quietLogs && mainWindowRef?.webContents) {
       const upperServer = (serverCode || '').toString().toUpperCase();
       const entry = hasEntry && data.entries[0] ? data.entries[0] : null;
       const pseudo = entry && entry.name ? entry.name : '?';
@@ -1252,7 +1226,7 @@ async function scrapeOneProfile(serverCode, userId, mainWindowRef) {
     if (!hasEntry) return null;
     return { entry: data.entries[0], userId, serverCode };
   } catch (e) {
-    if (mainWindowRef?.webContents) {
+    if (!quietLogs && mainWindowRef?.webContents) {
       mainWindowRef.webContents.send('dostats:log', {
         type: 'error',
         server: serverCode,
@@ -1270,6 +1244,22 @@ async function scrapeOneProfile(serverCode, userId, mainWindowRef) {
   }
 }
 
+function sendProfileProgress(mainWindowRef, serverCode, current, total, active) {
+  if (!mainWindowRef?.webContents || mainWindowRef.isDestroyed?.()) return;
+  mainWindowRef.webContents.send('dostats:profile-progress', {
+    server: (serverCode || '').toString().trim().toLowerCase(),
+    current: Math.max(0, Number(current) || 0),
+    total: Math.max(0, Number(total) || 0),
+    active: !!active,
+    at: getNowIso(),
+  });
+}
+
+function sendProfileBatchLog(mainWindowRef, payload) {
+  if (!mainWindowRef?.webContents || mainWindowRef.isDestroyed?.()) return;
+  mainWindowRef.webContents.send('dostats:log', payload);
+}
+
 async function runDostatsProfilesScraper(options = {}) {
   const serverCode = options.serverCode || null;
   const userIdsRaw = Array.isArray(options.userIds) ? options.userIds : [];
@@ -1280,10 +1270,25 @@ async function runDostatsProfilesScraper(options = {}) {
     return { ok: false, error: 'Aucun user_id fourni' };
   }
 
+  const totalPlayers = userIds.length;
+  const serverNorm = (serverCode || '').toString().trim().toLowerCase();
+
+  sendProfileBatchLog(mainWindowRef, {
+    type: 'info',
+    server: serverNorm,
+    metric_type: 'player_profile_batch_start',
+    message: `Début de la récupération de ${totalPlayers} joueur${totalPlayers > 1 ? 's' : ''}…`,
+    at: getNowIso(),
+  });
+
+  sendProfileProgress(mainWindowRef, serverNorm, 0, totalPlayers, true);
+
   const results = [];
   const collectedEntries = [];
+  const failures = [];
 
   const queue = [...userIds];
+  let processed = 0;
 
   while (queue.length > 0) {
     // Résolution dynamique de la concurrence : si options.concurrency est fourni, on le respecte,
@@ -1303,36 +1308,65 @@ async function runDostatsProfilesScraper(options = {}) {
         // eslint-disable-next-line no-constant-condition
         while (true) {
           // eslint-disable-next-line no-await-in-loop
-          r = await scrapeOneProfile(serverCode, userId, mainWindowRef);
+          r = await scrapeOneProfile(serverCode, userId, mainWindowRef, { quietLogs: true });
           if (r || attempt >= maxRetries) break;
           attempt += 1;
         }
-        return r;
+        return { userId, result: r };
       }),
     );
-    batchResults.forEach((r) => {
+    batchResults.forEach(({ userId, result: r }) => {
       if (r && r.entry) {
         const enriched = attachFlatHallOfFameStats(r.entry);
         r.entry = enriched;
         results.push(r);
         collectedEntries.push(enriched);
+      } else {
+        const pseudo = r && r.entry && r.entry.name ? String(r.entry.name).trim() : null;
+        failures.push({ userId, pseudo: pseudo || null });
       }
     });
+    processed += batch.length;
+    sendProfileProgress(mainWindowRef, serverNorm, Math.min(processed, totalPlayers), totalPlayers, true);
   }
 
-  if (mainWindowRef?.webContents) {
-    const upperServer = (serverCode || '').toString().toUpperCase();
-    const uniqueProfiles = collectedEntries.length;
-    const message = `[${upperServer}] ${uniqueProfiles} profils extraits ✔`;
-    mainWindowRef.webContents.send('dostats:log', {
+  const okCount = collectedEntries.length;
+  const failCount = failures.length;
+
+  if (failCount === 0) {
+    sendProfileBatchLog(mainWindowRef, {
       type: 'success',
-      server: serverCode,
-      metric_type: 'player_profile_summary',
-      period: 'current',
-      message,
+      server: serverNorm,
+      metric_type: 'player_profile_batch_end',
+      message: `Récupération terminée — ${okCount} joueur${okCount > 1 ? 's' : ''} récupéré${okCount > 1 ? 's' : ''}`,
+      symbol: 'check',
+      at: getNowIso(),
+    });
+  } else {
+    sendProfileBatchLog(mainWindowRef, {
+      type: 'warning',
+      server: serverNorm,
+      metric_type: 'player_profile_batch_end',
+      message: `Récupération terminée — ${okCount} ✔ · ${failCount} non récupéré${failCount > 1 ? 's' : ''}`,
+      symbol: 'cross',
+      at: getNowIso(),
+    });
+    const maxShow = 12;
+    const lines = failures.slice(0, maxShow).map((f) => {
+      const name = f.pseudo && f.pseudo.length ? f.pseudo : '?';
+      return `${name} (${f.userId}) — non récupéré`;
+    });
+    const more = failures.length > maxShow ? `\n… +${failures.length - maxShow} autre${failures.length - maxShow > 1 ? 's' : ''}` : '';
+    sendProfileBatchLog(mainWindowRef, {
+      type: 'warning',
+      server: serverNorm,
+      metric_type: 'player_profile_failures_list',
+      message: lines.join('\n') + more,
       at: getNowIso(),
     });
   }
+
+  sendProfileProgress(mainWindowRef, serverNorm, totalPlayers, totalPlayers, false);
 
   if (collectedEntries.length > 0) {
     const outPath = buildServerProfilesPath(serverCode);

@@ -21,7 +21,9 @@ function initDropdown() {
   selected.setAttribute('tabindex', '0');
   if (options) {
     options.setAttribute('role', 'listbox');
-    options.setAttribute('aria-label', 'Sélectionner un grade');
+    options.setAttribute('aria-label', (typeof window.i18nT === 'function')
+      ? window.i18nT('dropdown_aria_grades_list')
+      : 'Sélectionner un grade');
   }
   optionItems.forEach((item, i) => {
     item.setAttribute('role', 'option');
@@ -87,6 +89,16 @@ function initDropdown() {
 
     saveCurrentStats();
     updateStatsDisplay();
+  }
+
+  if (!window._dropdownGradesI18nBound) {
+    window._dropdownGradesI18nBound = true;
+    window.addEventListener('languageChanged', function () {
+      var opts = document.getElementById('options');
+      if (opts && typeof window.i18nT === 'function') {
+        opts.setAttribute('aria-label', window.i18nT('dropdown_aria_grades_list'));
+      }
+    });
   }
 
   selected.addEventListener("click", () => {

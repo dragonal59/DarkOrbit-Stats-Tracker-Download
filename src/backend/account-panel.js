@@ -142,7 +142,7 @@
       statusEl.textContent = (typeof window.i18nT === 'function') ? window.i18nT(key) : subStatus;
     }
 
-    var pricePro = (typeof window.i18nT === 'function') ? window.i18nT('price_pro_month') : '7.99€/mois';
+    var pricePro = (typeof window.i18nT === 'function') ? window.i18nT('price_pro_month') : '2.99€/mois';
     if (priceEl) {
       if (subMeta.price != null && String(subMeta.price).trim() !== '') {
         priceEl.textContent = String(subMeta.price);
@@ -232,7 +232,7 @@
     if (loginList) {
       var rows = [];
       try {
-        var hr = await supabase.from('user_login_history').select('logged_in_at').eq('user_id', user.id).order('logged_in_at', { ascending: false }).limit(50);
+        var hr = await supabase.from('user_login_history').select('logged_in_at').eq('user_id', user.id).order('logged_in_at', { ascending: false }).limit(3);
         if (hr.error) {
           Logger.warn('[account-panel] user_login_history:', hr.error.message || hr.error);
         } else if (hr.data && hr.data.length) {

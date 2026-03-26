@@ -51,7 +51,11 @@ async function hardReset() {
     if (currentLevelEl) currentLevelEl.value = "";
 
     const selected = document.getElementById("selected");
-    if (selected) selected.innerHTML = "<span>Sélectionner votre grade actuel</span>";
+    if (selected) {
+      var sg = (typeof window.i18nT === "function") ? window.i18nT("select_grade") : "Sélectionner votre grade actuel";
+      var esc = (typeof escapeHtml === "function") ? escapeHtml(sg) : sg;
+      selected.innerHTML = '<span data-i18n="select_grade">' + esc + "</span>";
+    }
 
     renderHistory();
     if (typeof window.maybeRefreshProgression === 'function') window.maybeRefreshProgression();

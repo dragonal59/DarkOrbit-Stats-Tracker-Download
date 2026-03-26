@@ -2,6 +2,15 @@ const { BrowserWindow, app } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
+const {
+  getRateLimitDelayMs,
+  getTimeoutMs,
+  getRetries,
+  getServerConcurrency,
+  getUserAgentString,
+  applyScraperSessionProxyPolicy,
+} = require('./scraper-app-settings');
+
 const DOSTATS_BASE_URL = 'https://dostats.info/hall-of-fame';
 
 const GROUPS = {
@@ -24,75 +33,6 @@ const PERIODS = [
 /** Serveurs récents sans données 365 jours — on ne scrape pas last_365d pour eux */
 const SERVERS_SKIP_365 = ['gbl5'];
 
-const SCRAPER_APP_SETTINGS_PATH = path.join(app.getPath('userData'), 'scraper-app-settings.json');
-
-function getScraperSettings() {
-  if (!fs.existsSync(SCRAPER_APP_SETTINGS_PATH)) return null;
-  try {
-    const raw = fs.readFileSync(SCRAPER_APP_SETTINGS_PATH, 'utf8');
-    const data = JSON.parse(raw);
-    return data && typeof data === 'object' ? data : null;
-  } catch (_) {
-    return null;
-  }
-}
-
-function getRateLimitDelayMs() {
-  try {
-    const data = getScraperSettings();
-    if (!data) return 500;
-    const v = data && data.scraper && typeof data.scraper.rateLimitDelay === 'number'
-      ? data.scraper.rateLimitDelay
-      : 500;
-    const n = Math.floor(Number.isFinite(v) ? v : 500);
-    return Math.max(100, Math.min(10000, n));
-  } catch (_) {
-    return 500;
-  }
-}
-
-function getTimeoutMs() {
-  try {
-    const data = getScraperSettings();
-    if (!data) return 30000;
-    const v = data && data.scraper && typeof data.scraper.timeoutMs === 'number'
-      ? data.scraper.timeoutMs
-      : 30000;
-    const n = Math.floor(Number.isFinite(v) ? v : 30000);
-    return Math.max(5000, Math.min(60000, n));
-  } catch (_) {
-    return 30000;
-  }
-}
-
-function getRetries() {
-  try {
-    const data = getScraperSettings();
-    if (!data) return 0;
-    const v = data && data.scraper && typeof data.scraper.retries === 'number'
-      ? data.scraper.retries
-      : 0;
-    const n = Math.floor(Number.isFinite(v) ? v : 0);
-    return Math.max(0, Math.min(5, n));
-  } catch (_) {
-    return 0;
-  }
-}
-
-function getServerConcurrency() {
-  try {
-    const data = getScraperSettings();
-    if (!data) return 1;
-    const v = data && data.scraper && typeof data.scraper.concurrency === 'number'
-      ? data.scraper.concurrency
-      : 1;
-    const n = Math.floor(Number.isFinite(v) ? v : 1);
-    return Math.max(1, Math.min(10, n));
-  } catch (_) {
-    return 1;
-  }
-}
-
 // Libellé affiché (FR/EN, DOSTATS) → code serveur — pour filtrer les entrées par serveur
 const SERVER_LABEL_TO_CODE = {
   'Allemagne 2': 'de2', 'Germany 2': 'de2',
@@ -102,6 +42,7 @@ const SERVER_LABEL_TO_CODE = {
   'Global PvE': 'gbl1', 'Global PvE 1': 'gbl1',
   'Global 2 (Ganymede)': 'gbl2', 'Global PvE 2': 'gbl2',
   'Global 3 (Titan)': 'gbl3', 'Global PvE 3': 'gbl3',
+  'Global 4': 'gbl4',
   'Global 4 (Europa)': 'gbl4', 'Global PvE 4': 'gbl4',
   'Global 5 (Callisto)': 'gbl5', 'Global 5 (Steam)': 'gbl5', 'Global PvE 5': 'gbl5', 'GBL5': 'gbl5', 'gbl5': 'gbl5',
   'Europe Global 1': 'int1', 'Global Europe 1': 'int1',
@@ -118,7 +59,8 @@ const SERVER_LABEL_TO_CODE = {
   'Turquie 3': 'tr3', 'Turkey 3': 'tr3',
   'Turquie 4': 'tr4', 'Turkey 4': 'tr4',
   'Turquie 5': 'tr5', 'Turkey 5': 'tr5',
-  'USA 2 (Côte Ouest)': 'us2', 'USA West': 'us2', 'USA 2': 'us2',
+  'USA 2 (Côte Ouest)': 'us2', 'USA 2 (West Coast)': 'us2',
+  'USA West': 'us2', 'USA 2': 'us2',
 };
 
 // Param names and values: lowercase (server, type, duration) — aligné avec les URLs DOSTATS
@@ -210,8 +152,8 @@ async function createDostatsWindow() {
       partition,
     },
   });
-  const ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-  win.webContents.setUserAgent(ua);
+  win.webContents.setUserAgent(getUserAgentString());
+  await applyScraperSessionProxyPolicy(win.webContents.session);
   return win;
 }
 
@@ -316,6 +258,50 @@ async function extractHallOfFame(win, meta) {
       if (!cleaned) return null;
       try { return parseInt(cleaned, 10); } catch(e){ return null; }
     }
+    /** Firme : texte dans la cellule ou logo DOStats (React : souvent <img> sans texte). */
+    function companyFromCell(cell){
+      if (!cell) return null;
+      var raw = text(cell);
+      if (raw) {
+        var u = raw.toUpperCase();
+        if (/^(MMO|EIC|VRU)$/.test(u)) return u;
+        var m = raw.match(/\\b(MMO|EIC|VRU)\\b/i);
+        if (m) return m[1].toUpperCase();
+      }
+      var imgs = cell.querySelectorAll('img');
+      for (var i = 0; i < imgs.length; i++) {
+        var im = imgs[i];
+        var alt = (im.getAttribute('alt') || '').trim();
+        if (/^(MMO|EIC|VRU)$/i.test(alt)) return alt.toUpperCase();
+        var src = (im.getAttribute('src') || '').toLowerCase();
+        if (src.indexOf('avatar') !== -1 || src.indexOf('profile') !== -1) continue;
+        if (src.indexOf('mmo') !== -1) return 'MMO';
+        if (src.indexOf('eic') !== -1) return 'EIC';
+        if (src.indexOf('vru') !== -1) return 'VRU';
+      }
+      return null;
+    }
+    /** Détecte les index de colonnes depuis la ligne d'en-tête (# / Name / Company / Server / Points). */
+    function columnIndicesFromHeaderRow(tr){
+      var cells = tr.querySelectorAll('th, td');
+      if (cells.length < 5) return null;
+      var headers = [];
+      for (var i = 0; i < cells.length; i++) {
+        headers.push(text(cells[i]).toLowerCase());
+      }
+      var idx = { rank: 0, name: 1, company: 2, server: 3, points: 4 };
+      var found = 0;
+      for (var h = 0; h < headers.length; h++) {
+        var lab = headers[h];
+        if (lab === '#' || /^#\\s*$/.test(lab)) { idx.rank = h; found++; }
+        else if (lab === 'name' || lab.indexOf('player') !== -1) { idx.name = h; found++; }
+        else if (lab.indexOf('company') !== -1 || lab.indexOf('faction') !== -1 || lab.indexOf('firme') !== -1) { idx.company = h; found++; }
+        else if (lab.indexOf('server') !== -1 || lab.indexOf('world') !== -1) { idx.server = h; found++; }
+        else if (lab.indexOf('point') !== -1 || lab === 'honor' || lab === 'experience' || lab.indexOf('top user') !== -1 || lab.indexOf('kills') !== -1 || lab.indexOf('aliens') !== -1) { idx.points = h; found++; }
+      }
+      if (found >= 2) return idx;
+      return null;
+    }
     try {
       var table = null;
       var tables = document.querySelectorAll('table');
@@ -327,13 +313,22 @@ async function extractHallOfFame(win, meta) {
         }
       }
       if (!table) return { ok:false, entries:[] };
-      var rows = Array.from(table.querySelectorAll('tr')).slice(1);
+      var allRows = Array.from(table.querySelectorAll('tr'));
+      var colIdx = null;
+      if (allRows.length > 0) colIdx = columnIndicesFromHeaderRow(allRows[0]);
+      var dataRows = allRows.slice(1);
       var out = [];
-      rows.forEach(function(tr){
-        var cells = tr.querySelectorAll('td,th');
+      dataRows.forEach(function(tr){
+        var cells = tr.querySelectorAll('td');
         if (!cells || cells.length < 5) return;
-        var rank = toInt(text(cells[0]));
-        var nameCell = cells[1];
+        var rankI = colIdx ? colIdx.rank : 0;
+        var nameI = colIdx ? colIdx.name : 1;
+        var companyI = colIdx ? colIdx.company : 2;
+        var serverI = colIdx ? colIdx.server : 3;
+        var pointsI = colIdx ? colIdx.points : 4;
+        if (cells.length <= Math.max(rankI, nameI, companyI, serverI, pointsI)) return;
+        var rank = toInt(text(cells[rankI]));
+        var nameCell = cells[nameI];
         var link = null;
         for (var ci = 0; ci < cells.length; ci++) {
           var cell = cells[ci];
@@ -342,6 +337,11 @@ async function extractHallOfFame(win, meta) {
           if (a) { link = a; break; }
         }
         var name = link ? text(link) : text(nameCell);
+        // DOStats affiche parfois "Pseudo's Stats" (libellé UI) au lieu du pseudo brut.
+        // On retire uniquement le suffixe terminal "'s Stats" (insensible à la casse, tolère espaces).
+        if (name) {
+          name = String(name).replace(/\s*'s\s+stats\s*$/i, '').trim();
+        }
         var href = link ? (link.getAttribute('href') || '') : '';
         var userId = null;
         if (href) {
@@ -350,10 +350,13 @@ async function extractHallOfFame(win, meta) {
             try { userId = decodeURIComponent(m[1]); } catch(e2) { userId = m[1]; }
           }
         }
-        var company = text(cells[2]).toUpperCase() || null;
-        var serverLabel = text(cells[3]) || null;
-        var points = toInt(text(cells[4]));
+        var company = companyFromCell(cells[companyI]);
+        var serverLabel = text(cells[serverI]) || null;
+        var points = toInt(text(cells[pointsI]));
         if (!rank && !name && !points) return;
+        var h0 = text(cells[0]).trim();
+        var h1 = text(cells[1] || '').trim();
+        if (h0 === '#' && /^name$/i.test(h1)) return;
         out.push({
           rank: rank || null,
           name: name || null,
@@ -781,30 +784,79 @@ async function fetchHallOfFameForServer(win, serverCode, typeDef, periodDef) {
 async function runDostatsRankingScraper(options = {}) {
   const groupId = options.groupId || null;
   const serverCode = options.serverCode || null;
+  const serverCodes = Array.isArray(options.serverCodes) ? options.serverCodes : null;
   const mainWindowRef = options.mainWindowRef || null;
 
   let servers = [];
-  if (serverCode) {
+  if (serverCodes && serverCodes.length) {
+    servers = [...new Set(serverCodes.map((s) => String(s || '').trim().toLowerCase()).filter(Boolean))];
+  } else if (serverCode) {
     servers = [String(serverCode).toLowerCase()];
   } else if (groupId && GROUPS[groupId]) {
     servers = GROUPS[groupId];
   } else {
-    return { ok: false, error: groupId ? `Groupe inconnu: ${groupId}` : 'Indiquez groupId ou serverCode.' };
+    return { ok: false, error: groupId ? `Groupe inconnu: ${groupId}` : 'Indiquez groupId, serverCode ou serverCodes.' };
   }
   if (!servers.length) {
     return { ok: false, error: 'Aucun serveur à scraper.' };
   }
 
-  const sendLog = (type, message, server = null) => {
+  const sendLog = (type, message, server = null, extra = null) => {
     if (mainWindowRef?.webContents && !mainWindowRef.isDestroyed()) {
-      mainWindowRef.webContents.send('dostats:log', {
+      const payload = {
         type,
-        server: server || (servers.length === 1 ? servers[0] : null),
+        server: server != null ? server : (servers.length === 1 ? servers[0] : null),
         message,
         at: getNowIso(),
-      });
+      };
+      if (extra && typeof extra === 'object') {
+        Object.assign(payload, extra);
+      }
+      mainWindowRef.webContents.send('dostats:log', payload);
     }
   };
+
+  const TYPE_LABEL_FR = {
+    top_user: 'top utilisateur',
+    experience: 'expérience',
+    honor: 'honneur',
+    ship_kills: 'vaisseaux détruits',
+    alien_kills: 'aliens vaincus',
+  };
+  const PERIOD_LABEL_FR = {
+    current: 'actuel',
+    last_24h: '24 h',
+    last_7d: '7 j',
+    last_30d: '30 j',
+    last_90d: '90 j',
+    last_365d: '365 j',
+  };
+
+  function formatFailureFragments(failures) {
+    return failures.map((f) => {
+      const srv = (f.serverCode || '').toString().toUpperCase();
+      const t = TYPE_LABEL_FR[f.type] || f.type;
+      const p = PERIOD_LABEL_FR[f.period] || f.period;
+      return `[${srv}] ${t} · ${p}`;
+    });
+  }
+
+  function sendRankingsBatchStats(serverStatsMap) {
+    const list = [];
+    serverStatsMap.forEach((v, server) => {
+      list.push({
+        server,
+        successDelta: v.ok,
+        errorDelta: v.fail,
+      });
+    });
+    if (!list.length) return;
+    sendLog('info', '', null, {
+      silent: true,
+      metric_type: 'rankings_batch_stats',
+      servers: list,
+    });
+  }
 
   function waitIfPaused() {
     return new Promise((resolve) => {
@@ -824,8 +876,18 @@ async function runDostatsRankingScraper(options = {}) {
   }
 
   try {
-    sendLog('info', `Démarrage scraping DOSTATS — ${servers.length} serveur(s): ${servers.join(', ')}`);
+    sendLog('info', 'Récupération des classements…', null, { metric_type: 'rankings_batch_start' });
     const results = [];
+    const failures = [];
+    const serverStats = new Map();
+    const bump = (srv, ok) => {
+      const k = (srv || '').toString().trim().toLowerCase();
+      if (!k) return;
+      if (!serverStats.has(k)) serverStats.set(k, { ok: 0, fail: 0 });
+      const s = serverStats.get(k);
+      if (ok) s.ok += 1;
+      else s.fail += 1;
+    };
     const serverConcurrency = getServerConcurrency();
     let index = 0;
     while (index < servers.length) {
@@ -852,7 +914,6 @@ async function runDostatsRankingScraper(options = {}) {
                   if (typeof global.scraperShouldStop === 'boolean' && global.scraperShouldStop) {
                     return;
                   }
-                  const startTime = Date.now();
                   let r = null;
                   const maxRetries = getRetries();
                   let attempt = 0;
@@ -863,52 +924,19 @@ async function runDostatsRankingScraper(options = {}) {
                     if (r || attempt >= maxRetries) break;
                     attempt += 1;
                   }
-                  const durationMs = Date.now() - startTime;
-                  const waitMs = Math.max(0, getRateLimitDelayMs() - durationMs);
+                  /** Pause additionnelle après chaque chargement (ms) — valeur du slider, toujours appliquée si > 0. */
+                  const rateLimitPauseMs = getRateLimitDelayMs();
                   if (r) results.push({ serverCode: srvCode, type: typeDef.key, period: periodDef.key, ...r });
-                  if (mainWindowRef?.webContents) {
-                    const count = r ? r.count : 0;
-                    const url = r?.url ?? null;
-                    const upperServer = (srvCode || '').toString().toUpperCase();
-                    const typeLabelMap = {
-                      leaderboard: 'Leaderboard',
-                      top_user: 'Top User',
-                      experience: 'Experience',
-                      honor: 'Honor',
-                      ship_kills: 'Ship Kills',
-                      alien_kills: 'NPC Kills',
-                    };
-                    const periodLabelMap = {
-                      current: 'Current',
-                      last_24h: '24h',
-                      last_7d: '7j',
-                      last_30d: '30j',
-                      last_90d: '90j',
-                      last_365d: '365j',
-                    };
-                    const typeLabel = typeLabelMap[typeDef.key] || typeDef.key;
-                    const periodLabel = periodLabelMap[periodDef.key] || periodDef.key;
-                    const baseMsg = `[${upperServer}] ${typeLabel} - ${periodLabel} → `;
-                    const ok = !!r && count > 0;
-                    const message = ok
-                      ? `${baseMsg}${count} entrées ✔`
-                      : `${baseMsg}${count} entrées ✖`;
-                    const logType = !r ? 'warning' : count === 0 ? 'error' : 'success';
-                    mainWindowRef.webContents.send('dostats:log', {
-                      type: logType,
-                      server: srvCode,
-                      metric_type: typeDef.key,
-                      period: periodDef.key,
-                      message,
-                      url: count === 0 ? url : undefined,
-                      at: getNowIso(),
-                      count,
-                      durationMs,
-                    });
+                  const count = r ? r.count : 0;
+                  if (r && count > 0) {
+                    bump(srvCode, true);
+                  } else {
+                    bump(srvCode, false);
+                    failures.push({ serverCode: srvCode, type: typeDef.key, period: periodDef.key });
                   }
-                  if (waitMs > 0) {
+                  if (rateLimitPauseMs > 0) {
                     // eslint-disable-next-line no-await-in-loop
-                    await new Promise((resolve) => setTimeout(resolve, waitMs));
+                    await new Promise((resolve) => setTimeout(resolve, rateLimitPauseMs));
                   }
                 }
               }
@@ -923,11 +951,37 @@ async function runDostatsRankingScraper(options = {}) {
         });
       }
       if (typeof global.scraperShouldStop === 'boolean' && global.scraperShouldStop) {
+        sendRankingsBatchStats(serverStats);
+        if (failures.length > 0) {
+          const parts = formatFailureFragments(failures);
+          const maxShow = 12;
+          const shown = parts.slice(0, maxShow);
+          const more = parts.length > maxShow ? ` (… +${parts.length - maxShow})` : '';
+          sendLog('warning', `Certains classements n’ont pas été extraits : ${shown.join(', ')}${more}.`, null, {
+            metric_type: 'rankings_summary',
+            symbol: 'cross',
+          });
+        }
         sendLog('info', 'Scraping DOSTATS arrêté par l’utilisateur.');
         return { ok: true, groupId, resultsCount: results.length, results, stopped: true };
       }
     }
-    sendLog('success', `Scraping DOSTATS terminé — ${results.length} combinaison(s) scrapée(s).`);
+    sendRankingsBatchStats(serverStats);
+    if (failures.length === 0) {
+      sendLog('success', 'Tous les classements ont été extraits', null, {
+        metric_type: 'rankings_summary',
+        symbol: 'check',
+      });
+    } else {
+      const parts = formatFailureFragments(failures);
+      const maxShow = 12;
+      const shown = parts.slice(0, maxShow);
+      const more = parts.length > maxShow ? ` (… +${parts.length - maxShow})` : '';
+      sendLog('warning', `Certains classements n’ont pas été extraits : ${shown.join(', ')}${more}.`, null, {
+        metric_type: 'rankings_summary',
+        symbol: 'cross',
+      });
+    }
     return { ok: true, groupId, resultsCount: results.length, results };
   } catch (e) {
     sendLog('error', `Erreur scraping DOSTATS: ${e?.message || String(e)}`);
@@ -989,6 +1043,7 @@ function getLatestRanking(serverCode, typeKey, periodKey) {
 }
 
 module.exports = {
+  DOSTATS_GROUPS: GROUPS,
   runDostatsRankingScraper,
   getLatestRanking,
   checkDostatsHealth,

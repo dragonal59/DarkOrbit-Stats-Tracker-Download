@@ -48,9 +48,8 @@
 <div id="paypalButtonsContainer" class="paypal-buttons-fixed" style="display:none;">
   <button type="button" class="paypal-btn paypal-btn--support" id="supportDeveloperBtnTopLeft" data-i18n="support_short">❤️ Payer un café</button>
   <div id="paypalSubscribeBlock" class="paypal-subscribe-block paypal-subscribe-block--passer-pro">
-    <div id="upgradeProBtn" class="paypal-passer-pro-btn" title="Passer PRO" role="button" tabindex="0" aria-label="Passer PRO">
-      <span class="paypal-passer-pro-text">✨ Passer PRO</span>
-      <div id="paypalSubscribeContainer" class="paypal-subscribe-wrap paypal-subscribe-wrap--click-overlay"></div>
+    <div id="upgradeProBtn" class="paypal-passer-pro-btn" data-i18n-title="passer_pro_btn" data-i18n-aria-label="passer_pro_btn" role="button" tabindex="0">
+      <span class="paypal-passer-pro-text" data-i18n="passer_pro_btn">✨ Passer PRO</span>
     </div>
   </div>
 </div>
@@ -68,31 +67,33 @@
       <div class="upgrade-pro-col upgrade-pro-col--free">
         <h3 class="upgrade-pro-col-title">FREE</h3>
         <ul class="upgrade-pro-features">
-          <li class="upgrade-pro-feature upgrade-pro-feature--strike">Stats de base</li>
-          <li class="upgrade-pro-feature upgrade-pro-feature--strike">1 compte</li>
-          <li class="upgrade-pro-feature upgrade-pro-feature--strike">Pas d'alertes boosters</li>
-          <li class="upgrade-pro-feature upgrade-pro-feature--strike">Sidebar événements (aperçu seulement)</li>
-          <li class="upgrade-pro-feature upgrade-pro-feature--strike">Pas d'export</li>
+          <li class="upgrade-pro-feature" data-i18n="upgrade_cmp_free_1">✅ Accès aux classements</li>
+          <li class="upgrade-pro-feature" data-i18n="upgrade_cmp_free_2">✅ Accès au suivi personnel</li>
+          <li class="upgrade-pro-feature" data-i18n="upgrade_cmp_free_3">✅ Scan automatique</li>
+          <li class="upgrade-pro-feature upgrade-pro-feature--no" data-i18n="upgrade_cmp_free_4">❌ Alerte booster</li>
+          <li class="upgrade-pro-feature upgrade-pro-feature--no" data-i18n="upgrade_cmp_free_5">❌ Vue des événements DO</li>
+          <li class="upgrade-pro-feature upgrade-pro-feature--no" data-i18n="upgrade_cmp_free_6">❌ Suivi de joueur</li>
         </ul>
       </div>
       <div class="upgrade-pro-col upgrade-pro-col--pro">
         <h3 class="upgrade-pro-col-title">PRO</h3>
         <ul class="upgrade-pro-features">
-          <li class="upgrade-pro-feature"><span class="upgrade-pro-check">✅</span> Toutes les stats</li>
-          <li class="upgrade-pro-feature"><span class="upgrade-pro-check">✅</span> Multi-comptes</li>
-          <li class="upgrade-pro-feature"><span class="upgrade-pro-check">✅</span> Alertes boosters</li>
-          <li class="upgrade-pro-feature"><span class="upgrade-pro-check">✅</span> Sidebar événements + suivi joueurs (complet)</li>
-          <li class="upgrade-pro-feature"><span class="upgrade-pro-check">✅</span> Export JSON/CSV</li>
-          <li class="upgrade-pro-feature"><span class="upgrade-pro-check">✅</span> Support prioritaire</li>
+          <li class="upgrade-pro-feature" data-i18n="upgrade_cmp_pro_1">✅ Accès aux classements</li>
+          <li class="upgrade-pro-feature" data-i18n="upgrade_cmp_pro_2">✅ Accès au suivi personnel</li>
+          <li class="upgrade-pro-feature" data-i18n="upgrade_cmp_pro_3">✅ Scan automatique</li>
+          <li class="upgrade-pro-feature" data-i18n="upgrade_cmp_pro_4">✅ Alerte booster</li>
+          <li class="upgrade-pro-feature" data-i18n="upgrade_cmp_pro_5">✅ Vue des événements DO</li>
+          <li class="upgrade-pro-feature" data-i18n="upgrade_cmp_pro_6">✅ Suivi de joueur</li>
+          <li class="upgrade-pro-feature" data-i18n="upgrade_cmp_pro_7">✅ Support prioritaire</li>
         </ul>
       </div>
     </div>
     <div class="upgrade-pro-price-block">
-      <span class="upgrade-pro-price-badge">7,99€/mois</span>
-      <p class="upgrade-pro-trial-banner">🎯 Essai 7 jours à seulement 1€</p>
+      <span class="upgrade-pro-price-badge" data-i18n="price_pro_month">2.99€/mois</span>
+      <p class="upgrade-pro-trial-banner" data-i18n="upgrade_pro_paypal_banner">🎯 Paiement sécurisé via PayPal — abonnement avec renouvellement automatique.</p>
     </div>
     <div class="upgrade-pro-cta-wrap">
-      <button type="button" class="upgrade-pro-cta" id="upgradeProCtaBtn">Commencer l'essai à 1€</button>
+      <button type="button" class="upgrade-pro-cta" id="upgradeProCtaBtn" data-paypal-pro-subscribe="1" data-i18n="upgrade_pro_paypal_cta">S'abonner avec PayPal</button>
     </div>
   </div>
 </div>
@@ -257,6 +258,9 @@
           if (typeof SubscriptionCheck !== 'undefined' && SubscriptionCheck.startHourlyCheck) SubscriptionCheck.startHourlyCheck();
           if (Loader) Loader.setProgress(90, 'Initialisation de l\'interface...');
           if (typeof applyPermissionsUI === 'function') applyPermissionsUI();
+          if (session?.user?.id && typeof window.restoreBelowRankCacheForUser === 'function') {
+            window.restoreBelowRankCacheForUser(session.user.id);
+          }
           if (typeof applyConsoleOverride === 'function') applyConsoleOverride();
           if (typeof updateExportButtonVisibility === 'function') await updateExportButtonVisibility();
           if (typeof window.startProfileBadgeRealtime === 'function' && session.user && session.user.id) {
@@ -360,8 +364,8 @@
       <img src="img/events/honnor_day.png" alt="50% Honneur" class="booster-free-promo-img">
       <div class="booster-free-promo-title" data-i18n="booster_alert">Alerte booster 50%</div>
       <div class="booster-free-promo-version" data-i18n="pro_version">Version Pro</div>
-      <div class="booster-free-promo-price" data-i18n="price_pro_month">7.99€/mois</div>
-      <div id="paypalSubscribeContainerBooster" class="paypal-subscribe-wrap paypal-subscribe-wrap--booster"></div>
+      <div class="booster-free-promo-price" data-i18n="price_pro_month">2.99€/mois</div>
+      <button type="button" class="booster-free-promo-btn" id="boosterFreePromoProBtn" data-open-upgrade-pro-modal="1" data-i18n="booster_free_promo_cta">Passer en PRO</button>
     </div>
     <div class="booster-sidebar-content" id="boosterAlert" style="display: none;">
       <div class="booster-sidebar-header">
@@ -473,7 +477,7 @@
       <div class="form-group" style="margin-bottom: 12px;">
         <label data-i18n="current_grade">Grade actuel</label>
         <div class="dropdown">
-          <div id="selected" class="dropdown-selected"><span>Sélectionner votre grade actuel</span></div>
+          <div id="selected" class="dropdown-selected"><span data-i18n="select_grade">Sélectionner votre grade actuel</span></div>
           <div id="options" class="dropdown-options" style="display:none;"></div>
         </div>
       </div>
@@ -491,7 +495,7 @@
     <div class="stats-section" id="statsCollectAutoSection" style="display: none;">
       <h2 style="margin: 0;">🎮 <span data-i18n="stats_retrieve_my_stats_heading">Récupérer mes statistiques</span></h2>
       <p class="settings-description" style="margin: 8px 0 12px;"><span id="statsCollectHelpText"></span></p>
-      <button type="button" id="collectStatsFromGameBtn" class="btn-primary btn-compact"><span data-i18n="stats_retrieve_my_stats_button">Récupérer mes statistiques</span></button>
+      <button type="button" id="collectStatsFromGameBtn" class="btn-primary btn-collect-stats-cta"><span data-i18n="stats_retrieve_my_stats_button">Récupérer mes statistiques</span></button>
       <p id="collectStatsCooldownText" class="settings-description" style="margin: 10px 0 0; font-weight: 500;"></p>
       <div id="collectStatsProgressWrap" style="display: none; margin-top: 8px;">
         <div class="collect-stats-progress-bar" style="height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden;">
@@ -763,6 +767,15 @@
           <option value="7j">+7j</option>
           <option value="30j">+30j</option>
         </select>
+        <label for="ranking-player-search" data-i18n="ranking_player_search_label">Rechercher</label>
+        <input
+          type="text"
+          id="ranking-player-search"
+          class="ranking-player-search"
+          data-i18n-placeholder="ranking_player_search_placeholder"
+          placeholder="Rechercher un joueur"
+          autocomplete="off"
+        >
       </div>
       <div class="ranking-filter-group">
         <span class="ranking-filter-label" data-i18n="firme">Firme</span>
@@ -799,6 +812,7 @@
             <th data-col="pseudo" data-i18n="pseudo">Pseudo</th>
             <th data-col="firme" data-i18n="firme">Firme</th>
             <th data-col="grade" data-i18n="grade">Grade</th>
+            <th data-col="delta_24h" data-i18n="progression_period_24h">24 h</th>
             <th data-col="honor" data-i18n="points">Points</th>
             <th data-col="xp" data-i18n="points">Points</th>
             <th data-col="rank_points" data-i18n="points">Points</th>
@@ -2042,7 +2056,7 @@
         <p><strong>3.2 Niveaux d'accès</strong> — FREE : accès limité (stats, progression, historique limité à 1 session, classement). PRO : accès complet (événements, notifications, boosters, liens personnalisés, historique illimité, synchronisation multi-appareils).</p>
         <p><strong>3.3 Suspension</strong> — Le Développeur se réserve le droit de suspendre ou supprimer tout compte en cas d'abus, fraude ou violation des CGU, sans préavis ni remboursement.</p>
         <h2>Article 4 — Abonnement et paiement</h2>
-        <p><strong>4.1 Prix</strong> — <span data-i18n="price_pro_month">7.99€/mois</span> (TVA incluse selon pays de résidence).</p>
+        <p><strong>4.1 Prix</strong> — <span data-i18n="price_pro_month">2.99€/mois</span> (TVA incluse selon pays de résidence).</p>
         <p><strong>4.2 Facturation</strong> — Mensuelle, à date anniversaire. Paiement via PayPal.</p>
         <p><strong>4.3 Résiliation</strong> — À tout moment. Prise d'effet en fin de période en cours. Aucun remboursement partiel.</p>
         <p><strong>4.4 Politique de remboursement</strong> — Aucun remboursement sauf défaillance technique majeure imputable au Développeur et non résolue sous 7 jours ouvrés.</p>

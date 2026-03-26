@@ -186,7 +186,9 @@
 
 .group-header-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
+  justify-content: flex-end;
 }
 
 .group-action-btn {
@@ -207,6 +209,17 @@
 
 .group-action-btn--muted {
   opacity: 0.6;
+}
+
+.group-action-btn--scrape {
+  border-color: color-mix(in srgb, var(--accent-emerald) 45%, var(--border-glass));
+  background: color-mix(in srgb, var(--accent-emerald) 14%, rgba(255, 255, 255, 0.06));
+  color: color-mix(in srgb, var(--accent-emerald) 92%, var(--text-primary));
+}
+
+.group-action-btn--scrape:hover {
+  background: color-mix(in srgb, var(--accent-emerald) 22%, rgba(255, 255, 255, 0.08));
+  border-color: color-mix(in srgb, var(--accent-emerald) 55%, var(--border-glass));
 }
 
 .server-cards-inner {
@@ -401,6 +414,16 @@
   font-size: 10px;
   color: var(--text-muted);
   text-align: right;
+}
+
+.server-card-profile-scrape-fill {
+  background: var(--accent-cyan);
+  opacity: 0.9;
+}
+
+.server-card-profile-scrape-pct {
+  color: var(--accent-cyan);
+  opacity: 0.95;
 }
 
 .card-metrics {

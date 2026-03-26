@@ -914,6 +914,91 @@ h3 {
   margin-top: 4px;
 }
 
+/* CTA « Récupérer mes stats » — visuel renforcé (même id / même action) */
+#statsCollectAutoSection #collectStatsFromGameBtn.btn-collect-stats-cta {
+  flex: 0 0 auto;
+  align-self: center;
+  margin-top: 8px;
+  padding: 14px 32px 14px 28px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: linear-gradient(
+    135deg,
+    var(--accent) 0%,
+    #22d3ee 45%,
+    var(--accent-hover) 100%
+  );
+  background-size: 200% 200%;
+  color: #fff;
+  box-shadow:
+    0 0 0 1px rgba(56, 189, 248, 0.35),
+    0 4px 20px rgba(34, 211, 238, 0.35),
+    0 12px 36px rgba(15, 23, 42, 0.45);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition:
+    transform 0.22s ease,
+    box-shadow 0.22s ease,
+    filter 0.22s ease,
+    background-position 0.35s ease;
+  position: relative;
+  overflow: hidden;
+  gap: 10px;
+}
+
+#statsCollectAutoSection #collectStatsFromGameBtn.btn-collect-stats-cta::before {
+  content: '⚡';
+  font-size: 1.15em;
+  line-height: 1;
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.65));
+}
+
+#statsCollectAutoSection #collectStatsFromGameBtn.btn-collect-stats-cta:hover:not(:disabled) {
+  transform: translateY(-3px) scale(1.02);
+  background-position: 100% 50%;
+  box-shadow:
+    0 0 0 1px rgba(165, 243, 252, 0.5),
+    0 8px 28px rgba(34, 211, 238, 0.45),
+    0 20px 48px rgba(15, 23, 42, 0.5);
+  filter: brightness(1.06);
+}
+
+#statsCollectAutoSection #collectStatsFromGameBtn.btn-collect-stats-cta:active:not(:disabled) {
+  transform: translateY(-1px) scale(0.99);
+  box-shadow:
+    0 0 0 1px rgba(56, 189, 248, 0.4),
+    0 2px 12px rgba(34, 211, 238, 0.3);
+  transition-duration: 0.08s;
+}
+
+#statsCollectAutoSection #collectStatsFromGameBtn.btn-collect-stats-cta:focus-visible {
+  outline: 2px solid #a5f3fc;
+  outline-offset: 4px;
+}
+
+#statsCollectAutoSection #collectStatsFromGameBtn.btn-collect-stats-cta:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  filter: grayscale(0.25) brightness(0.92);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  background-position: 0% 50%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #statsCollectAutoSection #collectStatsFromGameBtn.btn-collect-stats-cta,
+  #statsCollectAutoSection #collectStatsFromGameBtn.btn-collect-stats-cta:hover:not(:disabled),
+  #statsCollectAutoSection #collectStatsFromGameBtn.btn-collect-stats-cta:active:not(:disabled) {
+    transition: none;
+    transform: none;
+  }
+  #statsCollectAutoSection #collectStatsFromGameBtn.btn-collect-stats-cta:hover:not(:disabled) {
+    filter: none;
+  }
+}
+
 #collectStatsProgressWrap {
   width: 100%;
   max-width: 520px;
@@ -2518,22 +2603,28 @@ input.true-placeholder:focus::placeholder {
   z-index: 0;
 }
 
-.paypal-passer-pro-btn .paypal-subscribe-wrap--click-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  min-width: 0;
-  opacity: 0;
+.paypal-hosted-subscribe-btn {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #111;
   cursor: pointer;
-  border-radius: 10px;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ffc439 0%, #f0b024 100%);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  transition: filter 0.15s ease, transform 0.15s ease;
 }
 
-.paypal-passer-pro-btn .paypal-subscribe-wrap--click-overlay iframe {
-  position: absolute;
-  inset: 0;
-  width: 100% !important;
-  height: 100% !important;
-  min-height: 40px !important;
+.paypal-hosted-subscribe-btn:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
+.sub-paypal .paypal-hosted-subscribe-btn {
+  width: 100%;
 }
 
 @keyframes passer-pro-pulse {
@@ -2718,6 +2809,10 @@ input.true-placeholder:focus::placeholder {
 .upgrade-pro-feature--strike {
   color: var(--text-muted);
   text-decoration: line-through;
+}
+
+.upgrade-pro-feature--no {
+  color: var(--text-muted);
 }
 
 .upgrade-pro-check {
@@ -3402,7 +3497,7 @@ input.true-placeholder:focus::placeholder {
   left: 0;
   top: 50%;
   transform: translateY(-50%);
-  z-index: 100;
+  z-index: 10050;
   width: 220px;
   height: 70vh;
   min-height: 320px;

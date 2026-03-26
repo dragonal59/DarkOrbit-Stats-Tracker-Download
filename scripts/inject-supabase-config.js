@@ -4,7 +4,7 @@
  * Ce fichier est lu par preload.js au runtime (app empaquetée) ; jamais versionné (build/ dans .gitignore).
  *
  * Utilisation :
- *   - En dev : avoir un .env avec SUPABASE_URL et SUPABASE_ANON_KEY
+ *   - En dev : .env avec SUPABASE_URL et SUPABASE_ANON_KEY, ou config.supabase.local.js à la racine (même export que ce fichier)
  *   - Build : npm run prebuild (charge .env via dotenv si présent, ou variables d'env système)
  *
  * Contraintes : n'injecte jamais SUPABASE_SERVICE_ROLE_KEY (uniquement URL + anon key).

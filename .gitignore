@@ -3,6 +3,8 @@ dist/
 build/
 landing/
 # config.supabase.prod.js (généré par inject-supabase-config.js) — dans build/src/
+# Config locale dev (même format module.exports que prod) — alternative si pas de dossier build/
+config.supabase.local.js
 .env
 .env.local
 .env.*.local
