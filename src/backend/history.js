@@ -52,7 +52,18 @@ function renderHistory() {
   // Générer le HTML
   let html = '';
   
-  for (const [period, periodData] of Object.entries(grouped)) {
+  const periodOrder = Object.keys(grouped).sort(function (a, b) {
+    const rank = function (k) {
+      if (k === 'this-week') return 0;
+      if (k === 'last-week') return 1;
+      return 2;
+    };
+    var ra = rank(a), rb = rank(b);
+    if (ra !== rb) return ra - rb;
+    return b.localeCompare(a);
+  });
+  for (const period of periodOrder) {
+    const periodData = grouped[period];
     const { label, sessions: periodSessions, totalHonor, totalXp } = periodData;
     const isCurrentPeriod = period === getCurrentPeriodKey();
     const labelEsc = (typeof escapeHtml === 'function') ? escapeHtml(label) : label;
@@ -162,10 +173,11 @@ function computeGainsBySession(sortedSessions) {
     const sid = session.id != null ? String(session.id) : 's-' + (session.timestamp || i);
     const prev = sortedSessions[i + 1]; // session chronologiquement précédente (plus ancienne)
     if (prev) {
+      const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
       out[sid] = {
-        honor: session.honor - prev.honor,
-        xp: session.xp - prev.xp,
-        rankPoints: session.rankPoints - prev.rankPoints
+        honor: n(session.honor) - n(prev.honor),
+        xp: n(session.xp) - n(prev.xp),
+        rankPoints: n(session.rankPoints) - n(prev.rankPoints)
       };
     } else if (baseline && baseline.id !== session.id && !session.is_baseline) {
       out[sid] = {
@@ -263,7 +275,7 @@ function renderPeriodSessions(sessions, gainsBySessionId) {
       <div class="session-header">
         <div class="session-date">📅 ${dateEsc}${baselineBadge ? ' • <span class="session-baseline-badge">' + baselineBadgeEsc + '</span>' : ''}</div>
         <div class="session-actions">
-          <button class="session-btn error" onclick="deleteSession(${attrSessionId(session.id)})" title="${delTitle}">🗑️</button>
+          ${session.id != null ? `<button class="session-btn error" onclick="deleteSession(${attrSessionId(session.id)})" title="${delTitle}">🗑️</button>` : ''}
         </div>
       </div>
       <div class="session-stats">
@@ -315,7 +327,7 @@ function renderPeriodSessions(sessions, gainsBySessionId) {
 function toggleHistoryPeriod(periodId) {
   const icon = document.getElementById(`period-icon-${periodId}`);
   const content = document.getElementById(`period-content-${periodId}`);
-  
+  if (!content || !icon) return;
   if (content.classList.contains('show')) {
     content.classList.remove('show');
     icon.textContent = '▶';

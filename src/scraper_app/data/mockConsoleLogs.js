@@ -123,17 +123,6 @@ const TECHNICAL_LOGS = [
   },
 ];
 
-export function getRandomLog(includeTechnical = true) {
-  const pool = includeTechnical
-    ? [...NORMAL_LOGS, ...TECHNICAL_LOGS]
-    : NORMAL_LOGS;
-  const entry =
-    pool[Math.floor(Math.random() * pool.length)] || NORMAL_LOGS[0];
-  return makeLog(entry.type, entry.msg, {
-    server: entry.server,
-    duration: entry.duration,
-  });
-}
 
 export const CONSOLE_COMMANDS_HELP = [
   'Commandes console (avec ou sans /) :',

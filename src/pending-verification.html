@@ -8,27 +8,43 @@
   <link rel="stylesheet" href="frontend/style.css">
   <link rel="stylesheet" href="frontend/legal.css">
   <style>
-    .auth-container { max-width: 520px; margin: 80px auto; padding: 32px; background: var(--bg-secondary); border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 8px 32px var(--shadow); }
-    .auth-header { text-align: center; margin-bottom: 24px; }
-    .auth-header h1 { font-size: 1.5rem; margin-bottom: 8px; }
-    .pending-message { color: var(--text-secondary); line-height: 1.6; margin-bottom: 24px; }
-    .auth-submit { width: 100%; padding: 14px; background: var(--accent); color: #fff; border: none; border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer; }
-    .auth-submit:hover { background: var(--accent-hover); }
+    .auth-container { max-width: 520px; margin: 80px auto; padding: 36px; background: var(--bg-secondary); border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 8px 32px var(--shadow); text-align: center; }
+    .pending-icon { font-size: 3rem; margin-bottom: 16px; animation: pend-pulse 2s ease-in-out infinite; }
+    @keyframes pend-pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+    .pending-title { font-size: 1.3rem; font-weight: 700; margin-bottom: 12px; }
+    .pending-email { display: inline-block; background: rgba(255,255,255,0.07); padding: 4px 12px; border-radius: 6px; font-size: 0.9rem; color: var(--accent); margin-bottom: 16px; word-break: break-all; }
+    .pending-message { color: var(--text-secondary); line-height: 1.7; margin-bottom: 8px; font-size: 0.95rem; }
+    .pending-delay { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 28px; }
+    .pending-status { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 20px; min-height: 20px; }
+    .pending-status.checking { color: var(--accent); }
+    .pending-status.approved { color: var(--success); }
+    .btn-primary { display: block; width: 100%; padding: 13px; background: var(--accent); color: #fff; border: none; border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer; margin-bottom: 10px; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-secondary { display: block; width: 100%; padding: 12px; background: transparent; color: var(--text-secondary); border: 1px solid var(--border); border-radius: 8px; font-size: 0.95rem; cursor: pointer; margin-bottom: 10px; }
+    .btn-secondary:hover { background: var(--bg-tertiary); }
+    .btn-logout { display: block; width: 100%; padding: 10px; background: transparent; color: var(--danger); border: 1px solid rgba(239,68,68,0.3); border-radius: 8px; font-size: 0.9rem; cursor: pointer; margin-top: 6px; }
+    .btn-logout:hover { background: rgba(239,68,68,0.08); }
+    .pending-divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
   </style>
 </head>
 <body>
 <button id="btnLegal" type="button" class="btn-legal-info" title="Informations légales" aria-label="Informations légales">ℹ️</button>
 <div class="auth-container">
-  <div class="auth-header">
-    <h1>🕐 Votre compte est en attente de vérification</h1>
-  </div>
+  <div class="pending-icon">🕐</div>
+  <div class="pending-title">Compte en attente de vérification</div>
+  <div id="pendingEmail" class="pending-email" style="display:none"></div>
   <p class="pending-message">
-    Notre équipe d'administration est en train de vérifier votre pseudo DarkOrbit.<br>
-    Vous recevrez un email dès que votre compte sera approuvé et vous pourrez alors accéder à l'application.<br>
-    Ce processus prend généralement moins de 24 heures.<br>
-    Merci de votre patience !
+    Notre équipe vérifie votre pseudo DarkOrbit.<br>
+    Vous serez automatiquement redirigé dès l'approbation.
   </p>
-  <button type="button" class="auth-submit" id="logoutBtn">Se déconnecter</button>
+  <p class="pending-delay">Ce processus prend généralement <strong>moins de 24 heures</strong>.</p>
+  <p class="pending-status" id="pendingStatus">Vérification en cours…</p>
+
+  <button type="button" class="btn-secondary" id="discordBtn" style="display:none">
+    💬 Contacter sur Discord
+  </button>
+  <hr class="pending-divider">
+  <button type="button" class="btn-logout" id="logoutBtn">Se déconnecter</button>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -42,16 +58,72 @@
 <script src="frontend/legal.js"></script>
 <script>
 (function() {
-  document.getElementById('logoutBtn').addEventListener('click', async function() {
-    await AuthManager.logout();
-    if (typeof electronAPI !== 'undefined' && electronAPI.navigateToAuth) {
-      electronAPI.navigateToAuth();
-    } else {
-      window.location.href = 'auth.html';
+  var POLL_INTERVAL_MS = 15000;
+  var pollTimer = null;
+  var statusEl = document.getElementById('pendingStatus');
+  var emailEl = document.getElementById('pendingEmail');
+
+  // Afficher l'email de l'utilisateur
+  async function showUserEmail() {
+    try {
+      var supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+      if (!supabase) return;
+      var res = await supabase.auth.getUser();
+      var email = res && res.data && res.data.user && res.data.user.email;
+      if (email && emailEl) { emailEl.textContent = email; emailEl.style.display = 'inline-block'; }
+    } catch (e) {}
+  }
+
+  // Polling : vérifie si le compte est approuvé
+  async function checkApproval() {
+    try {
+      var supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+      if (!supabase) return;
+      var userRes = await supabase.auth.getUser();
+      var user = userRes && userRes.data && userRes.data.user;
+      if (!user) return;
+      var profileRes = await supabase.from('profiles').select('status').eq('id', user.id).single();
+      if (profileRes.error || !profileRes.data) return;
+      var status = profileRes.data.status;
+      if (status === 'active') {
+        if (statusEl) { statusEl.className = 'pending-status approved'; statusEl.textContent = '✅ Compte approuvé ! Redirection…'; }
+        if (pollTimer) clearInterval(pollTimer);
+        setTimeout(function() { window.location.href = 'index.html'; }, 1500);
+      } else if (status === 'rejected') {
+        if (statusEl) { statusEl.className = 'pending-status'; statusEl.textContent = '❌ Compte refusé. Contactez l\'administrateur.'; }
+        if (pollTimer) clearInterval(pollTimer);
+      } else {
+        if (statusEl) { statusEl.className = 'pending-status checking'; statusEl.textContent = 'En attente d\'approbation… (dernière vérif. ' + new Date().toLocaleTimeString() + ')'; }
+      }
+    } catch (e) {}
+  }
+
+  // Discord button (visible si config disponible)
+  var discordBtn = document.getElementById('discordBtn');
+  try {
+    var discordUrl = window.APP_KEYS && window.APP_KEYS.DISCORD_URL;
+    if (discordUrl && discordBtn) {
+      discordBtn.style.display = 'block';
+      discordBtn.addEventListener('click', function() {
+        if (typeof window.electronAPI !== 'undefined' && window.electronAPI.openExternal) window.electronAPI.openExternal(discordUrl);
+        else window.open(discordUrl, '_blank');
+      });
     }
+  } catch (e) {}
+
+  document.getElementById('logoutBtn').addEventListener('click', async function() {
+    if (pollTimer) clearInterval(pollTimer);
+    await AuthManager.logout();
+    if (typeof electronAPI !== 'undefined' && electronAPI.navigateToAuth) electronAPI.navigateToAuth();
+    else window.location.href = 'auth.html';
   });
+
+  showUserEmail();
+  checkApproval();
+  pollTimer = setInterval(checkApproval, POLL_INTERVAL_MS);
 })();
 </script>
+
 <div id="modalLegal" class="modal-legal hidden">
   <div class="modal-legal-overlay"></div>
   <div class="modal-legal-container">

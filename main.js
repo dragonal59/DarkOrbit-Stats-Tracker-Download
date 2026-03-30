@@ -736,6 +736,22 @@ function setupScraper() {
     ScraperBridge.setUserContext(userId, accessToken);
   });
 
+  /** Renderer → fenêtre scraper : même format que sendLog dans do-events:scrape (dostats:log). */
+  ipcMain.on('renderer:scraper-log', (_e, data) => {
+    try {
+      if (scraperWindow && !scraperWindow.isDestroyed()) {
+        scraperWindow.webContents.send('dostats:log', {
+          type: (data && data.type) || 'info',
+          message: (data && data.message) || '',
+          at: (data && data.at) || new Date().toISOString(),
+          server: data && data.server != null ? data.server : null
+        });
+      }
+    } catch (e) {
+      console.warn('[Main] renderer:scraper-log', e?.message);
+    }
+  });
+
   ipcMain.on('fresh-token-response', (_, { userId, accessToken }) => {
     if (userId && accessToken) {
       ScraperBridge.setUserContext(userId, accessToken);
@@ -1567,6 +1583,19 @@ async function pushDostatsServerToSupabase({ logWin, server, combos }) {
     if (fullErr) throw new Error('upsert_player_full: ' + (fullErr?.message || fullErr));
     sendDostatsSupabaseLog(logWin, serverNorm, 'success',
       `upsert_player_full OK — ${p_players.length} joueurs.`);
+
+    // Snapshots RP : save top_user (points de grade) pour calcul delta 24h/7j côté SUIVI JOUEURS.
+    // DOStats ne fournit pas de classement top_user par période — on calcule depuis les snapshots.
+    try {
+      const rpSnaps = p_players
+        .filter(function(p) { return p.top_user != null && p.user_id; })
+        .map(function(p) { return { user_id: String(p.user_id), rank_points: Number(p.top_user) }; });
+      if (rpSnaps.length > 0) {
+        await supabase.rpc('insert_rp_snapshots', { p_server: serverNorm, p_snapshots: rpSnaps });
+      }
+    } catch (rpErr) {
+      console.warn('[Main] insert_rp_snapshots:', rpErr?.message || rpErr);
+    }
   } catch (e) {
     sendDostatsSupabaseLog(logWin, serverNorm, 'error', 'DOStats → Supabase push error: ' + (e?.message || e));
   }
@@ -1968,7 +1997,13 @@ app.on('ready', async () => {
 
   ipcMain.handle('scheduler:getConfig', () => loadSchedulerConfig());
   ipcMain.handle('scheduler:saveConfig', (_, config) => {
-    if (!config || !Array.isArray(config.slots) || config.slots.length < 1) return { ok: false, error: 'Au moins 1 créneau requis' };
+    if (!config || !Array.isArray(config.slots)) return { ok: false, error: 'Config invalide' };
+    // slots vide = désactiver le scheduler
+    if (config.slots.length === 0) {
+      if (!saveSchedulerConfig({ slots: [] })) return { ok: false, error: 'Erreur écriture fichier' };
+      setupScheduler();
+      return { ok: true };
+    }
     const seen = {};
     const normalized = { slots: config.slots.map((s) => {
       if (!s.time || !/^\d{1,2}:\d{2}$/.test(s.time)) return null;
@@ -1981,7 +2016,6 @@ app.on('ready', async () => {
       if (scrapers.length === 0) return null;
       return { time: norm, scrapers };
     }).filter(Boolean) };
-    if (normalized.slots.length < 1) return { ok: false, error: 'Au moins 1 créneau valide requis' };
     if (!saveSchedulerConfig(normalized)) return { ok: false, error: 'Erreur écriture fichier' };
     setupScheduler();
     return { ok: true };
@@ -2314,44 +2348,27 @@ app.on('ready', async () => {
   });
 
   const { pathToFileURL } = require('url');
-  const EVENTS_DB_FILES = [
-    'agatus_breach.json',
-    'apocalypse_box_refresh.json',
-    'ascend.json',
-    'battle_pass.json',
-    'bk_+_ld_sale.json',
-    'bonus_rewards_gate.json',
-    'chromin_rush.json',
-    'chinese_new_year.json',
-    'deep_space_echoes.json',
-    'discord.json',
-    'dispatch_day.json',
-    'enhanced_lf4_day.json',
-    'galaxy_gate_weekend.json',
-    'galaxy_gates_double_reward.json',
-    'galaxy_gates_special_rewards_day.json',
-    'galaxy_trek.json',
-    'helix_blitz_sale.json',
-    'honor_day.json',
-    'immortal_union.json',
-    'instagram.json',
-    'mimesis_mutiny.json',
-    'monthly_deluxe_calendar.json',
-    'new_dawn.json',
-    'obsidian_box_refresh.json',
-    'odysseus_laser.json',
-    'r&b_box_refresh.json',
-    'season_pass_waning_crescent.json',
-    'stellar_pathfinder_bundles.json',
-    'super_booster_pack_dmg_shd_hp.json',
-    'super_subscription.json',
-    'empyrian_march.json',
-    'unstable_modules_salvage.json',
-    'trinity_trials.json',
-    'uridium_bank.json',
-    'vortex_of_greed.json',
-    'xp_day.json',
-  ];
+  function listMultillinguesEventJsonFiles() {
+    try {
+      const baseDir = getSrcPath('multillingues_events');
+      if (!fs.existsSync(baseDir)) return [];
+      return fs.readdirSync(baseDir)
+        .filter(function (name) {
+          return /\.json$/i.test(name) && name.toLowerCase() !== 'manifest.json';
+        })
+        .sort(function (a, b) { return a.localeCompare(b, 'en'); });
+    } catch (e) {
+      console.warn('[Main] listMultillinguesEventJsonFiles:', e?.message || e);
+      return [];
+    }
+  }
+  ipcMain.handle('events:list-multillingues-json', () => {
+    try {
+      return { ok: true, files: listMultillinguesEventJsonFiles() };
+    } catch (e) {
+      return { ok: false, files: [], error: e.message };
+    }
+  });
   ipcMain.handle('do-events:get-definitions', () => {
     try {
       const baseDir = getSrcPath('multillingues_events');
@@ -2359,7 +2376,7 @@ app.on('ready', async () => {
       let baseUrlForImages = pathToFileURL(path.join(srcDir)).href;
     if (!baseUrlForImages.endsWith('/')) baseUrlForImages += '/';
       const definitions = [];
-      for (const filename of EVENTS_DB_FILES) {
+      for (const filename of listMultillinguesEventJsonFiles()) {
         const filePath = path.join(baseDir, filename);
         if (!fs.existsSync(filePath)) continue;
         try {
@@ -2374,7 +2391,7 @@ app.on('ready', async () => {
               image: data.image || '',
             });
           }
-        } catch (_) {}
+        } catch (parseErr) { console.warn('[Main] do-events:get-definitions — JSON invalide dans', filename, ':', parseErr?.message); }
       }
       return { ok: true, baseUrlForImages, definitions };
     } catch (e) {
@@ -2416,9 +2433,72 @@ app.on('ready', async () => {
       const events = Array.isArray(data?.events) ? data.events : [];
       return { ok: true, events };
     } catch (e) {
-      console.warn('[Main] scraper-app:load-do-events:', e?.message || e);
+      console.warn('[Main] scraper-app:load-do-events — cache corrompu, réinitialisation:', e?.message || e);
+      try { fs.unlinkSync(DO_EVENTS_CACHE_PATH); } catch (_) {}
       return { ok: true, events: [] };
     }
+  });
+
+  ipcMain.handle('scraper-app:test-webhook', async (_, { url, type }) => {
+    const https = require('https');
+    const http = require('http');
+    if (!url || typeof url !== 'string') return { ok: false, error: 'URL manquante' };
+    let parsed;
+    try { parsed = new URL(url); } catch (_) { return { ok: false, error: 'URL invalide' }; }
+    const isDiscord = type === 'discord';
+    const body = JSON.stringify(
+      isDiscord
+        ? { content: '🔔 Test de connexion depuis **DarkOrbit Tracker**' }
+        : { test: true, source: 'DarkOrbit Tracker', timestamp: new Date().toISOString() }
+    );
+    return new Promise((resolve) => {
+      const lib = parsed.protocol === 'https:' ? https : http;
+      const req = lib.request(
+        { hostname: parsed.hostname, port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80), path: parsed.pathname + (parsed.search || ''), method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }, timeout: 8000 },
+        (res) => {
+          res.resume();
+          const ok = res.statusCode >= 200 && res.statusCode < 300;
+          resolve({ ok, statusCode: res.statusCode });
+        }
+      );
+      req.on('timeout', () => { req.destroy(); resolve({ ok: false, error: 'Timeout' }); });
+      req.on('error', (e) => resolve({ ok: false, error: e.message || 'Erreur réseau' }));
+      req.write(body);
+      req.end();
+    });
+  });
+
+  ipcMain.handle('scraper-app:test-proxy', async (_, { host, port, username, password, testUrl }) => {
+    const http = require('http');
+    const target = (() => { try { return new URL(testUrl || 'https://dostats.info'); } catch (_) { return new URL('https://dostats.info'); } })();
+    const targetHost = target.hostname;
+    const targetPort = target.protocol === 'https:' ? 443 : 80;
+    return new Promise((resolve) => {
+      const start = Date.now();
+      const TIMEOUT = 8000;
+      const req = http.request({
+        host: String(host || ''),
+        port: parseInt(port, 10) || 8080,
+        method: 'CONNECT',
+        path: `${targetHost}:${targetPort}`,
+        timeout: TIMEOUT,
+        headers: {
+          'Proxy-Connection': 'keep-alive',
+          ...(username && password
+            ? { 'Proxy-Authorization': 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64') }
+            : {}),
+        },
+      });
+      const tid = setTimeout(() => { try { req.destroy(); } catch (_) {} resolve({ ok: false, error: 'Timeout', latency: null }); }, TIMEOUT);
+      req.on('connect', (res, socket) => {
+        clearTimeout(tid);
+        try { socket.destroy(); } catch (_) {}
+        if (res.statusCode !== 200) return resolve({ ok: false, error: `CONNECT ${res.statusCode}`, latency: null });
+        resolve({ ok: true, latency: Date.now() - start });
+      });
+      req.on('error', (e) => { clearTimeout(tid); resolve({ ok: false, error: e.message || 'Erreur connexion', latency: null }); });
+      req.end();
+    });
   });
 
   ipcMain.handle('scraper-app:load-settings', () => {
@@ -2568,6 +2648,14 @@ app.on('ready', async () => {
       console.warn('[Main] scraper-app:save-planning-extra:', e?.message || e);
       return { ok: false, error: e?.message || 'Erreur écriture' };
     }
+  });
+
+  ipcMain.handle('scraper-app:pick-directory', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Sélectionner un dossier',
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    return result.canceled ? null : (result.filePaths[0] || null);
   });
 
   try {

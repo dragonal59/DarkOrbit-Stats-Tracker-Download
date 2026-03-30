@@ -85,7 +85,8 @@ export function useLiveLogs() {
         ...prev,
       ].slice(0, 50));
     };
-    window.electronDostatsScraper.onLog(handler);
+    const unsub = window.electronDostatsScraper.onLog(handler);
+    return () => unsub?.();
   }, []);
 
   const clearLogs = () => setLogs([]);

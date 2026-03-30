@@ -2,6 +2,7 @@
   "id": "dispatch_day",
   "visible": true,
   "image": "img/events/dispatch_day.jpg",
+  "image_urls": ["breaking_news_dispatchday"],
   "names": {
     "fr": "Jour de l'expédition",
     "en": "Dispatch Day",

@@ -2,6 +2,7 @@
   "id": "obsidian_box_refresh",
   "visible": true,
   "image": "img/events/obsidian_box_refresh.jpg",
+  "image_urls": ["bbox_obsidian"],
   "names": {
     "fr": "Actualisation de la boîte d'obsidienne",
     "en": "Obsidian Box Refresh",
@@ -18,5 +19,5 @@
     "ru": "Мы добавили новый дизайн корабля Blaze Goliath Plus! Создавайте или покупайте наборы ключей, чтобы получить шанс на эпические дизайны кораблей в Обсидиановых ящиках!",
     "tr": "Yeni Blaze Goliath Plus Gemi Tasarımını ekledik! Obsidyen Kutularında destansı gemi tasarımları elde etmek için anahtar paketleri üretin veya satın alın!"
   },
-  "keywords": ["obsidian box refresh", "actualisation boîte obsidienne", "obsidian-box-aktualisierung", "actualización caja obsidiana","actualización de caja de obsidiana", "обновление обсидианового ящика", "obsidyen kutu yenilemesi", "obsidian box", "blaze goliath plus", "ship design", "design vaisseau", "keys", "clés", "craft"],"exclude_keywords":["apocalypse","apokalypse","r&b","r and b","caja del apocalipsis"]
+  "keywords": ["obsidian box refresh", "actualisation boîte obsidienne", "obsidian-box-aktualisierung", "actualización caja obsidiana","actualización de caja de obsidiana", "обновление обсидианового ящика", "obsidyen kutu yenilemesi", "obsidian box", "blaze goliath plus", "ship design", "design vaisseau"],"exclude_keywords":["apocalypse","apokalypse","r&b","r and b","caja del apocalipsis"]
 }

@@ -141,8 +141,11 @@ export function SectionNotifications({ settings, patch }) {
                     }
                   />
                   <TestButton
-                  label="Tester"
-                  onTest={async () => false}
+                    label="Tester"
+                    onTest={async () => {
+                      const res = await (window.electronAPI?.testWebhook?.(n.webhookUrl, 'http') ?? Promise.resolve({ ok: false }));
+                      return !!res?.ok;
+                    }}
                   />
                 </div>
               </div>
@@ -250,7 +253,10 @@ export function SectionNotifications({ settings, patch }) {
                 />
                 <TestButton
                   label="Tester"
-                  onTest={async () => false}
+                  onTest={async () => {
+                    const res = await (window.electronAPI?.testWebhook?.(n.discordWebhookUrl, 'discord') ?? Promise.resolve({ ok: false }));
+                    return !!res?.ok;
+                  }}
                 />
               </div>
             </motion.div>

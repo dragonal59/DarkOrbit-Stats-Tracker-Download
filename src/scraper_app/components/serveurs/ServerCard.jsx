@@ -85,16 +85,6 @@ export function ServerCard({
     }
   }, [server.code]);
 
-  const handleToggleScrapeProfiles = () => {
-    if (!serverEnabled) return;
-    const next = !scrapeProfiles;
-    setScrapeProfiles(next);
-    if (typeof window.electronAPI?.setServerScrapeConfig === 'function') {
-      window.electronAPI.setServerScrapeConfig(server.code, { scrapeProfiles: next }).catch(() => {});
-    } else if (typeof window.electronAPI?.setScrapeProfilesPreference === 'function') {
-      window.electronAPI.setScrapeProfilesPreference(server.code, next).catch(() => {});
-    }
-  };
 
   const successPct =
     server.totalCount > 0
@@ -141,26 +131,6 @@ export function ServerCard({
               transition={{ duration: 0.15 }}
               onClick={(e) => e.stopPropagation()}
             >
-              <button
-                className="card-action-btn"
-                title="Scraper les profils joueurs"
-                onClick={handleToggleScrapeProfiles}
-              >
-                <span
-                  style={{
-                    display: 'inline-block',
-                    width: 10,
-                    height: 10,
-                    borderRadius: 999,
-                    backgroundColor: scrapeProfiles
-                      ? 'var(--accent-emerald)'
-                      : 'var(--accent-rose)',
-                    boxShadow: scrapeProfiles
-                      ? '0 0 6px var(--accent-emerald)'
-                      : '0 0 6px var(--accent-rose)',
-                  }}
-                />
-              </button>
               <button
                 className="card-action-btn"
                 title="Lancer le scrape (classements / profils)"

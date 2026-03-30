@@ -43,6 +43,7 @@ var _allTimeRankingCache = {
 // Cache classements 24h par serveur pour le delta « joueur suivi 24h » dans la sidebar
 // Structure : { [serverCode]: { honor: rows[], xp: rows[], rank_points: rows[] } }
 var _last24hByServer = {};
+var _rpDeltaByServer = {}; // { srv: { userId: deltaRp, _readyRp: true } }
 
 // Même liste que formulaire d'inscription (config.js SERVERS_LIST), avec "Tous les serveurs" en premier
 const RANKING_SERVERS = typeof SERVERS_LIST !== 'undefined' && Array.isArray(SERVERS_LIST) ? ['Tous les serveurs', ...SERVERS_LIST] : ['Tous les serveurs'];
@@ -509,9 +510,10 @@ function initRankingTab() {
           filters,
           count: _lastRankingData.length
         });
-        // FIX 1 + FIX 3 — même enrichissement que renderRanking si le chargement ne repasse pas par render (sécurité)
+        // FIX 1 + FIX 3 — même enrichissement que renderRanking, uniquement en vue "Aujourd'hui".
         try {
-          if (typeof isPlayerFollowed === 'function') {
+          var _isPeriodFiltered2 = !!(filters && filters.period);
+          if (!_isPeriodFiltered2 && typeof isPlayerFollowed === 'function') {
             for (var _fj = 0; _fj < _lastRankingData.length; _fj++) {
               if (isPlayerFollowed(_lastRankingData[_fj])) _mergePersistedFollowedStatsFromRow(_lastRankingData[_fj]);
             }
@@ -836,9 +838,11 @@ function renderRanking(data, sortType) {
       highlightActiveUserRow(tbody, token);
     });
   });
-  // FIX 1 + FIX 3 — cache persistant : chaque ligne du classement correspondant à un suivi enrichit le stockage
+  // FIX 1 + FIX 3 — cache persistant : enrichit uniquement en vue "Aujourd'hui" (pas de filtre période).
+  // En vue filtrée (7j/30j/24h), data.honor/xp/rank_points sont des deltas, pas des totaux absolus.
   try {
-    if (Array.isArray(data) && typeof isPlayerFollowed === 'function') {
+    var _isPeriodFiltered = !!((_lastRankingFilters && _lastRankingFilters.period));
+    if (!_isPeriodFiltered && Array.isArray(data) && typeof isPlayerFollowed === 'function') {
       for (var _fri = 0; _fri < data.length; _fri++) {
         if (isPlayerFollowed(data[_fri])) _mergePersistedFollowedStatsFromRow(data[_fri]);
       }
@@ -1021,6 +1025,11 @@ function addFollowedPlayer(row) {
   try {
     _mergePersistedFollowedStatsFromRow(row);
   } catch (_e) {}
+  // Invalider le cache RP du serveur pour forcer un rechargement des deltas
+  var _entrySrv = entry.server || entry._server || '';
+  if (_entrySrv && _rpDeltaByServer[_entrySrv]) {
+    delete _rpDeltaByServer[_entrySrv];
+  }
 }
 
 function removeFollowedPlayer(userId, server) {
@@ -1404,7 +1413,16 @@ function _getFollowedPlayer24hDelta(server, pseudo, userId) {
   var rpDelta = null;
   if (rowR && rowR.rank_points != null) {
     rpDelta = Number(rowR.rank_points);
-  } else if (honorDelta != null || xpDelta != null) {
+  }
+  // Snapshot-based RP delta (source fiable — DOStats n'a pas de classement top_user par période)
+  if (rpDelta == null && uid) {
+    var rpMap = _rpDeltaByServer[srv];
+    if (rpMap && rpMap[uid] != null && Number.isFinite(Number(rpMap[uid]))) {
+      rpDelta = Number(rpMap[uid]);
+    }
+  }
+  // Dernier recours : estimation approximative depuis honneur/XP 24h
+  if (rpDelta == null && (honorDelta != null || xpDelta != null)) {
     var h = Number.isFinite(Number(honorDelta)) ? Number(honorDelta) : 0;
     var x = Number.isFinite(Number(xpDelta)) ? Number(xpDelta) : 0;
     rpDelta = Math.round((h / 100) + (x / 100000));
@@ -1445,6 +1463,45 @@ function _ensure24hDataForServer(server, onDone) {
   }).catch(function () {
     if (typeof onDone === 'function') onDone(false);
   });
+}
+
+/**
+ * Charge les deltas RP (points de grade) depuis les snapshots Supabase pour les joueurs suivis
+ * sur un serveur donné. DOStats ne fournit pas de classement top_user par période —
+ * on compare deux snapshots : le plus récent et celui d'il y a ~24h.
+ */
+function _ensureRpDeltasForServer(server, followedList, onDone) {
+  var srv = (server || '').toString().toLowerCase().trim();
+  if (!srv || typeof getSupabaseClient !== 'function') {
+    if (typeof onDone === 'function') onDone(false);
+    return;
+  }
+  if (_rpDeltaByServer[srv] && _rpDeltaByServer[srv]._readyRp) {
+    if (typeof onDone === 'function') onDone(false);
+    return;
+  }
+  var supabase = getSupabaseClient();
+  if (!supabase) { if (typeof onDone === 'function') onDone(false); return; }
+  var userIds = (followedList || []).map(function(p) {
+    return String(p.userId || p.user_id || '').trim();
+  }).filter(Boolean);
+  if (!userIds.length) { if (typeof onDone === 'function') onDone(false); return; }
+  var hadBefore = !!_rpDeltaByServer[srv];
+  supabase.rpc('get_rp_deltas', { p_server: srv, p_user_ids: userIds, p_hours: 24 })
+    .then(function(res) {
+      if (!res.error && Array.isArray(res.data) && res.data.length > 0) {
+        var map = { _readyRp: true };
+        res.data.forEach(function(row) {
+          if (row.user_id && row.delta != null) map[row.user_id] = Number(row.delta);
+        });
+        _rpDeltaByServer[srv] = map;
+        if (typeof onDone === 'function') onDone(!hadBefore);
+      } else {
+        _rpDeltaByServer[srv] = { _readyRp: true };
+        if (typeof onDone === 'function') onDone(false);
+      }
+    })
+    .catch(function() { if (typeof onDone === 'function') onDone(false); });
 }
 
 /**
@@ -1697,22 +1754,18 @@ function renderFollowedPlayersSidebar() {
           '<button type="button" class="watched-player-remove" title="' + escapeHtml(unfollowText) + '">×</button>' +
         '</div>' +
         '<div class="watched-player-separator"></div>' +
-        (comparisonDeltasHtml
-          ? '<div class="watched-player-stats-grid watched-player-stats-grid-with-labels">' +
-              '<div class="watched-player-stat-group">' + honorLine + '</div>' +
-              '<div class="watched-player-stat-group">' + xpLine + '</div>' +
-              '<div class="watched-player-stat-group">' + gradeLine + '</div>' +
-              '<div class="watched-player-row-label watched-player-row-label-empty"></div>' +
-              comparisonDeltasHtml +
-              '<span class="watched-player-row-info-icon" data-tooltip="Différence de points entre vous et ' + escapeHtml(pseudo) + '" aria-label="Info">ℹ</span>' +
-              row24hHtml +
-              '<span class="watched-player-row-info-icon" data-tooltip="Points réalisés par ' + escapeHtml(pseudo) + ' sur les dernières 24 heures" aria-label="Info">ℹ</span>' +
-            '</div>'
-          : '<div class="watched-player-stats">' +
-              '<div class="watched-player-stat-group">' + honorLine + '</div>' +
-              '<div class="watched-player-stat-group">' + xpLine + '</div>' +
-              '<div class="watched-player-stat-group">' + gradeLine + '</div>' +
-            '</div>') +
+        '<div class="watched-player-stats-grid watched-player-stats-grid-with-labels">' +
+          '<div class="watched-player-stat-group">' + honorLine + '</div>' +
+          '<div class="watched-player-stat-group">' + xpLine + '</div>' +
+          '<div class="watched-player-stat-group">' + gradeLine + '</div>' +
+          '<div class="watched-player-row-label watched-player-row-label-empty"></div>' +
+          (comparisonDeltasHtml
+            ? comparisonDeltasHtml +
+              '<span class="watched-player-row-info-icon" data-tooltip="Différence de points entre vous et ' + escapeHtml(pseudo) + '" aria-label="Info">ℹ</span>'
+            : '') +
+          row24hHtml +
+          '<span class="watched-player-row-info-icon" data-tooltip="Points réalisés par ' + escapeHtml(pseudo) + ' sur les dernières 24 heures" aria-label="Info">ℹ</span>' +
+        '</div>' +
       '</div>'
     );
   }).join('');
@@ -1727,7 +1780,13 @@ function renderFollowedPlayersSidebar() {
     if (s && servers.indexOf(s) === -1) servers.push(s);
   });
   servers.forEach(function (srv) {
+    var followedOnSrv = list.filter(function(p) {
+      return (p.server || p._server || '').toString().toLowerCase().trim() === srv;
+    });
     _ensure24hDataForServer(srv, function (shouldRerender) {
+      if (shouldRerender && typeof renderFollowedPlayersSidebar === 'function') renderFollowedPlayersSidebar();
+    });
+    _ensureRpDeltasForServer(srv, followedOnSrv, function (shouldRerender) {
       if (shouldRerender && typeof renderFollowedPlayersSidebar === 'function') renderFollowedPlayersSidebar();
     });
   });
@@ -2314,6 +2373,15 @@ function showPlayerDetails(row) {
         dostats_updated_at: pp.dostats_updated_at || row.dostats_updated_at
       });
       renderDostatsSection(mergedRow);
+
+      // Propagation des stats absolues (player_profiles) dans row pour que "Suivre ce joueur"
+      // enregistre toujours les totaux, peu importe le filtre de période actif.
+      if (pp.honor != null) row.honor = Number(pp.honor);
+      if (pp.experience != null) row.xp = Number(pp.experience);
+      if (pp.top_user != null) row.rank_points = Number(pp.top_user);
+      if (pp.estimated_rp != null) row.estimated_rp = Number(pp.estimated_rp);
+      if (pp.level != null) row.level = Number(pp.level);
+      if (pp.company != null) row.company = String(pp.company);
 
       // Propagation du grade mis à jour dans les données en mémoire pour harmoniser tableau et popup.
       var normalizedRank2 = (rawRank2 && String(rawRank2).trim()) || null;

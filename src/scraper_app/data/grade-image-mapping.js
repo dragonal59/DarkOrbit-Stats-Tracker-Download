@@ -32,7 +32,7 @@ const RANK_KEYS = new Set(Object.values(LEVEL_TO_RANK));
  * @param {number|string} grade - Level 1–21 or rank key (e.g. 'major')
  * @returns {string|null} - Filename without path, e.g. 'major.png', or null if unmapped
  */
-export function getGradeImageFilename(grade) {
+function getGradeImageFilename(grade) {
   if (grade == null) return null;
   const key = typeof grade === 'number' || (typeof grade === 'string' && /^\d+$/.test(grade))
     ? LEVEL_TO_RANK[Number(grade)]

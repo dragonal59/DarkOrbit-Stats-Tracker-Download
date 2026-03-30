@@ -22,7 +22,11 @@
       trial_expires_at: null,
       updated_at: new Date().toISOString()
     }).eq('id', userId);
-    if (!error && typeof BackendAPI !== 'undefined') BackendAPI.invalidateProfileCache();
+    if (error) {
+      if (typeof Logger !== 'undefined' && Logger.warn) Logger.warn('[SubscriptionCheck] expireTrialAndRedirect DB error:', error?.message || error);
+      return;
+    }
+    if (typeof BackendAPI !== 'undefined') BackendAPI.invalidateProfileCache();
     goToSubscription();
   }
 

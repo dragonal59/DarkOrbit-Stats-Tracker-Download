@@ -17,6 +17,7 @@ const path = require('path');
 const fs = require('fs');
 const { readMergedSupabaseConfigFromDisk } = require('./supabase-config-from-disk');
 const { applyScraperSessionProxyPolicy } = require('./scraper-app-settings');
+const { JS_EXTRACT_EVENTS } = require('./extract-events');
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -342,42 +343,6 @@ function jsExtractRanking(rankKey, valueKey, page) {
   })()`;
 }
 
-const JS_EXTRACT_EVENTS = `(function(){
-  function getText(el){ return el ? (el.textContent || '').trim() : ''; }
-  function getBg(el){
-    if (!el) return '';
-    var s = el.getAttribute('style') || el.style.cssText || '';
-    var m = s.match(/background-image:\\s*url\\s*\\(\\s*['"]?([^'"\\)\\s]+)/);
-    return m ? m[1].trim() : '';
-  }
-  try {
-    var container = document.querySelector('.news-base-container');
-    if (!container) return { ok: false, events: [] };
-    var layers = container.querySelectorAll('.breaking-news-layer');
-    if (!layers.length) {
-      var any = container.querySelectorAll('[class*="breaking"],[class*="news-layer"],.news-item');
-      layers = any.length ? any : [container];
-    }
-    var scrapedAt = new Date().toISOString();
-    var out = [];
-    Array.from(layers).forEach(function(el, i){
-      var nameEl  = el.querySelector('.be-style-bold_full_content,.be-style-headline,[class*="headline"],h2,h3,.title');
-      var descEl  = el.querySelector('.be-style-default,[class*="default"],.description,.desc');
-      var timerEl = el.querySelector('.news-countdown,[class*="countdown"]');
-      var name        = getText(nameEl);
-      var description = getText(descEl);
-      var timer       = timerEl ? getText(timerEl) : '';
-      var imageUrl    = getBg(el);
-      if (!imageUrl){ var img = el.querySelector('img'); if (img) imageUrl = img.getAttribute('src') || ''; }
-      var id = el.getAttribute('id') || ('event-' + i);
-      if (name || description || timer || imageUrl) {
-        out.push({ id: id, name: name, description: description, timer: timer, imageUrl: imageUrl, scrapedAt: scrapedAt });
-      }
-    });
-    return { ok: true, events: out };
-  } catch(e) { return { ok: false, events: [], error: e.message }; }
-})()`;
-
 // ─── Fusion des classements (identique à l'extension) ────────────────────────
 
 function mergeRankings(honorP1, honorP2, xpP1, xpP2, topUserP1, topUserP2) {
@@ -675,8 +640,28 @@ async function scrapeOneServer(serverId, serverName, username, password, isFirst
       await delay(DELAY.afterLogin.min, DELAY.afterLogin.max);
       const evRes = await exec(JS_EXTRACT_EVENTS);
       if (evRes?.ok && evRes.events?.length > 0) {
-        await saveEventsToSupabase(evRes.events);
-        console.log(`[SessionScraper] ${serverId} : ${evRes.events.length} événements sauvegardés`);
+        const nowMs = Date.now();
+        const events = (evRes.events || []).map(ev => ({
+          id: ev.id || '',
+          name: (ev.name || '').trim(),
+          description: (ev.description || '').trim(),
+          timer: (ev.timer || '').trim(),
+          imageUrl: (ev.imageUrl || '').trim(),
+          scrapedAt: ev.scrapedAt || new Date().toISOString(),
+          endTimestamp: ev.endTimestamp != null ? ev.endTimestamp : null
+        })).filter(ev => {
+          const m = (ev.timer || '').match(/(\d+):(\d+):(\d+)/);
+          if (!m) return true;
+          const h = parseInt(m[1], 10) || 0, mn = parseInt(m[2], 10) || 0, s = parseInt(m[3], 10) || 0;
+          const scrapedAt = ev.scrapedAt ? new Date(ev.scrapedAt).getTime() : nowMs;
+          return scrapedAt + (h * 3600 + mn * 60 + s) * 1000 > nowMs;
+        });
+        if (events.length === 0) {
+          console.log(`[SessionScraper] ${serverId} : aucun événement actif après filtrage`);
+        } else {
+          await saveEventsToSupabase(events);
+          console.log(`[SessionScraper] ${serverId} : ${events.length} événements sauvegardés`);
+        }
       }
     } catch (e) {
       console.warn('[SessionScraper] scrape events:', e?.message);

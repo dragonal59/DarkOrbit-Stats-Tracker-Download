@@ -369,20 +369,11 @@ export function SectionProxies({
                 onDelete={() => deleteProxy(proxy.id)}
                 onTest={async () => {
                   updateProxy(proxy.id, { status: 'testing' });
-                  await new Promise((r) =>
-                    setTimeout(
-                      r,
-                      800 + Math.random() * 1000,
-                    ),
-                  );
-                  const ok = Math.random() > 0.2;
+                  const testUrl = p.testUrl || 'https://dostats.info';
+                  const result = await (window.electronAPI?.testProxy?.(proxy, testUrl) ?? Promise.resolve({ ok: false, error: 'IPC indisponible', latency: null }));
                   updateProxy(proxy.id, {
-                    status: ok ? 'ok' : 'error',
-                    latency: ok
-                      ? Math.floor(
-                          200 + Math.random() * 600,
-                        )
-                      : null,
+                    status: result.ok ? 'ok' : 'error',
+                    latency: result.ok ? result.latency : null,
                   });
                 }}
               />

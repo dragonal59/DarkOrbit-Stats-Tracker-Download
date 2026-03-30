@@ -2,6 +2,7 @@
   "id": "season_pass_waning_crescent",
   "visible": true,
   "image": "img/events/season_pass_waning_crescent.jpg",
+  "image_urls": ["breaking_news_seasonpass"],
   "names": {
     "fr": "Pass de Saison : Dernier Croissant",
     "en": "Season Pass: Waning Crescent",

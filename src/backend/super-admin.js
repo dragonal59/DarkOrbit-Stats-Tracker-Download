@@ -1105,15 +1105,31 @@ function initSuperAdmin() {
     for (let i = 0; i < 16; i++) s += chars.charAt(Math.floor(Math.random() * chars.length));
     return s.match(/.{1,4}/g).join('-');
   }
+  /** Valeurs INTERVAL PostgreSQL pour license_keys.expires_after_activation (NULL = permanent). */
+  const EXPIRES_AFTER_ACTIVATION_MAP = {
+    '1d': '1 day',
+    '3d': '3 days',
+    '1w': '7 days',
+    '2w': '14 days',
+    '1m': '30 days',
+    indefinite: null
+  };
+
   document.getElementById('superAdminKeysGenerateBtn')?.addEventListener('click', async () => {
     const badgeSelect = document.getElementById('superAdminKeysBadge');
     const qtyInput = document.getElementById('superAdminKeysQuantity');
+    const expiresSelect = document.getElementById('superAdminKeysExpiresIn');
     const resultDiv = document.getElementById('superAdminKeysResult');
     const outputEl = document.getElementById('superAdminKeysOutput');
     if (!badgeSelect || !qtyInput || !resultDiv || !outputEl) return;
     const badge = badgeSelect.value || 'PRO';
     let qty = parseInt(qtyInput.value, 10) || 5;
     qty = Math.max(1, Math.min(100, qty));
+    const expiresIn = expiresSelect?.value || 'indefinite';
+    const expiresAfterActivation =
+      Object.prototype.hasOwnProperty.call(EXPIRES_AFTER_ACTIVATION_MAP, expiresIn)
+        ? EXPIRES_AFTER_ACTIVATION_MAP[expiresIn]
+        : null;
     const supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
     if (!supabase) {
       if (typeof showToast === 'function') showToast('Supabase non disponible.', 'error');
@@ -1123,22 +1139,47 @@ function initSuperAdmin() {
     const seen = new Set();
     for (let i = 0; i < qty; i++) {
       let k;
-      do { k = generateRandomKey(); } while (seen.has(k));
+      do {
+        k = generateRandomKey();
+      } while (seen.has(k));
       seen.add(k);
-      keys.push({ key: k, badge });
+      keys.push({ key: k, badge, expires_after_activation: expiresAfterActivation });
     }
     try {
-      const { data, error } = await supabase.rpc('insert_license_keys', { p_rows: keys });
-      if (error) throw error;
-      if (data && data.success) {
-        const inserted = data.inserted || 0;
-        const lines = keys.map(r => r.key);
-        outputEl.value = lines.join('\n');
-        resultDiv.style.display = 'block';
-        if (typeof showToast === 'function') showToast(inserted + ' clé(s) générée(s).', 'success');
-      } else {
-        if (typeof showToast === 'function') showToast(data?.error || 'Erreur génération.', 'error');
+      let inserted = 0;
+      for (let j = 0; j < keys.length; j++) {
+        const row = keys[j];
+        const insertPayload = {
+          key: row.key,
+          badge: row.badge,
+          expires_after_activation: row.expires_after_activation
+        };
+        const { error } = await supabase.from('license_keys').insert(insertPayload);
+        if (error) throw error;
+        inserted += 1;
       }
+      const i18nT = typeof window !== 'undefined' && typeof window.i18nT === 'function' ? window.i18nT : null;
+      const expiresLabelKey =
+        expiresIn === '1d'
+          ? 'sa_keys_expires_1d'
+          : expiresIn === '3d'
+            ? 'sa_keys_expires_3d'
+            : expiresIn === '1w'
+              ? 'sa_keys_expires_1w'
+              : expiresIn === '2w'
+                ? 'sa_keys_expires_2w'
+                : expiresIn === '1m'
+                  ? 'sa_keys_expires_1m'
+                  : 'sa_keys_expires_indefinite';
+
+      const expiresLabel = i18nT ? i18nT(expiresLabelKey) : expiresIn;
+      const periodPrefix = i18nT ? i18nT('sa_keys_pro_period_line_prefix') : 'Période PRO après activation :';
+      const expiresText = expiresAfterActivation === null ? expiresLabel : `${periodPrefix} ${expiresLabel}`;
+
+      const lines = keys.map((r) => `${r.key} — ${expiresText}`);
+      outputEl.value = lines.join('\n');
+      resultDiv.style.display = 'block';
+      if (typeof showToast === 'function') showToast(inserted + ' clé(s) générée(s).', 'success');
     } catch (e) {
       if (typeof showToast === 'function') showToast('Erreur : ' + (e?.message || 'Exception'), 'error');
     }

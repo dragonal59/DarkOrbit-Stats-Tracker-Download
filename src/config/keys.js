@@ -50,7 +50,9 @@
     /** Legacy : ancien throttle (record_user_login utilise sessionStorage par session app). */
     RECORD_USER_LOGIN_THROTTLE: 'darkorbit_lastLoginRecord',
     /** Dernière version dont l’utilisateur a validé le changelog (machine, survit au logout). */
-    LAST_APP_VERSION_ACK: 'doStatsTracker_appVersionLastAcked'
+    LAST_APP_VERSION_ACK: 'doStatsTracker_appVersionLastAcked',
+    /** Snapshot subscription (badge + subscription_status + trial) pour transitions PRO et cold start. */
+    LAST_PROFILE_SUB_SNAPSHOT: 'darkOrbitLastProfileSubSnapshot'
   };
 
   var SYNC_KEYS = [

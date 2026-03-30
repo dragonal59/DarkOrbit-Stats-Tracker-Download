@@ -209,7 +209,8 @@ const AuthManager = {
       const { data: { user }, error } = await supabase.auth.getUser();
       if (error) {
         Logger.warn('[AuthManager] getValidSession: getUser error', error?.message || error);
-        await this.logout();
+        const isAuthFailure = error.status === 401 || error.status === 403 || error.status === 404;
+        if (isAuthFailure) await this.logout();
         return null;
       }
       if (!user) {
@@ -220,8 +221,7 @@ const AuthManager = {
       const { data: { session } } = await supabase.auth.getSession();
       return session;
     } catch (e) {
-      Logger.warn('[AuthManager] getValidSession erreur:', e?.message || e);
-      await this.logout();
+      Logger.warn('[AuthManager] getValidSession erreur réseau:', e?.message || e);
       return null;
     }
   },

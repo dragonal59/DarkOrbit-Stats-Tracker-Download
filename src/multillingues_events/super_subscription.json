@@ -2,6 +2,7 @@
   "id": "super_subscription",
   "visible": true,
   "image": "img/events/best_subscriptions.jpg",
+  "image_urls": ["best_subscriptions", "best-subscriptions"],
   "names": {
     "fr": "Super Abonnement",
     "en": "Super Subscription",

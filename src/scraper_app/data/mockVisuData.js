@@ -86,10 +86,4 @@ export const COMPANY_COLORS = {
   VRU: '#38a169',
 };
 
-// URLs images firmes (mockées pour la visu)
-export const COMPANY_IMAGES = {
-  MMO: 'https://dostats.info/gfx/mmo.png',
-  EIC: 'https://dostats.info/gfx/eic.png',
-  VRU: 'https://dostats.info/gfx/vru.png',
-};
 

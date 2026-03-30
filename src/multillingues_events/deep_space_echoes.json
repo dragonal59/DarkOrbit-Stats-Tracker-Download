@@ -2,6 +2,7 @@
   "id": "deep_space_echoes",
   "visible": true,
   "image": "img/events/deep_space_echoes.jpg",
+  "image_urls": ["breaking_news_dse"],
   "names": {
     "fr": "DARKORBIT PRÉSENTE : LES ÉCHOS DE L'ESPACE",
     "en": "DARKORBIT PRESENTS: DEEP SPACE ECHOES",

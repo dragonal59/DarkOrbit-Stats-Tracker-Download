@@ -1,0 +1,54 @@
+{
+  "id": "asmodeus_laser",
+  "visible": true,
+  "image": "img/events/asmodeus_laser.jpg",
+  "image_urls": ["breaking_news_asmodeuslas"],
+  "names": {
+    "fr": "LE LASER ASMODEUS",
+    "en": "THE ASMODEUS LASER",
+    "de": "DER ASMODEUS-LASER",
+    "es": "EL LÁSER ASMODEUS",
+    "ru": "ЛАЗЕР АСМОДЕУС",
+    "tr": "ASMODEUS LAZERI"
+  },
+  "descriptions": {
+    "fr": "Le laser Asmodeus, trempé dans le sang des batailles, se nourrit de chaque ennemi vaincu. Plus vous éliminez de NPC, plus sa puissance grandit, condamnant inexorablement ceux qui restent.",
+    "en": "The Asmodeus Laser, forged in the blood of battle, feeds on every fallen enemy. The more NPCs you eliminate, the more its power grows, sealing the fate of those who remain.",
+    "de": "Der Asmodeus-Laser, im Blut der Schlachten gehärtet, nährt sich von jedem gefallenen Feind. Je mehr NPCs ihr eliminiert, desto stärker wird er und besiegelt das Schicksal der Verbliebenen.",
+    "es": "El Láser Asmodeus, templado en la sangre de las batallas, se alimenta de cada enemigo caído. Cuantos más NPC elimines, más crece su poder, sellando el destino de los que quedan.",
+    "ru": "Лазер Асмодеус, закалённый в крови сражений, питается каждым павшим врагом. Чем больше NPC вы уничтожаете, тем сильнее он становится, предрешая судьбу оставшихся.",
+    "tr": "Savaşların kanıyla dövülmüş Asmodeus Lazeri, her düşen düşmandan güç alır. Ne kadar çok NPC yok ederseniz, gücü o kadar artar ve geride kalanların kaderini mühürler."
+  },
+  "keywords": [
+    "asmodeus laser",
+    "le laser asmodeus",
+    "der asmodeus-laser",
+    "el láser asmodeus",
+    "лазер асмодеус",
+    "asmodeus lazeri",
+    "asmodeus",
+    "blood of battle",
+    "sang des batailles",
+    "blut der schlachten",
+    "sangre de batalla",
+    "кровь сражений",
+    "savaş kanı",
+    "power scaling",
+    "gains power",
+    "gagne en puissance"
+  ],
+  "exclude_keywords": [
+    "mimesis mutiny",
+    "rébellion des mimesis",
+    "deep space echoes",
+    "les échos de l'espace",
+    "stellar pathfinder",
+    "galaxy trek",
+    "into the unknown",
+    "vers l'inconnu",
+    "em freighter",
+    "mimesis invasion",
+    "le laser odysseus",
+    "the odysseus laser"
+  ]
+}

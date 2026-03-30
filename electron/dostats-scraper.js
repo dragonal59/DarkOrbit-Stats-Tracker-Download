@@ -9,6 +9,12 @@ const {
   getServerConcurrency,
   getUserAgentString,
   applyScraperSessionProxyPolicy,
+  applyResourceBlockingPolicy,
+  captureScreenshotOnError,
+  getPrettyPrint,
+  getFormatCsv,
+  getRetentionDays,
+  getBackupSettings,
 } = require('./scraper-app-settings');
 
 const DOSTATS_BASE_URL = 'https://dostats.info/hall-of-fame';
@@ -131,9 +137,72 @@ function buildOutputPath(serverCode, typeKey, periodKey, scrapedAtIso) {
 }
 
 function writeJsonFile(targetPath, payload) {
+  const indent = getPrettyPrint() ? 2 : 0;
   const tmp = `${targetPath}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(payload, null, 2), 'utf8');
+  fs.writeFileSync(tmp, JSON.stringify(payload, null, indent), 'utf8');
   fs.renameSync(tmp, targetPath);
+  if (getFormatCsv()) writeCsvSidecar(targetPath, payload);
+}
+
+function writeCsvSidecar(jsonPath, data) {
+  try {
+    const entries = Array.isArray(data?.entries) ? data.entries : [];
+    if (!entries.length) return;
+    const headers = ['rank', 'name', 'user_id', 'company', 'server_code', 'server_label', 'points'];
+    const esc = (v) => {
+      if (v == null) return '';
+      const s = String(v);
+      return (s.includes(',') || s.includes('"') || s.includes('\n')) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const lines = [headers.join(','), ...entries.map((e) => headers.map((h) => esc(e[h])).join(','))];
+    fs.writeFileSync(jsonPath.replace(/\.json$/, '.csv'), lines.join('\n'), 'utf8');
+  } catch (_) {}
+}
+
+const BACKUP_TIMESTAMP_PATH = path.join(app.getPath('userData'), '.last_rankings_backup_ts');
+
+function runRetentionCleanup(baseDir) {
+  const days = getRetentionDays();
+  if (!days || !fs.existsSync(baseDir)) return;
+  const cutoff = Date.now() - days * 86400000;
+  const walk = (dir) => {
+    try {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const p = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(p);
+          try { if (!fs.readdirSync(p).length) fs.rmdirSync(p); } catch (_) {}
+        } else if (fs.statSync(p).mtimeMs < cutoff) {
+          try { fs.unlinkSync(p); } catch (_) {}
+        }
+      }
+    } catch (_) {}
+  };
+  walk(baseDir);
+}
+
+function runBackupIfNeeded(baseDir) {
+  const bk = getBackupSettings();
+  if (!bk.enabled || !fs.existsSync(baseDir)) return;
+  const nowMs = Date.now();
+  let lastBackup = 0;
+  try {
+    if (fs.existsSync(BACKUP_TIMESTAMP_PATH)) lastBackup = parseInt(fs.readFileSync(BACKUP_TIMESTAMP_PATH, 'utf8'), 10) || 0;
+  } catch (_) {}
+  if (nowMs - lastBackup < bk.everyH * 3600000) return;
+  let destRoot = bk.dir;
+  if (!path.isAbsolute(destRoot)) destRoot = path.join(app.getPath('userData'), destRoot.replace(/^\.\//, ''));
+  const destDir = path.join(destRoot, `backup_${new Date().toISOString().replace(/[:.]/g, '-')}`);
+  try {
+    copyDirRecursive(baseDir, destDir);
+    fs.writeFileSync(BACKUP_TIMESTAMP_PATH, String(nowMs), 'utf8');
+    const all = fs.readdirSync(destRoot, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && e.name.startsWith('backup_'))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    while (all.length > bk.maxBackups) {
+      try { fs.rmSync(path.join(destRoot, all.shift().name), { recursive: true, force: true }); } catch (_) {}
+    }
+  } catch (_) {}
 }
 
 async function createDostatsWindow() {
@@ -154,6 +223,7 @@ async function createDostatsWindow() {
   });
   win.webContents.setUserAgent(getUserAgentString());
   await applyScraperSessionProxyPolicy(win.webContents.session);
+  applyResourceBlockingPolicy(win.webContents.session);
   return win;
 }
 
@@ -405,6 +475,7 @@ async function checkDostatsHealth(serverCode, typeKey, periodKey) {
     const url = `${DOSTATS_BASE_URL}?${params.toString()}`;
     const ok = await loadUrl(win, url);
     if (!ok) {
+      await captureScreenshotOnError(win, `hof_${requestedServer || 'all'}_${typeDef.key}`);
       return { ok: false, count: 0, url };
     }
     await waitForHallOfFameTable(win);
@@ -463,6 +534,8 @@ async function measureDostatsLatency(serverCode, typeKey, periodKey, attempts) {
       const end = Date.now();
       durations.push(ok ? end - start : null);
 
+      // eslint-disable-next-line no-await-in-loop
+      if (!ok) await captureScreenshotOnError(win, `hof_quick_${typeDef.key}_p${i}`)
       // Même fichier JSON HoF que le scrape complet (attendu par l’UI / getLatestRanking).
       if (i === 0 && ok && !wroteQuickTestHoF) {
         try {
@@ -576,6 +649,8 @@ async function measureDostatsLatencyAndScanProfiles(serverCode, typeKey, periodK
       const ok = await loadUrl(win, url);
       const end = Date.now();
       durations.push(ok ? end - start : null);
+      // eslint-disable-next-line no-await-in-loop
+      if (!ok) await captureScreenshotOnError(win, `hof_full_${typeDef.key}_p${i}`)
 
       // 1 seul chargement HoF pour récupérer des user_id (top du tableau)
       if (i === 0 && ok && scanCount > 0) {
@@ -764,6 +839,7 @@ async function fetchHallOfFameForServer(win, serverCode, typeDef, periodDef) {
   const url = `${DOSTATS_BASE_URL}?${params.toString()}`;
   const ok = await loadUrl(win, url);
   if (!ok) {
+    await captureScreenshotOnError(win, `hof_${serverCode}_${typeDef.key}_${periodDef.key}`);
     return null;
   }
   await waitForHallOfFameTable(win);
@@ -844,10 +920,12 @@ async function runDostatsRankingScraper(options = {}) {
   function sendRankingsBatchStats(serverStatsMap) {
     const list = [];
     serverStatsMap.forEach((v, server) => {
+      const avgDurationMs = v.durationCount > 0 ? Math.round(v.totalDurationMs / v.durationCount) : null;
       list.push({
         server,
         successDelta: v.ok,
         errorDelta: v.fail,
+        avgDurationMs,
       });
     });
     if (!list.length) return;
@@ -880,13 +958,17 @@ async function runDostatsRankingScraper(options = {}) {
     const results = [];
     const failures = [];
     const serverStats = new Map();
-    const bump = (srv, ok) => {
+    const bump = (srv, ok, durationMs) => {
       const k = (srv || '').toString().trim().toLowerCase();
       if (!k) return;
-      if (!serverStats.has(k)) serverStats.set(k, { ok: 0, fail: 0 });
+      if (!serverStats.has(k)) serverStats.set(k, { ok: 0, fail: 0, totalDurationMs: 0, durationCount: 0 });
       const s = serverStats.get(k);
       if (ok) s.ok += 1;
       else s.fail += 1;
+      if (typeof durationMs === 'number' && durationMs >= 0) {
+        s.totalDurationMs += durationMs;
+        s.durationCount += 1;
+      }
     };
     const serverConcurrency = getServerConcurrency();
     let index = 0;
@@ -917,6 +999,7 @@ async function runDostatsRankingScraper(options = {}) {
                   let r = null;
                   const maxRetries = getRetries();
                   let attempt = 0;
+                  const scrapeStart = Date.now();
                   // eslint-disable-next-line no-constant-condition
                   while (true) {
                     // eslint-disable-next-line no-await-in-loop
@@ -924,14 +1007,15 @@ async function runDostatsRankingScraper(options = {}) {
                     if (r || attempt >= maxRetries) break;
                     attempt += 1;
                   }
+                  const scrapeDuration = Date.now() - scrapeStart;
                   /** Pause additionnelle après chaque chargement (ms) — valeur du slider, toujours appliquée si > 0. */
                   const rateLimitPauseMs = getRateLimitDelayMs();
                   if (r) results.push({ serverCode: srvCode, type: typeDef.key, period: periodDef.key, ...r });
                   const count = r ? r.count : 0;
                   if (r && count > 0) {
-                    bump(srvCode, true);
+                    bump(srvCode, true, scrapeDuration);
                   } else {
-                    bump(srvCode, false);
+                    bump(srvCode, false, scrapeDuration);
                     failures.push({ serverCode: srvCode, type: typeDef.key, period: periodDef.key });
                   }
                   if (rateLimitPauseMs > 0) {
@@ -982,6 +1066,11 @@ async function runDostatsRankingScraper(options = {}) {
         symbol: 'cross',
       });
     }
+    try {
+      const baseDir = getOutputBaseDir();
+      runRetentionCleanup(baseDir);
+      runBackupIfNeeded(baseDir);
+    } catch (_) {}
     return { ok: true, groupId, resultsCount: results.length, results };
   } catch (e) {
     sendLog('error', `Erreur scraping DOSTATS: ${e?.message || String(e)}`);

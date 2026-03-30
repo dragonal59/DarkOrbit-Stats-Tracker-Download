@@ -171,6 +171,11 @@ export function SectionDatabase({ settings, patch, resetSection }) {
                 <button
                   type="button"
                   className="path-browse-btn"
+                  title="Choisir le dossier de backup"
+                  onClick={async () => {
+                    const dir = await window.electronAPI?.pickDirectory?.();
+                    if (dir) patch('database', { backupDir: dir });
+                  }}
                 >
                   <FolderOpen size={13} />
                 </button>

@@ -8,6 +8,7 @@ const { readMergedSupabaseConfigFromDisk } = require('./supabase-config-from-dis
 const { getConfig } = require('./scraping-config');
 const { getDoEventsCredentials } = require('./do-events-credentials');
 const { applyScraperSessionProxyPolicy } = require('./scraper-app-settings');
+const { JS_EXTRACT_EVENTS } = require('./extract-events');
 
 const SERVER_ID = 'fr1';
 const EVENTS_URL = `https://${SERVER_ID}.darkorbit.com/indexInternal.es?action=internalStart&prc=100`;
@@ -51,10 +52,20 @@ function jsLogin(username, password) {
   const u = JSON.stringify(username);
   const p = JSON.stringify(password);
   return `(function(){
-    // Cibler le formulaire de CONNEXION (Pseudonyme + Mot de passe), pas l'inscription (qui a Adresse e-mail).
+    // Cibler le formulaire de CONNEXION, indépendamment de la langue de la page.
+    function findField(placeholders) {
+      for (var i = 0; i < placeholders.length; i++) {
+        var el = document.querySelector('input[placeholder*="' + placeholders[i] + '"]');
+        if (el) return el;
+      }
+      return null;
+    }
     function getLoginForm() {
-      var pseudo = document.querySelector('input[placeholder*="Pseudonyme"]');
-      var mdp = document.querySelector('input[placeholder*="Mot de passe"]');
+      var pseudo = findField(['Pseudonyme','Username','Benutzername','Nombre de usuario','Kullanıcı','Имя пользователя','nickname','login','user'])
+        || document.querySelector('input[name*="user"],input[name*="login"],input[name*="nick"]')
+        || document.querySelector('#username,#user,#login,#nick');
+      var mdp = findField(['Mot de passe','Password','Passwort','Contraseña','Şifre','Пароль','password','pass'])
+        || document.querySelector('input[type="password"]');
       if (!pseudo || !mdp) return null;
       var forms = document.querySelectorAll('form');
       for (var i = 0; i < forms.length; i++) {
@@ -80,50 +91,6 @@ function jsLogin(username, password) {
     } catch (e) { return { success: false, error: e.message }; }
   })()`;
 }
-
-const JS_EXTRACT_EVENTS = `(function(){
-  function getText(el){ return el ? (el.textContent || '').trim().replace(/\\s+/g, ' ') : ''; }
-  function getBg(el){
-    if (!el) return '';
-    var s = (el.getAttribute('style') || el.style.cssText || '');
-    var m = s.match(/background-image\\s*:\\s*url\\s*\\(\\s*['"]?([^'")\s]+)/);
-    return m ? m[1].trim() : '';
-  }
-  function getEndTimestamp(block) {
-    var scripts = block.querySelectorAll('script');
-    for (var i = 0; i < scripts.length; i++) {
-      var txt = scripts[i].textContent || '';
-      var match = txt.match(/newsTimer\\w+End\\s*=\\s*(\\d+)/);
-      if (match) return parseInt(match[1], 10);
-    }
-    return null;
-  }
-  try {
-    var container = document.querySelector('.news-base-container');
-    if (!container) return { ok: false, events: [] };
-    var blocks = container.querySelectorAll('div[id^="be_news_"]');
-    var scrapedAt = new Date().toISOString();
-    var out = [];
-    Array.from(blocks).forEach(function(block, i){
-      var layer = block.querySelector('.breaking-news-layer');
-      if (!layer) return;
-      var nameEl = layer.querySelector('.be-position-half_headline.be-style-bold_full_content, .be-position-half_headline.be-style-headline, .be-style-bold_full_content, .be-style-headline');
-      var descEl = layer.querySelector('.be-position-half_maintext_with_headline.be-style-default, .be-style-default');
-      var timerEl = layer.querySelector('.news-countdown');
-      var name = getText(nameEl);
-      var description = getText(descEl);
-      var timer = timerEl ? getText(timerEl) : '';
-      var imageUrl = getBg(layer);
-      if (!imageUrl) { var img = layer.querySelector('img'); if (img) imageUrl = img.getAttribute('src') || ''; }
-      var id = layer.getAttribute('id') || block.getAttribute('id') || ('event-' + i);
-      var endTimestamp = getEndTimestamp(block);
-      if (name || description || timer || imageUrl) {
-        out.push({ id: id, name: name, description: description, timer: timer, imageUrl: imageUrl, scrapedAt: scrapedAt, endTimestamp: endTimestamp });
-      }
-    });
-    return { ok: true, events: out };
-  } catch(e) { return { ok: false, events: [], error: e.message }; }
-})()`;
 
 async function runEventsScraping(options = {}) {
   const { mainWindowRef } = options;
@@ -160,15 +127,18 @@ async function runEventsScraping(options = {}) {
 
     const loadUrl = (url) => new Promise((resolve) => {
       const wc = win.webContents;
-      const t = setTimeout(resolve, 30000);
-      wc.once('did-fail-load', () => { clearTimeout(t); resolve(); });
-      wc.once('did-finish-load', () => { clearTimeout(t); resolve(); });
+      const t = setTimeout(() => resolve({ ok: false, reason: 'timeout' }), 30000);
+      wc.once('did-fail-load', (_e, errCode, errDesc) => { clearTimeout(t); resolve({ ok: false, reason: errDesc || String(errCode) }); });
+      wc.once('did-finish-load', () => { clearTimeout(t); resolve({ ok: true }); });
       win.loadURL(url);
     });
 
     const exec = (code) => win.webContents.executeJavaScript(code);
 
-    await loadUrl(LOGIN_URL);
+    const loginLoad = await loadUrl(LOGIN_URL);
+    if (!loginLoad.ok) {
+      return { ok: false, error: `Impossible de charger la page DarkOrbit (${loginLoad.reason})` };
+    }
     await new Promise(r => setTimeout(r, DELAY.afterLoad));
     try { await exec(JS_ACCEPT_BANNER); await new Promise(r => setTimeout(r, 500)); } catch (_) {}
     const loginRes = await exec(jsLogin(acc.username, acc.password));
@@ -250,9 +220,10 @@ async function runEventsScraping(options = {}) {
     return { ok: true, eventsCount: filtered.length, events: filtered };
   } catch (e) {
     global.scrapingState.running = false;
+    global.scrapingState.currentAction = 'events_error';
     if (mainWindowRef?.webContents) {
       mainWindowRef.webContents.send('scraping-progress', global.scrapingState);
-      mainWindowRef.webContents.send('scraping-finished', { action: 'events_completed', completedCount: 0, error: e.message });
+      mainWindowRef.webContents.send('scraping-finished', { action: 'events_error', completedCount: 0, error: e.message });
     }
     console.error('[EventsScraper] Erreur lors de la collecte ou de l\'upsert des événements:', e?.message || e);
     return { ok: false, error: e?.message || 'Erreur' };
@@ -292,15 +263,19 @@ async function loginAndExtractEventsOnly(options = {}) {
 
     const loadUrl = (url) => new Promise((resolve) => {
       const wc = win.webContents;
-      const t = setTimeout(resolve, 30000);
-      wc.once('did-fail-load', () => { clearTimeout(t); resolve(); });
-      wc.once('did-finish-load', () => { clearTimeout(t); resolve(); });
+      const t = setTimeout(() => resolve({ ok: false, reason: 'timeout' }), 30000);
+      wc.once('did-fail-load', (_e, errCode, errDesc) => { clearTimeout(t); resolve({ ok: false, reason: errDesc || String(errCode) }); });
+      wc.once('did-finish-load', () => { clearTimeout(t); resolve({ ok: true }); });
       win.loadURL(url);
     });
 
     const exec = (code) => win.webContents.executeJavaScript(code);
 
-    await loadUrl(LOGIN_URL);
+    const loginLoad = await loadUrl(LOGIN_URL);
+    if (!loginLoad.ok) {
+      log('error', `Impossible de charger la page DarkOrbit (${loginLoad.reason})`);
+      return { ok: false, error: `Impossible de charger la page DarkOrbit (${loginLoad.reason})`, events: [] };
+    }
     await new Promise(r => setTimeout(r, DELAY.afterLoad));
     try { await exec(JS_ACCEPT_BANNER); await new Promise(r => setTimeout(r, 500)); } catch (_) {}
     const loginRes = await exec(jsLogin(acc.username, acc.password));

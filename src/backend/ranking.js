@@ -761,11 +761,16 @@ async function loadDostatsPeriodRanking(supabase, server, type, period, limit) {
       periodKey: periodKey,
       count: top.length,
     });
-    // FIX 3 — enrichir le cache suivi (ranking-ui) sans fetch supplémentaire
+    // FIX 3 — enrichir le cache suivi uniquement pour les champs non-statistiques (grade, firme, niveau).
+    // Les valeurs honor/xp/rank_points issues d'une période sont des DELTAS, pas des totaux absolus :
+    // les écrire dans le cache corromprait la comparaison affichée dans SUIVI JOUEURS.
     try {
       if (typeof window !== 'undefined' && typeof window.mergeFollowedPlayerStatsCacheFromRow === 'function') {
         for (var _fci = 0; _fci < top.length; _fci++) {
-          window.mergeFollowedPlayerStatsCacheFromRow(top[_fci]);
+          var _r = top[_fci];
+          if (!_r) continue;
+          var _safeRow = Object.assign({}, _r, { honor: null, xp: null, rank_points: null, estimated_rp: null });
+          window.mergeFollowedPlayerStatsCacheFromRow(_safeRow);
         }
       }
     } catch (_e) {}

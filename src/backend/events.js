@@ -9,46 +9,37 @@
   var _cachedEvents = [];
   var countdownInterval = null;
   var MAX_DESC_LENGTH = 80;
-  var MATCH_SCORE_THRESHOLD = 2;
+  var MATCH_SCORE_THRESHOLD = 4;
 
-  /** Fichiers JSON des événements multilingues (src/multillingues_events/). Pour un nouvel événement, l’ajouter ici. */
-  var EVENTS_DB_FILES = [
-    'agatus_breach.json',
-    'apocalypse_box_refresh.json',
-    'ascend.json',
-    'battle_pass.json',
-    'bk_+_ld_sale.json',
-    'bonus_rewards_gate.json',
-    'chromin_rush.json',
-    'chinese_new_year.json',
-    'deep_space_echoes.json',
-    'discord.json',
-    'dispatch_day.json',
-    'enhanced_lf4_day.json',
-    'galaxy_gate_weekend.json',
-    'galaxy_gates_double_reward.json',
-    'galaxy_gates_special_rewards_day.json',
-    'galaxy_trek.json',
-    'helix_blitz_sale.json',
-    'honor_day.json',
-    'immortal_union.json',
-    'instagram.json',
-    'mimesis_mutiny.json',
-    'monthly_deluxe_calendar.json',
-    'new_dawn.json',
-    'obsidian_box_refresh.json',
-    'odysseus_laser.json',
-    'r&b_box_refresh.json',
-    'season_pass_waning_crescent.json',
-    'stellar_pathfinder_bundles.json',
-    'super_subscription.json',
-    'empyrian_march.json',
-    'unstable_modules_salvage.json',
-    'trinity_trials.json',
-    'uridium_bank.json',
-    'vortex_of_greed.json',
-    'xp_day.json'
-  ];
+  /**
+   * Liste des JSON événements : découverte dynamique (Electron → IPC + fs.readdirSync dans le main).
+   * Hors Electron : fetch('multillingues_events/manifest.json') avec { "files": ["a.json", ...] }.
+   */
+  function discoverEventsDbFiles() {
+    if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.listMultillinguesEventJsonFiles === 'function') {
+      return window.electronAPI.listMultillinguesEventJsonFiles().then(function (res) {
+        if (res && res.ok && Array.isArray(res.files)) return res.files;
+        Logger.warn('[Events] discoverEventsDbFiles — IPC invalide ou vide');
+        return [];
+      });
+    }
+    var baseUrl = getEventsDbBaseUrl();
+    return fetch(baseUrl + 'manifest.json')
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (data && Array.isArray(data.files)) {
+          return data.files
+            .filter(function (f) { return typeof f === 'string' && /\.json$/i.test(f); })
+            .sort(function (a, b) { return a.localeCompare(b, 'en'); });
+        }
+        Logger.warn('[Events] discoverEventsDbFiles — manifest.json absent ou invalide (hors Electron)');
+        return [];
+      })
+      .catch(function (e) {
+        Logger.warn('[Events] discoverEventsDbFiles — manifest:', e?.message || e);
+        return [];
+      });
+  }
 
   var _eventsDatabase = null;
   var _eventsDatabasePromise = null;
@@ -96,14 +87,23 @@
         return null;
       });
     }
-    _eventsDatabasePromise = Promise.all(EVENTS_DB_FILES.map(function (filename) {
-      return fetchOne(baseUrl, filename).then(function (data) {
-        if (data != null) return data;
-        var fallback = getEventsDbBaseUrlFallback();
-        if (fallback && fallback !== baseUrl) return fetchOne(fallback, filename);
-        return null;
+    _eventsDatabasePromise = discoverEventsDbFiles().then(function (EVENTS_DB_FILES) {
+      if (!EVENTS_DB_FILES.length) {
+        Logger.warn('[Events] loadEventsDatabase — aucun fichier JSON listé');
+      }
+      return Promise.all(EVENTS_DB_FILES.map(function (filename) {
+        return fetchOne(baseUrl, filename).then(function (data) {
+          if (data != null) return data;
+          var fallback = getEventsDbBaseUrlFallback();
+          if (fallback && fallback !== baseUrl) return fetchOne(fallback, filename);
+          return null;
+        });
+      })).then(function (results) {
+        return { results: results, fileNames: EVENTS_DB_FILES };
       });
-    })).then(function (results) {
+    }).then(function (bundle) {
+      var results = bundle.results;
+      var EVENTS_DB_FILES = bundle.fileNames;
       var events = [];
       results.forEach(function (r, idx) {
         if (Array.isArray(r)) r.forEach(function (ev) { if (ev && typeof ev === 'object') events.push(ev); });
@@ -133,6 +133,7 @@
     var events = (db && db.events) || [];
     var best = null;
     var bestScore = 0;
+    var ambiguous = false;
     for (var i = 0; i < events.length; i++) {
       var ev = events[i];
       var exclude = ev.exclude_keywords || [];
@@ -155,10 +156,19 @@
         var idSlugNorm = idStr.toLowerCase().replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim();
         if (idSlugNorm.length >= 2 && titleNorm.indexOf(idSlugNorm) !== -1) score += 3;
       }
-      if (score >= MATCH_SCORE_THRESHOLD && score > bestScore) {
-        bestScore = score;
-        best = ev;
+      if (score >= MATCH_SCORE_THRESHOLD) {
+        if (score > bestScore) {
+          bestScore = score;
+          best = ev;
+          ambiguous = false;
+        } else if (score === bestScore) {
+          ambiguous = true;
+          Logger.warn('[EventMatcher] ÉGALITÉ de score entre', best?.id, 'et', ev.id, '— vérifier les keywords JSON');
+        }
       }
+    }
+    if (ambiguous) {
+      Logger.warn('[EventMatcher] Match ambigu pour "' + titleNorm + '" — retour du premier résultat (score ' + bestScore + ')');
     }
     return best;
   }
@@ -221,20 +231,29 @@
   function findEventInDatabaseForScraped(ev) {
     var name = (ev.name || ev.title || '').trim();
     var desc = (ev.description || '').trim();
+    var imageUrl = (ev.imageUrl || '').trim();
     var descNorm = desc ? normalizeForLookup(desc) : '';
-    if (!name && !descNorm) return null;
+    if (!name && !descNorm && !imageUrl) return null;
     if (!_eventsDatabase) return null;
     var db = _eventsDatabase;
+
+    if (imageUrl) {
+      var foundByImage = _matchEventByImageUrl(imageUrl, db);
+      if (foundByImage) return foundByImage;
+    }
+
     if (name) {
       var norm = normalizeForLookup(name);
       if (db.byExactTitle && db.byExactTitle[norm]) return db.byExactTitle[norm];
       var found = _matchEventByKeywords(norm, descNorm, db);
       if (found) return found;
     }
+
     if (descNorm) {
       var foundByDesc = _matchEventByKeywords(descNorm, '', db);
       if (foundByDesc) return foundByDesc;
     }
+
     Logger.warn('[EventMatcher] AUCUN MATCH pour :', name);
     return null;
   }
@@ -407,6 +426,9 @@
       var t = new Date(ev.expires_at).getTime();
       if (!isNaN(t)) return t;
     }
+    if (ev.endTimestamp && !isNaN(Number(ev.endTimestamp)) && Number(ev.endTimestamp) > 0) {
+      return Number(ev.endTimestamp) * 1000;
+    }
     var timer = (ev.timer || '').trim();
     if (!timer) return null;
     var match = timer.match(/(\d+):(\d+):(\d+)/);
@@ -475,13 +497,14 @@
     var cardClass = 'event-card event-card-compact scraped-event-card manual-event-card';
     var evId = escapeHtml(ev.id || '');
     var hidden = (typeof window.isEventHidden === 'function') ? window.isEventHidden(ev.id) : false;
-    var eyeTitle = hidden ? 'Afficher dans la sidebar' : 'Masquer de la sidebar';
+    var i18n = typeof window.i18nT === 'function' ? window.i18nT : function(k) { return k; };
+    var eyeTitle = hidden ? i18n('event_show_in_sidebar') : i18n('event_hide_from_sidebar');
     var eyeClass = 'event-card-eye-btn' + (hidden ? ' event-card-eye-btn--hidden' : '');
     var html = '<div class="' + cardClass + '" data-event-id="' + evId + '">';
     html += '<button type="button" class="event-card-info-btn" data-event-id="' + evId + '" title="Info" aria-label="Info">ℹ️</button>';
     html += '<button class="' + eyeClass + '" data-action="toggle-hide" data-event-id="' + evId + '" title="' + eyeTitle + '" aria-label="' + eyeTitle + '">' + (hidden ? '🙈' : '👁') + '</button>';
     if (imageUrl) {
-      html += '<img src="' + escapeHtml(imageUrl) + '" alt="" class="manual-event-bg scraped-event-img">';
+      html += '<img src="' + escapeHtml(imageUrl) + '" alt="" class="manual-event-bg scraped-event-img" onerror="this.style.display=\'none\'">';
     } else {
       html += '<div class="manual-event-placeholder"></div>';
     }
@@ -534,7 +557,7 @@
     var evId = escapeHtml(ev.id || '');
     var html = '<div class="' + cardClass + '" data-event-id="' + evId + '" data-free-demo="1">';
     if (imageUrl) {
-      html += '<img src="' + escapeHtml(imageUrl) + '" alt="" class="manual-event-bg scraped-event-img">';
+      html += '<img src="' + escapeHtml(imageUrl) + '" alt="" class="manual-event-bg scraped-event-img" onerror="this.style.display=\'none\'">';
     } else {
       html += '<div class="manual-event-placeholder"></div>';
     }
@@ -667,7 +690,8 @@
         var parent = container.parentNode;
         if (parent) parent.appendChild(btn);
       }
-      btn.textContent = '👁 Tout afficher (' + hiddenCount + ' masqué' + (hiddenCount > 1 ? 's' : '') + ')';
+      var tShowAll = typeof window.i18nT === 'function' ? window.i18nT('event_show_all_hidden').replace('{{n}}', hiddenCount) : ('Show all (' + hiddenCount + ' hidden)');
+      btn.textContent = '👁 ' + tShowAll;
       btn.style.display = '';
       btn.onclick = function () {
         if (typeof window.getHiddenEventIds !== 'function') return;
@@ -806,25 +830,6 @@
       clearInterval(countdownInterval);
       countdownInterval = null;
     }
-  }
-
-  function pushEventsToSupabase(events) {
-    if (!Array.isArray(events)) return;
-    var supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
-    if (!supabase) return;
-    (async function () {
-      var userId = null;
-      if (typeof AuthManager !== 'undefined' && typeof AuthManager.getCurrentUser === 'function') {
-        var user = await AuthManager.getCurrentUser();
-        userId = (user?.id ?? null);
-      }
-      try {
-        var _r = await supabase.rpc('upsert_shared_events', { p_events: events, p_uploaded_by: userId });
-        if (_r.error) throw _r.error;
-      } catch (e) {
-        Logger.warn('[Events] upsert_shared_events:', e?.message || e);
-      }
-    })();
   }
 
   function setScrapedEventsFromIPC(events) {
@@ -998,7 +1003,6 @@
   window.refreshEventsFromSupabase = refreshEventsFromSupabase;
   window.setScrapedEventsFromIPC = setScrapedEventsFromIPC;
   window.loadEventsDatabase = loadEventsDatabase;
-  window.findEventInDatabase = findEventInDatabase;
   window.loadSharedEvents = loadSharedEvents;
   window.getActiveBoosterType = getActiveBoosterType;
   window.renderFreeShowcaseEvents = renderFreeShowcaseEvents;

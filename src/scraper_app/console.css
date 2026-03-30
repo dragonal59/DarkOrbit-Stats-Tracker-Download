@@ -170,7 +170,7 @@
 }
 
 .copy-toast {
-  position: absolute;
+  position: fixed;
   bottom: 36px;
   left: 50%;
   transform: translateX(-50%);

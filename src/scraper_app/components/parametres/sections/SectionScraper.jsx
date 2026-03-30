@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { RotateCcw } from 'lucide-react';
 
+const pct = (val, min, max) => `${Math.round(((val - min) / (max - min)) * 100)}%`;
+
 export function SectionScraper({ settings, patch, resetSection }) {
   const s = settings.scraper;
   const [uaExpanded, setUaExpanded] = useState(false);
@@ -14,7 +16,7 @@ export function SectionScraper({ settings, patch, resetSection }) {
             Le scraper DOStats intégré (Electron) lit{' '}
             <strong>scraper-app-settings.json</strong> au lancement de chaque page : workers,
             timeout, délai, retries, profils concurrents, User-Agent. Les options « Puppeteer »
-            ci-dessous ne sont pas encore branchées sur ce moteur.
+            ci-dessous sont appliquées à chaque fenêtre de scraping (blocage ressources, screenshot sur erreur).
           </p>
         </div>
         <button
@@ -56,6 +58,7 @@ export function SectionScraper({ settings, patch, resetSection }) {
                 })
               }
               className="range-input"
+              style={{ '--pct': pct(s.concurrency, 1, 10) }}
             />
             <div className="range-labels">
               <span>1</span>
@@ -88,6 +91,7 @@ export function SectionScraper({ settings, patch, resetSection }) {
                 patch('scraper', { profilesConcurrency: Number(e.target.value) })
               }
               className="range-input"
+              style={{ '--pct': pct(s.profilesConcurrency, 1, 10) }}
             />
             <div className="range-labels">
               <span>1</span>
@@ -123,6 +127,7 @@ export function SectionScraper({ settings, patch, resetSection }) {
                 })
               }
               className="range-input"
+              style={{ '--pct': pct(s.timeoutMs, 5000, 60000) }}
             />
             <div className="range-labels">
               <span>5s</span>
@@ -158,6 +163,7 @@ export function SectionScraper({ settings, patch, resetSection }) {
                 })
               }
               className="range-input"
+              style={{ '--pct': pct(s.rateLimitDelay, 0, 10000) }}
             />
             <div className="range-labels">
               <span>0ms</span>
@@ -192,6 +198,7 @@ export function SectionScraper({ settings, patch, resetSection }) {
                 })
               }
               className="range-input"
+              style={{ '--pct': pct(Math.min(5, s.retries), 0, 5) }}
             />
             <div className="range-labels">
               <span>0</span>

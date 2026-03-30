@@ -94,12 +94,7 @@
         count: 1
       };
     }
-    return {
-      honor: 0,
-      xp: 0,
-      rankPoints: 0,
-      count: 1
-    };
+    return { honor: null, xp: null, rankPoints: null, count: 1 };
   }
 
   function fmtSigned(n) {

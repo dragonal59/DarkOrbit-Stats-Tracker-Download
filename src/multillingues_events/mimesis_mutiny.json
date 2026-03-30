@@ -2,6 +2,7 @@
   "id": "mimesis_mutiny",
   "visible": true,
   "image": "img/events/mimesis_mutiny.jpg",
+  "image_urls": ["breaking_news_mimesis"],
   "names": {
     "fr": "RÉBELLION DES MIMESIS",
     "en": "MIMESIS MUTINY",

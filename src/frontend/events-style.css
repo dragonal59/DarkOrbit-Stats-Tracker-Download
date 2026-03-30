@@ -25,7 +25,7 @@
    ========================================== */
 
 .events-sidebar {
-  width: 520px;
+  width: clamp(280px, 520px, calc(100vw - 80px));
   background: var(--bg-secondary);
   border-left: 1px solid var(--border);
   display: flex;
@@ -36,12 +36,21 @@
   height: 100vh;
   transition: transform 0.3s ease, opacity 0.3s ease;
   margin-left: 40px;
-  /* Masquer la scrollbar verticale tout en conservant le scroll */
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* IE / Edge */
+  scrollbar-width: thin;
+  scrollbar-color: var(--bg-tertiary) transparent;
 }
 .events-sidebar::-webkit-scrollbar {
-  display: none; /* Chrome, Safari, Electron */
+  width: 5px;
+}
+.events-sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.events-sidebar::-webkit-scrollbar-thumb {
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+}
+.events-sidebar::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
 
 .events-sidebar.hidden {

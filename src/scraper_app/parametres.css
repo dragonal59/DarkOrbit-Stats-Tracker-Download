@@ -271,7 +271,11 @@
   width: 100%;
   appearance: none;
   height: 4px;
-  background: rgba(255, 255, 255, 0.1);
+  background: linear-gradient(
+    to right,
+    var(--accent-cyan) var(--pct, 0%),
+    rgba(255, 255, 255, 0.1) var(--pct, 0%)
+  );
   border-radius: 2px;
   outline: none;
   cursor: pointer;
@@ -285,6 +289,12 @@
   background: var(--accent-cyan);
   cursor: pointer;
   box-shadow: 0 0 8px rgba(99, 179, 237, 0.5);
+}
+
+.range-input::-moz-range-progress {
+  background: var(--accent-cyan);
+  height: 4px;
+  border-radius: 2px;
 }
 
 .range-labels {

@@ -2,6 +2,7 @@
   "id": "battle_pass",
   "visible": true,
   "image": "img/events/battle_pass.jpg",
+  "image_urls": ["battlepass"],
   "names": {
     "fr": "Pass Bataille",
     "en": "Battle Pass",

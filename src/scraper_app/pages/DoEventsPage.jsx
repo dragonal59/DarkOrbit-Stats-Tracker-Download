@@ -189,7 +189,7 @@ export function DoEventsPage({
       setDoEventsState((s) => ({ ...s, error: 'API scraping non disponible' }));
       return;
     }
-    setDoEventsState({ loading: true, events: [], error: null });
+    setDoEventsState((s) => ({ ...s, loading: true, error: null }));
     try {
       const result = await api.scrapeDoEvents();
       if (result?.ok && Array.isArray(result.events)) {
@@ -358,13 +358,12 @@ export function DoEventsPage({
 
       <details style={{ fontSize: 11, color: 'var(--text-muted)' }}>
         <summary style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Info size={14} /> Infos pour le scraping
+          <Info size={14} /> Infos
         </summary>
         <ul style={{ marginTop: 8, paddingLeft: 18 }}>
-          <li>URL : page d&apos;accueil fr1 DarkOrbit puis <code>internalStart&amp;prc=100</code></li>
-          <li>Connexion : identifiants en dur (côté main, non visibles)</li>
-          <li>DOM : <code>.news-base-container</code>, <code>.breaking-news-layer</code>, sélecteurs titre / description / countdown</li>
-          <li>Si ça casse : fournir la structure HTML actuelle du bloc événements ou une capture d&apos;écran</li>
+          <li>Serveur : fr1 DarkOrbit</li>
+          <li>Données : événements en cours, timers en temps réel</li>
+          <li>Images : correspondance locale (<code>multillingues_events</code>)</li>
         </ul>
       </details>
     </motion.div>

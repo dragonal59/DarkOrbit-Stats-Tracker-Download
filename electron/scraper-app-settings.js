@@ -122,6 +122,62 @@ function getScrapeWithoutProxy() {
   }
 }
 
+function readDatabaseSection() {
+  try {
+    if (!fs.existsSync(SCRAPER_APP_SETTINGS_PATH)) return null;
+    const data = JSON.parse(fs.readFileSync(SCRAPER_APP_SETTINGS_PATH, 'utf8'));
+    if (!data || typeof data !== 'object') return null;
+    if (data.database == null || typeof data.database !== 'object') return {};
+    return data.database;
+  } catch (_) { return null; }
+}
+
+function getPrettyPrint() {
+  try { const db = readDatabaseSection(); return !!(db && db.prettyPrint === true); } catch (_) { return false; }
+}
+
+function getFormatCsv() {
+  try { const db = readDatabaseSection(); return !!(db && db.format === 'json+csv'); } catch (_) { return false; }
+}
+
+function getRetentionDays() {
+  try {
+    const db = readDatabaseSection();
+    if (!db) return 90;
+    const v = typeof db.retentionDays === 'number' ? db.retentionDays : 90;
+    return Math.max(1, Math.min(3650, Math.floor(v)));
+  } catch (_) { return 90; }
+}
+
+function getBackupSettings() {
+  try {
+    const db = readDatabaseSection();
+    if (!db) return { enabled: false };
+    return {
+      enabled: db.backupEnabled === true,
+      dir: typeof db.backupDir === 'string' && db.backupDir.trim() ? db.backupDir.trim() : './backups',
+      everyH: typeof db.backupEveryH === 'number' ? Math.max(1, db.backupEveryH) : 24,
+      maxBackups: typeof db.maxBackups === 'number' ? Math.max(1, db.maxBackups) : 7,
+    };
+  } catch (_) { return { enabled: false }; }
+}
+
+function getBlockImages() {
+  try { const sc = readScraperSection(); return !!(sc && sc.blockImages === true); } catch (_) { return false; }
+}
+
+function getBlockFonts() {
+  try { const sc = readScraperSection(); return !!(sc && sc.blockFonts === true); } catch (_) { return false; }
+}
+
+function getBlockCSS() {
+  try { const sc = readScraperSection(); return !!(sc && sc.blockCSS === true); } catch (_) { return false; }
+}
+
+function getScreenshotOnError() {
+  try { const sc = readScraperSection(); return !!(sc && sc.screenshotOnError === true); } catch (_) { return false; }
+}
+
 /**
  * Applique la politique proxy sur une session de fenêtre de scraping (DOStats, DarkOrbit, etc.).
  */
@@ -136,10 +192,51 @@ async function applyScraperSessionProxyPolicy(session) {
   }
 }
 
+/**
+ * Bloque les ressources selon les options UI (blockImages, blockFonts, blockCSS).
+ * Doit être appelé après création de la session, avant le premier chargement.
+ */
+function applyResourceBlockingPolicy(session) {
+  const blockImages = getBlockImages();
+  const blockFonts = getBlockFonts();
+  const blockCSS = getBlockCSS();
+  if (!blockImages && !blockFonts && !blockCSS) return;
+  if (!session || typeof session.webRequest?.onBeforeRequest !== 'function') return;
+  const imgRe = /\.(jpe?g|png|gif|webp|svg|ico|bmp|avif)(\?|$)/i;
+  const fontRe = /\.(woff2?|ttf|eot|otf)(\?|$)/i;
+  const cssRe = /\.css(\?|$)/i;
+  try {
+    session.webRequest.onBeforeRequest((details, callback) => {
+      const url = details.url || '';
+      if (blockImages && imgRe.test(url)) return callback({ cancel: true });
+      if (blockFonts && fontRe.test(url)) return callback({ cancel: true });
+      if (blockCSS && cssRe.test(url)) return callback({ cancel: true });
+      callback({});
+    });
+  } catch (_) { /* ignore */ }
+}
+
+/**
+ * Capture une screenshot si l'option screenshotOnError est activée.
+ * Sauvegarde dans userData/screenshots/error_<label>_<ts>.png
+ */
+async function captureScreenshotOnError(win, label) {
+  if (!getScreenshotOnError()) return;
+  if (!win || win.isDestroyed() || !win.webContents) return;
+  try {
+    const image = await win.webContents.capturePage();
+    const screenshotsDir = path.join(app.getPath('userData'), 'screenshots');
+    fs.mkdirSync(screenshotsDir, { recursive: true });
+    const safe = String(label || 'unknown').replace(/[^a-z0-9_-]/gi, '_').slice(0, 60);
+    fs.writeFileSync(path.join(screenshotsDir, `error_${safe}_${Date.now()}.png`), image.toPNG());
+  } catch (_) { /* ignore */ }
+}
+
 module.exports = {
   SCRAPER_APP_SETTINGS_PATH,
   DEFAULT_SCRAPER,
   readScraperSection,
+  readDatabaseSection,
   readProxiesSection,
   parseNum,
   getRateLimitDelayMs,
@@ -150,4 +247,14 @@ module.exports = {
   getUserAgentString,
   getScrapeWithoutProxy,
   applyScraperSessionProxyPolicy,
+  getBlockImages,
+  getBlockFonts,
+  getBlockCSS,
+  getScreenshotOnError,
+  applyResourceBlockingPolicy,
+  captureScreenshotOnError,
+  getPrettyPrint,
+  getFormatCsv,
+  getRetentionDays,
+  getBackupSettings,
 };

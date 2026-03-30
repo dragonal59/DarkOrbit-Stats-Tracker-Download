@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="frontend/style.css">
   <link rel="stylesheet" href="frontend/legal.css">
   <style>
-    .auth-container { max-width: 420px; margin: 80px auto; padding: 32px; background: var(--bg-secondary); border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 8px 32px var(--shadow); }
+    .auth-container { max-width: 440px; margin: 60px auto; padding: 32px; background: var(--bg-secondary); border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 8px 32px var(--shadow); }
     .auth-header { text-align: center; margin-bottom: 28px; }
     .auth-header h1 { font-size: 1.5rem; margin-bottom: 8px; }
     .auth-header p { color: var(--text-muted); font-size: 0.9rem; }
@@ -19,15 +19,21 @@
     .auth-form.active { display: block; }
     .auth-form .field { margin-bottom: 16px; }
     .auth-form label { display: block; margin-bottom: 6px; font-size: 0.9rem; color: var(--text-secondary); }
-    .auth-form input { width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--input-bg); color: var(--text-primary); font-size: 1rem; }
+    .auth-form input[type="email"],
+    .auth-form input[type="text"],
+    .auth-form input[type="password"] { width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--input-bg); color: var(--text-primary); font-size: 1rem; box-sizing: border-box; }
     .auth-form input:focus { outline: none; border-color: var(--accent); }
-    .auth-error { background: rgba(239, 68, 68, 0.15); color: var(--danger); padding: 10px 12px; border-radius: 8px; font-size: 0.9rem; margin-bottom: 16px; display: none; }
+    .auth-form input.field-error { border-color: var(--danger); }
+    .field-inline-error { font-size: 0.8rem; color: var(--danger); margin-top: 4px; display: none; }
+    .field-inline-error.visible { display: block; }
+    .auth-error { background: rgba(239,68,68,0.15); color: var(--danger); padding: 10px 12px; border-radius: 8px; font-size: 0.9rem; margin-bottom: 16px; display: none; }
     .auth-error.visible { display: block; }
-    .auth-success { background: rgba(34, 197, 94, 0.15); color: var(--success); padding: 10px 12px; border-radius: 8px; font-size: 0.9rem; margin-bottom: 16px; display: none; }
+    .auth-success { background: rgba(34,197,94,0.15); color: var(--success); padding: 10px 12px; border-radius: 8px; font-size: 0.9rem; margin-bottom: 16px; display: none; }
     .auth-success.visible { display: block; }
     .auth-submit { width: 100%; padding: 14px; background: var(--accent); color: #fff; border: none; border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer; margin-top: 8px; }
     .auth-submit:hover { background: var(--accent-hover); }
-    .auth-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+    .auth-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+    .auth-submit-hint { font-size: 0.8rem; color: var(--text-muted); text-align: center; margin-top: 6px; min-height: 18px; }
     .auth-link { display: block; text-align: center; margin-top: 16px; color: var(--accent); font-size: 0.9rem; text-decoration: none; cursor: pointer; }
     .auth-link:hover { text-decoration: underline; }
     .auth-forgot { font-size: 0.85rem; color: var(--text-muted); margin-top: 8px; }
@@ -37,52 +43,55 @@
     .auth-section-title { font-size: 1rem; font-weight: 600; color: var(--text-primary); margin: 20px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
     .auth-form select { width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--input-bg); color: var(--text-primary); font-size: 1rem; cursor: pointer; }
     .auth-form select:focus { outline: none; border-color: var(--accent); }
-    .auth-warning { font-size: 0.8rem; color: #e67e22; margin-top: 6px; line-height: 1.35; }
-    .company-option-eic { color: #3498db; }
-    .company-option-mmo { color: #e74c3c; }
-    .company-option-vru { color: #27ae60; }
-    /* Custom dropdown grade avec images */
-    .auth-rank-wrapper { position: relative; }
-    .auth-rank-select-native { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
-    .auth-rank-display { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--input-bg); color: var(--text-primary); font-size: 1rem; cursor: pointer; min-height: 48px; }
-    .auth-rank-display:hover { border-color: var(--accent); }
-    .auth-rank-display .auth-rank-option-icon { width: 32px; height: 32px; object-fit: contain; flex-shrink: 0; }
-    .auth-rank-display .auth-rank-option-text { flex: 1; }
-    .auth-rank-display::after { content: '▼'; font-size: 0.7rem; opacity: 0.7; }
-    .auth-rank-options { display: none; position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; max-height: 280px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-secondary); box-shadow: 0 8px 24px var(--shadow); z-index: 10; }
-    .auth-rank-options.open { display: block; }
-    .auth-rank-option { display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--border); }
-    .auth-rank-option:last-child { border-bottom: none; }
-    .auth-rank-option:hover { background: var(--accent); color: #fff; }
-    .auth-rank-option .auth-rank-option-icon { width: 28px; height: 28px; object-fit: contain; flex-shrink: 0; }
+    /* Password field with toggle */
+    .auth-pw-wrap { position: relative; }
+    .auth-pw-wrap input { padding-right: 44px; }
+    .auth-pw-toggle { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 4px; font-size: 1rem; line-height: 1; }
+    .auth-pw-toggle:hover { color: var(--text-primary); }
+    /* Password strength */
+    .pw-strength-bar { display: flex; gap: 4px; margin-top: 6px; height: 4px; }
+    .pw-strength-seg { flex: 1; border-radius: 999px; background: rgba(255,255,255,0.1); transition: background 0.3s; }
+    .pw-strength-seg.weak { background: var(--danger); }
+    .pw-strength-seg.medium { background: #e67e22; }
+    .pw-strength-seg.strong { background: var(--success); }
+    .pw-strength-label { font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; }
+    /* Scan why box */
+    .auth-scan-why { background: rgba(var(--accent-rgb, 79,172,254), 0.08); border: 1px solid rgba(var(--accent-rgb, 79,172,254), 0.2); border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5; }
+    .auth-scan-why strong { color: var(--text-primary); }
+    .auth-scan-why ul { margin: 6px 0 0 16px; padding: 0; }
+    .auth-scan-why ul li { margin-bottom: 3px; }
+    /* Manual guide */
+    .auth-manual-guide { background: rgba(255,255,255,0.04); border-radius: 8px; padding: 10px 14px; margin-top: 8px; margin-bottom: 8px; font-size: 0.83rem; color: var(--text-secondary); line-height: 1.55; display: none; }
+    .auth-manual-guide.visible { display: block; }
+    .auth-manual-guide ol { margin: 6px 0 0 16px; padding: 0; }
+    .auth-manual-guide ol li { margin-bottom: 4px; }
+    /* Toggle switch */
     .auth-toggle-wrap { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
-    .auth-toggle { position: relative; width: 48px; height: 26px; background: #dc3545; border-radius: 13px; cursor: pointer; transition: background 0.2s; }
+    .auth-toggle { position: relative; width: 48px; height: 26px; background: #dc3545; border-radius: 13px; cursor: pointer; transition: background 0.2s; flex-shrink: 0; }
     .auth-toggle.active { background: #22c55e; }
     .auth-toggle::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; background: #fff; border-radius: 50%; transition: transform 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
     .auth-toggle.active::after { transform: translateX(22px); }
     .auth-toggle-label { font-size: 0.9rem; color: var(--text-secondary); }
     .auth-countdown { font-size: 0.9rem; color: var(--accent); margin-top: 8px; }
     .auth-error-inline { margin-top: 8px; }
+    /* Progress bar */
     .auth-scan-progress { margin-top: 8px; }
     .auth-scan-progress-bar { width: 100%; height: 6px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden; }
-    .auth-scan-progress-fill { height: 100%; width: 0%; background: var(--accent); transition: width 0.4s ease; }
+    .auth-scan-progress-fill { height: 100%; width: 0%; background: var(--accent); transition: width 0.5s ease; }
     .auth-scan-progress-text { margin-top: 6px; font-size: 0.85rem; color: var(--text-secondary); }
+    /* Scan result card */
+    .auth-scan-result-card { background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); border-radius: 8px; padding: 12px 14px; margin-top: 10px; display: none; }
+    .auth-scan-result-card.visible { display: block; }
+    .auth-scan-result-card .scr-title { font-size: 0.8rem; color: var(--success); font-weight: 600; margin-bottom: 8px; }
+    .auth-scan-result-card .scr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; }
+    .auth-scan-result-card .scr-item { font-size: 0.82rem; color: var(--text-secondary); }
+    .auth-scan-result-card .scr-item strong { color: var(--text-primary); }
+    /* Spinner */
     .auth-submit--loading { position: relative; }
-    .auth-spinner {
-      width: 16px;
-      height: 16px;
-      border-radius: 999px;
-      border: 2px solid rgba(255,255,255,0.4);
-      border-top-color: #fff;
-      display: inline-block;
-      margin-right: 8px;
-      vertical-align: middle;
-      animation: auth-spin 0.8s linear infinite;
-    }
-    @keyframes auth-spin {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
-    }
+    .auth-spinner { width: 16px; height: 16px; border-radius: 999px; border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff; display: inline-block; margin-right: 8px; vertical-align: middle; animation: auth-spin 0.8s linear infinite; }
+    @keyframes auth-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    /* Warning text */
+    .auth-warning { font-size: 0.8rem; color: #e67e22; margin-top: 6px; line-height: 1.35; }
   </style>
 </head>
 <body>
@@ -101,6 +110,7 @@
   <div id="authError" class="auth-error"></div>
   <div id="authSuccess" class="auth-success"></div>
 
+  <!-- CONNEXION -->
   <form id="authLoginForm" class="auth-form active" onsubmit="return false;">
     <div class="field">
       <label for="loginEmail">Email</label>
@@ -108,12 +118,15 @@
     </div>
     <div class="field">
       <label for="loginPassword">Mot de passe</label>
-      <input type="password" id="loginPassword" required placeholder="••••••••" autocomplete="current-password">
+      <div class="auth-pw-wrap">
+        <input type="password" id="loginPassword" required placeholder="••••••••" autocomplete="current-password">
+        <button type="button" class="auth-pw-toggle" id="loginPwToggle" tabindex="-1" aria-label="Afficher/masquer le mot de passe">👁</button>
+      </div>
     </div>
     <div class="field field-remember">
       <label class="auth-remember-label">
         <input type="checkbox" id="loginRememberMe" autocomplete="off">
-        <span>Sauvegarder le mot de passe (Remember me)</span>
+        <span>Se souvenir de moi</span>
       </label>
     </div>
     <button type="button" id="authForgotBtn" class="auth-link auth-forgot">Mot de passe oublié ?</button>
@@ -121,53 +134,103 @@
     <p id="loginInlineError" class="auth-error auth-error-inline" style="display: none; margin-top: 8px;"></p>
   </form>
 
+  <!-- INSCRIPTION -->
   <form id="authRegisterForm" class="auth-form" onsubmit="return false;">
+
     <div class="field">
       <label for="registerEmail">Email</label>
       <input type="email" id="registerEmail" required placeholder="votre@email.com" autocomplete="email">
+      <p class="field-inline-error" id="registerEmailError"></p>
     </div>
     <div class="field">
-      <label for="registerPassword">Mot de passe (min. 6 caractères)</label>
-      <input type="password" id="registerPassword" required minlength="6" placeholder="••••••••" autocomplete="new-password">
+      <label for="registerEmailConfirm">Confirmer l'email</label>
+      <input type="email" id="registerEmailConfirm" required placeholder="votre@email.com" autocomplete="off">
+      <p class="field-inline-error" id="registerEmailConfirmError"></p>
     </div>
-    <div class="auth-section-title">Identifiants DarkOrbit (pour le scan)</div>
+    <div class="field">
+      <label for="registerPassword">Mot de passe <span style="color:var(--text-muted);font-weight:400">(min. 6 caractères)</span></label>
+      <div class="auth-pw-wrap">
+        <input type="password" id="registerPassword" required minlength="6" placeholder="••••••••" autocomplete="new-password">
+        <button type="button" class="auth-pw-toggle" id="registerPwToggle" tabindex="-1" aria-label="Afficher/masquer le mot de passe">👁</button>
+      </div>
+      <div class="pw-strength-bar" id="pwStrengthBar">
+        <div class="pw-strength-seg" id="pws1"></div>
+        <div class="pw-strength-seg" id="pws2"></div>
+        <div class="pw-strength-seg" id="pws3"></div>
+        <div class="pw-strength-seg" id="pws4"></div>
+      </div>
+      <p class="pw-strength-label" id="pwStrengthLabel"></p>
+    </div>
+
+    <div class="auth-section-title">Scan DarkOrbit</div>
+
+    <div class="auth-scan-why">
+      <strong>Pourquoi un scan ?</strong><br>
+      Le scan récupère votre point de départ (XP, honneur, grade) pour calculer votre progression au fil du temps.
+      <ul>
+        <li>Vos identifiants DarkOrbit <strong>ne sont jamais stockés</strong></li>
+        <li>Utilisés uniquement pour ce scan initial, une seule fois</li>
+        <li>Connexion directe au site officiel DarkOrbit</li>
+      </ul>
+    </div>
+
     <div class="auth-toggle-wrap">
       <div id="registerManualLoginToggle" class="auth-toggle" role="switch" aria-checked="false" tabindex="0"></div>
       <span class="auth-toggle-label">Connexion manuelle DarkOrbit</span>
     </div>
-    <div class="field">
-      <label for="registerDoPseudo">Pseudo DarkOrbit</label>
-      <input type="text" id="registerDoPseudo" placeholder="Votre pseudo en jeu" autocomplete="username">
+
+    <div id="registerAutoFields">
+      <div class="field">
+        <label for="registerDoPseudo">Pseudo DarkOrbit</label>
+        <input type="text" id="registerDoPseudo" placeholder="Votre pseudo en jeu" autocomplete="username">
+      </div>
+      <div class="field">
+        <label for="registerDoPassword">Mot de passe DarkOrbit</label>
+        <div class="auth-pw-wrap">
+          <input type="password" id="registerDoPassword" placeholder="••••••••" autocomplete="current-password">
+          <button type="button" class="auth-pw-toggle" id="registerDoPwToggle" tabindex="-1" aria-label="Afficher/masquer">👁</button>
+        </div>
+      </div>
     </div>
-    <div class="field">
-      <label for="registerDoPassword">Mot de passe DarkOrbit</label>
-      <input type="password" id="registerDoPassword" placeholder="••••••••" autocomplete="current-password">
+
+    <div id="registerManualGuide" class="auth-manual-guide">
+      <strong>Mode manuel — 3 étapes :</strong>
+      <ol>
+        <li>Sélectionnez votre serveur ci-dessous</li>
+        <li>Cliquez <em>"Lancer le scan"</em> — une fenêtre DarkOrbit s'ouvre</li>
+        <li>Connectez-vous dans cette fenêtre, puis attendez la détection automatique (~30s)</li>
+      </ol>
     </div>
+
     <div class="field">
       <label for="registerDoServer">Serveur</label>
       <select id="registerDoServer"></select>
     </div>
+
     <div class="field">
       <button type="button" id="registerScanStatsBtn" class="auth-submit" style="background: var(--bg-secondary); color: var(--accent); border: 2px solid var(--accent); margin-top: 0;" disabled>Lancer le scan</button>
       <p id="registerScanError" class="auth-error auth-error-inline" style="display: none;"></p>
-      <p id="registerScanHint" class="auth-warning" style="margin-top: 8px;">Ouvrez le client Dark Orbit Flash, connectez-vous, puis cliquez ci-dessus. Ces stats serviront de base et apparaîtront dans l’historique.</p>
+      <p id="registerScanHint" class="auth-warning" style="margin-top: 8px;"></p>
       <p id="registerScanCountdown" class="auth-countdown" style="display: none;"></p>
       <div id="registerScanProgress" class="auth-scan-progress" style="display: none;">
         <div class="auth-scan-progress-bar">
-          <div class="auth-scan-progress-fill"></div>
+          <div class="auth-scan-progress-fill" id="registerScanProgressFill"></div>
         </div>
-        <p id="registerScanProgressText" class="auth-scan-progress-text">Connexion à DarkOrbit...</p>
+        <p id="registerScanProgressText" class="auth-scan-progress-text"></p>
       </div>
-      <p id="registerScanResult" class="auth-success" style="margin-top: 8px; display: none;"></p>
+      <div id="registerScanResultCard" class="auth-scan-result-card">
+        <div class="scr-title">✅ Scan réussi — données de base enregistrées</div>
+        <div class="scr-grid" id="registerScanResultGrid"></div>
+      </div>
     </div>
 
-    <button type="submit" class="auth-submit" id="registerSubmit">Créer un compte</button>
+    <button type="submit" class="auth-submit" id="registerSubmit" disabled>Créer un compte</button>
+    <p class="auth-submit-hint" id="registerSubmitHint">Lancez d'abord le scan pour débloquer la création de compte</p>
   </form>
 </div>
 
 <!-- SDK Supabase EN PREMIER -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<!-- Config et client Supabase -->
 <script src="backend/supabase-config.js"></script>
 <script src="config/keys.js"></script>
 <script src="backend/supabase-client.js"></script>
@@ -176,13 +239,12 @@
 <script src="backend/server-mappings.js"></script>
 <script src="backend/config.js"></script>
 <script src="backend/utils.js"></script>
-<!-- UnifiedStorage puis auth -->
 <script src="backend/unified-storage.js"></script>
 <script src="backend/auth-manager.js"></script>
 <script src="frontend/auth.js"></script>
 <script src="frontend/legal.js"></script>
 
-<!-- MODAL DOCUMENTS LÉGAUX (même structure que index.html) -->
+<!-- MODAL DOCUMENTS LÉGAUX -->
 <div id="modalLegal" class="modal-legal hidden">
   <div class="modal-legal-overlay"></div>
   <div class="modal-legal-container">

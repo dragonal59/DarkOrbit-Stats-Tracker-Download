@@ -18,5 +18,6 @@
     "ru": "Приветствую, космический пилот! Наши шпионы обнаружили неизведанный регион космоса, богатый ценными материалами для сборки LF-5 и LF-5 Anchorlock. Однако будьте осторожны! Добыча ресурсов в этой опасной среде может оказаться крайне сложной операцией...",
     "tr": "Selamlar, Uzay Pilotu! Şirket casuslarımız, LF-5 ve LF-5 Anchorlock'u monte etmek için gereken değerli malzemelerle dolu keşfedilmemiş bir uzay bölgesi buldu. Ancak dikkatli ol! Bu tehlikeli ortamdan kaynak çıkarmak son derece zorlu bir operasyon olabilir..."
   },
-  "keywords": ["vortex of greed", "vortex de cupidité", "vórtice de la codicia", "strudel der gier", "вихрь жадности", "açgözlülük girdabı"]
+  "keywords": ["vortex of greed", "vortex de cupidité", "vórtice de la codicia", "strudel der gier", "вихрь жадности", "açgözlülük girdabı"],
+  "exclude_keywords": []
 }

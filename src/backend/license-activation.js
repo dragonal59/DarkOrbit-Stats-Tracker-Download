@@ -5,6 +5,10 @@
 (function () {
   'use strict';
 
+  function t(key) {
+    return (typeof window !== 'undefined' && typeof window.i18nT === 'function') ? window.i18nT(key) : key;
+  }
+
   function formatLicenseKeyInput(input) {
     var v = (input.value || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 16);
     var parts = [];
@@ -57,7 +61,7 @@
 
     var keyNorm = getLicenseKeyNormalized(input);
     if (keyNorm.length !== 16) {
-      showLicenseMessage('error', typeof t === 'function' ? t('license_activation_error') : '❌ Clé invalide ou déjà utilisée.');
+      showLicenseMessage('error', t('license_activation_error') || '❌ Clé invalide ou déjà utilisée.');
       return;
     }
 
@@ -72,20 +76,36 @@
       var keyFormatted = keyNorm.match(/.{1,4}/g).join('-');
       var { data, error } = await supabase.rpc('activate_license_key', { p_key: keyFormatted });
       if (error) {
-        showLicenseMessage('error', typeof t === 'function' ? t('license_activation_error') : '❌ Clé invalide ou déjà utilisée.');
+        var isNetworkErr = !error.status || error.status === 0 || (typeof error.message === 'string' && /fetch|network|timeout/i.test(error.message));
+        showLicenseMessage('error', isNetworkErr
+          ? (t('license_activation_network_error') || '⚠️ Erreur réseau. Vérifiez votre connexion et réessayez.')
+          : (t('license_activation_error') || '❌ Clé invalide ou déjà utilisée.'));
         return;
       }
       if (data && data.success === true) {
-        showLicenseMessage('success', typeof t === 'function' ? t('license_activation_success') : '✅ Clé activée avec succès ! Votre compte est maintenant PRO.');
+        var badge = (data && data.badge) ? String(data.badge).toUpperCase() : 'PRO';
+        var msgKey = badge === 'PRO'
+          ? 'license_activation_success'
+          : badge === 'ADMIN'
+            ? 'license_activation_success_admin'
+            : badge === 'SUPERADMIN'
+              ? 'license_activation_success_superadmin'
+              : 'license_activation_success';
+        showLicenseMessage('success', t(msgKey) || '✅ Clé activée avec succès !');
         input.value = '';
         if (typeof BackendAPI !== 'undefined') BackendAPI.invalidateProfileCache();
         if (typeof BackendAPI !== 'undefined') await BackendAPI.loadUserProfile();
+        if (typeof BackendAPI !== 'undefined' && typeof BackendAPI.getPermissions === 'function') await BackendAPI.getPermissions(true);
         if (typeof applyPermissionsUI === 'function') applyPermissionsUI();
         if (typeof updateExportButtonVisibility === 'function') await updateExportButtonVisibility();
         if (typeof window.updatePayPalButtonsVisibility === 'function') window.updatePayPalButtonsVisibility();
         setTimeout(function () {
           updateLicenseUIBasedOnBadge();
         }, 2000);
+        return;
+      }
+      if (data && data.success === false && data.error === 'key_expired') {
+        showLicenseMessage('error', t('license_activation_key_expired') || 'Cette clé a expiré et n\'est plus activable.');
         return;
       }
       var trialRes = await supabase.rpc('activate_trial_key', { p_key: keyFormatted });
@@ -94,6 +114,7 @@
         input.value = '';
         if (typeof BackendAPI !== 'undefined') BackendAPI.invalidateProfileCache();
         if (typeof BackendAPI !== 'undefined') await BackendAPI.loadUserProfile();
+        if (typeof BackendAPI !== 'undefined' && typeof BackendAPI.getPermissions === 'function') await BackendAPI.getPermissions(true);
         if (typeof applyPermissionsUI === 'function') applyPermissionsUI();
         if (typeof updateExportButtonVisibility === 'function') await updateExportButtonVisibility();
         if (typeof window.updatePayPalButtonsVisibility === 'function') window.updatePayPalButtonsVisibility();
@@ -101,10 +122,13 @@
           updateLicenseUIBasedOnBadge();
         }, 2000);
       } else {
-        showLicenseMessage('error', typeof t === 'function' ? t('license_activation_error') : '❌ Clé invalide ou déjà utilisée.');
+        showLicenseMessage('error', t('license_activation_error') || '❌ Clé invalide ou déjà utilisée.');
       }
     } catch (e) {
-      showLicenseMessage('error', typeof t === 'function' ? t('license_activation_error') : '❌ Clé invalide ou déjà utilisée.');
+      var isNetworkException = e instanceof TypeError || (typeof e.message === 'string' && /fetch|network|timeout/i.test(e.message));
+      showLicenseMessage('error', isNetworkException
+        ? (t('license_activation_network_error') || '⚠️ Erreur réseau. Vérifiez votre connexion et réessayez.')
+        : (t('license_activation_error') || '❌ Clé invalide ou déjà utilisée.'));
     } finally {
       btn.disabled = false;
     }

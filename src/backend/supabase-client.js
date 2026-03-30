@@ -33,11 +33,22 @@ function startProfileBadgeRealtime(userId) {
     },
     function () {
       if (typeof BackendAPI !== 'undefined' && BackendAPI.getPermissions) {
-        BackendAPI.getPermissions(true).then(function () {
-          if (typeof applyPermissionsUI === 'function') applyPermissionsUI();
-        }).catch(function () {
-          if (typeof applyPermissionsUI === 'function') applyPermissionsUI();
-        });
+        if (typeof BackendAPI.invalidateProfileCache === 'function') BackendAPI.invalidateProfileCache();
+        var loadP =
+          typeof BackendAPI.loadUserProfile === 'function' ? BackendAPI.loadUserProfile() : Promise.resolve();
+        loadP
+          .then(function () {
+            return BackendAPI.getPermissions(true);
+          })
+          .then(function () {
+            if (typeof window.ProfileSubscriptionUI !== 'undefined' && typeof window.ProfileSubscriptionUI.afterProfileRealtimeRefresh === 'function') {
+              window.ProfileSubscriptionUI.afterProfileRealtimeRefresh();
+            }
+            if (typeof applyPermissionsUI === 'function') applyPermissionsUI();
+          })
+          .catch(function () {
+            if (typeof applyPermissionsUI === 'function') applyPermissionsUI();
+          });
       }
     }
   );

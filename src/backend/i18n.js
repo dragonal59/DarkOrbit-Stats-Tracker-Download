@@ -76,12 +76,25 @@
 
   function openDropdown() {
     var dd = document.getElementById('languageDropdown');
-    if (dd) dd.classList.add('language-dropdown--open');
+    var btn = document.getElementById('languageBtn');
+    if (!dd) return;
+    dd.classList.add('language-dropdown--open');
+    if (btn) {
+      var rect = btn.getBoundingClientRect();
+      var ddWidth = dd.offsetWidth || 160;
+      var left = Math.min(rect.left, window.innerWidth - ddWidth - 8);
+      dd.style.top = (rect.bottom + 4) + 'px';
+      dd.style.right = 'auto';
+      dd.style.left = Math.max(8, left) + 'px';
+      btn.setAttribute('aria-expanded', 'true');
+    }
   }
 
   function closeDropdown() {
     var dd = document.getElementById('languageDropdown');
+    var btn = document.getElementById('languageBtn');
     if (dd) dd.classList.remove('language-dropdown--open');
+    if (btn) btn.setAttribute('aria-expanded', 'false');
   }
 
   function setLanguage(lang) {

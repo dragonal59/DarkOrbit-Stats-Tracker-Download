@@ -42,7 +42,6 @@
 </div>
 <div id="app-content" style="display:none">
 <button id="btnLegal" type="button" class="btn-legal-info" data-i18n-title="legal_btn_title" title="Informations légales" aria-label="Informations légales">ℹ️</button>
-<div id="languageButtonContainer" class="language-button-fixed"></div>
 
 <!-- Boutons PayPal — coin supérieur gauche, visibilité selon badge -->
 <div id="paypalButtonsContainer" class="paypal-buttons-fixed" style="display:none;">
@@ -94,6 +93,24 @@
     </div>
     <div class="upgrade-pro-cta-wrap">
       <button type="button" class="upgrade-pro-cta" id="upgradeProCtaBtn" data-paypal-pro-subscribe="1" data-i18n="upgrade_pro_paypal_cta">S'abonner avec PayPal</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal transition d'abonnement (FREE ↔ PRO) -->
+<div id="subscriptionStatusModal" class="sa-modal" role="dialog" aria-modal="true" aria-labelledby="subscriptionStatusModalTitle">
+  <div class="sa-modal-overlay"></div>
+  <div class="sa-modal-content" style="max-width: 420px;">
+    <div class="sa-modal-header">
+      <h3 id="subscriptionStatusModalTitle" data-i18n="sub_transition_welcome_title">—</h3>
+      <button type="button" class="sa-modal-close" id="subscriptionStatusModalClose" data-i18n-aria-label="close" aria-label="Fermer">&times;</button>
+    </div>
+    <div class="sa-modal-body">
+      <p id="subscriptionStatusModalBody" data-i18n="sub_transition_welcome_body" style="margin:0;">—</p>
+    </div>
+    <div class="sa-modal-footer" style="display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end;">
+      <button type="button" class="sa-btn" id="subscriptionStatusModalCloseBtn" data-i18n="close">Fermer</button>
+      <button type="button" class="sa-btn sa-btn--primary" id="subscriptionStatusModalSubscribe" style="display:none;" data-i18n="sub_transition_subscribe_btn">S'abonner</button>
     </div>
   </div>
 </div>
@@ -208,9 +225,6 @@
     window.location.href = 'pending-verification.html';
   }
 
-  function redirectSubscription() {
-    if (Loader) Loader.hideOverlay();
-  }
 
   async function runAuthCheck() {
     if (Loader) {
@@ -233,6 +247,9 @@
           var completed = await AuthManager.completeRegistrationFromMetadata();
           if (completed.done) BackendAPI.invalidateProfileCache();
           await BackendAPI.getPermissions(true);
+          if (typeof window.ProfileSubscriptionUI !== 'undefined' && typeof window.ProfileSubscriptionUI.checkProfileSubscriptionColdStart === 'function') {
+            window.ProfileSubscriptionUI.checkProfileSubscriptionColdStart();
+          }
           var profile = BackendAPI.getUserProfile();
           if (profile && profile.status === 'pending') {
             redirectPending();
@@ -252,7 +269,7 @@
           }
           var subCheck = typeof SubscriptionCheck !== 'undefined' && SubscriptionCheck.check ? await SubscriptionCheck.check() : { ok: true };
           if (!subCheck.ok && subCheck.redirectToSubscription) {
-            redirectSubscription();
+            if (Loader) Loader.hideOverlay();
             return;
           }
           if (typeof SubscriptionCheck !== 'undefined' && SubscriptionCheck.startHourlyCheck) SubscriptionCheck.startHourlyCheck();
@@ -326,7 +343,8 @@
       window.__supabaseAuthenticated = false;
       if (typeof Logger !== 'undefined' && Logger.error) Logger.error('[authCheck] Erreur:', e?.message || e, e);
       else console.error('[authCheck] Erreur:', e?.message || e, e);
-      if (typeof AuthManager !== 'undefined' && AuthManager.logout) await AuthManager.logout();
+      const isAuthErr = e && (e.status === 401 || e.status === 403 || (typeof e.message === 'string' && /jwt|token|auth|unauthorized/i.test(e.message)));
+      if (isAuthErr && typeof AuthManager !== 'undefined' && AuthManager.logout) await AuthManager.logout();
       goToAuth();
     }
   }
@@ -456,7 +474,7 @@
     <button class="tab-btn" data-tab="classement">🏆 <span data-i18n="nav_ranking">Classement</span></button>
     <button class="tab-btn" data-tab="coupons">🎫 <span data-i18n="nav_coupons">Coupons</span></button>
     <button class="tab-btn" data-tab="settings">⚙️ <span data-i18n="nav_settings">Paramètres</span></button>
-    <button class="tab-btn" data-tab="superadmin">📊 <span data-i18n="nav_dashboard">Dashboard</span></button>
+    <button class="tab-btn" data-tab="superadmin">🛠️ <span data-i18n="nav_dashboard">Dashboard</span></button>
   </div>
 
   <!-- TAB 1: STATISTIQUES -->
@@ -717,8 +735,8 @@
     <div class="progression-wrap">
       <header class="progression-header">
         <h2 class="progression-title">📈 <span data-i18n="progression_title">Progression</span></h2>
-        <p class="progression-subtitle" data-i18n="progression_subtitle">Synthèse nette sur la période (sessions enregistrées, hors seuil de départ).</p>
-        <div class="progression-period" role="group" aria-label="Période">
+        <p class="progression-subtitle" data-i18n="progression_subtitle">Synthèse sur la période choisie (sessions enregistrées, hors seuil de départ).</p>
+        <div class="progression-period" role="group" aria-label="Période" data-i18n-aria-label="aria_period_group">
           <button type="button" class="progression-period-btn" data-period="24h" data-i18n="progression_period_24h">24 h</button>
           <button type="button" class="progression-period-btn" data-period="7d" data-i18n="progression_period_7d">7 jours</button>
           <button type="button" class="progression-period-btn is-active" data-period="30d" data-i18n="progression_period_30d">30 jours</button>
@@ -734,7 +752,7 @@
             <label><input type="checkbox" id="progToggleXp" checked> <span data-i18n="progression_toggle_xp">XP</span></label>
           </div>
           <div class="progression-chart-canvas-box">
-            <canvas id="progressionChartCanvas" aria-label="Graphique"></canvas>
+            <canvas id="progressionChartCanvas" aria-label="Graphique" data-i18n-aria-label="aria_chart"></canvas>
           </div>
         </div>
         <p class="progression-projection" id="progressionProjection"></p>
@@ -889,6 +907,13 @@
               📊 <span data-i18n="compact">Compact</span>
             </button>
           </div>
+        </div>
+
+        <div class="settings-group">
+          <label class="settings-checkbox-label">
+            <input type="checkbox" id="settingsScrollbarsEnabled" checked>
+            <span>↕ <span data-i18n="show_scrollbars">Afficher les scrollbars</span></span>
+          </label>
         </div>
 
       </div>
@@ -1191,6 +1216,17 @@
                 <label class="sa-keys-label" data-i18n="sa_keys_quantity">Quantité (1-100)</label>
                 <input type="number" id="superAdminKeysQuantity" class="sa-keys-input" min="1" max="100" value="1">
               </div>
+              <div class="sa-keys-row">
+                <label class="sa-keys-label" data-i18n="sa_keys_expiration_period">Période d'expiration</label>
+                <select id="superAdminKeysExpiresIn" class="sa-keys-select">
+                  <option value="1d" data-i18n="sa_keys_expires_1d">1 jour</option>
+                  <option value="3d" data-i18n="sa_keys_expires_3d">3 jours</option>
+                  <option value="1w" data-i18n="sa_keys_expires_1w">1 semaine</option>
+                  <option value="2w" data-i18n="sa_keys_expires_2w">2 semaines</option>
+                  <option value="1m" data-i18n="sa_keys_expires_1m">1 mois</option>
+                  <option value="indefinite" selected data-i18n="sa_keys_expires_indefinite">indéfinie</option>
+                </select>
+              </div>
               <button type="button" class="sa-collect-btn sa-collect-btn--start" id="superAdminKeysGenerateBtn">
                 🔑 <span data-i18n="sa_keys_generate">Générer</span>
               </button>
@@ -1486,7 +1522,7 @@
     <div class="sa-modal-overlay account-panel-overlay"></div>
     <div class="sa-modal-content account-panel-content">
       <div class="sa-modal-header">
-        <button type="button" id="accountDoBackBtn" class="account-back-btn" style="display: none;">← Retour</button>
+        <button type="button" id="accountDoBackBtn" class="account-back-btn" style="display: none;" data-i18n="back_btn">← Retour</button>
         <h3>👤 <span data-i18n="my_account">Mon Compte</span></h3>
         <button type="button" class="sa-modal-close" id="accountPanelClose">&times;</button>
       </div>
@@ -1571,6 +1607,11 @@
         <div id="accountTabAbout" class="account-tab-content account-tab-content--about" style="display: none;">
         <div class="account-about-stack">
         <section class="account-section account-about-block">
+          <h4 class="account-section-title account-about-heading" data-i18n="language">Langue</h4>
+          <div id="languageButtonContainer"></div>
+        </section>
+
+        <section class="account-section account-about-block">
           <h4 class="account-section-title account-about-heading" data-i18n="about_application">Application</h4>
           <p class="account-about-app-title">DO Stats Tracker <span id="accountAppVersionInline" class="account-about-version-tag">v—</span></p>
           <div class="account-about-update-row">
@@ -1589,7 +1630,9 @@
           </div>
         </section>
 
-        <section class="account-section account-about-block">
+        <section id="accountAdminPrivilegeCard" class="account-section account-admin-privilege-card" style="display:none;"></section>
+
+        <section id="accountAboutStatusSection" class="account-section account-about-block">
           <h4 class="account-section-title account-about-heading" data-i18n="about_status">Statut</h4>
           <p class="account-about-sub-heading" data-i18n="about_subscription_heading">Abonnement</p>
           <div class="account-about-sub-grid">
@@ -1612,7 +1655,7 @@
           </div>
         </section>
 
-        <section class="account-section account-about-block">
+        <section id="accountAboutExpirySection" class="account-section account-about-block">
           <h4 class="account-section-title account-about-heading" data-i18n="about_expiry_section_title">Expiration</h4>
           <p class="account-about-expiry-hint" data-i18n="about_expiry_cancel_hint">Date de fin d’accès si vous annulez votre abonnement (ou fin d’essai).</p>
           <p id="accountAboutExpiryCancel" class="account-about-expiry-value">—</p>
@@ -1675,7 +1718,7 @@
       </div>
       <div class="sa-modal-body">
         <p data-i18n="delete_account_confirm_text">Pour confirmer, tapez <strong>SUPPRIMER</strong> ci-dessous.</p>
-        <input type="text" id="accountDeleteConfirmInput" class="account-input" placeholder="SUPPRIMER" autocomplete="off">
+        <input type="text" id="accountDeleteConfirmInput" class="account-input" data-i18n-placeholder="delete_confirm_word" placeholder="SUPPRIMER" autocomplete="off">
       </div>
       <div class="sa-modal-footer">
         <button type="button" class="sa-btn" id="accountDeleteConfirmCancelBtn" data-i18n="cancel">Annuler</button>
@@ -2145,6 +2188,7 @@
 <script src="backend/utils.js"></script>
 <script src="backend/version-badges.js"></script>
 <script src="backend/api.js"></script>
+<script src="backend/profile-subscription-ui.js"></script>
 
 <!-- NIVEAU 2 : Backend — Logique métier -->
 <script src="backend/stats.js"></script>

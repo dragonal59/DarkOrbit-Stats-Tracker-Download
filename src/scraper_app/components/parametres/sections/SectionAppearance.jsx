@@ -1,27 +1,9 @@
-import { motion } from 'framer-motion';
+﻿import { motion } from 'framer-motion';
 import {
   ACCENT_COLORS,
   UI_DENSITY_OPTIONS,
   APPEARANCE_BEHAVIOR_OPTIONS,
 } from '../../../data/defaultSettings';
-
-const _UNUSED_DENSITY = [
-  {
-    value: 'compact',
-    label: 'Compact',
-    desc: "Maximum d'infos à l'écran",
-  },
-  {
-    value: 'normal',
-    label: 'Normal',
-    desc: 'Équilibre densité / lisibilité',
-  },
-  {
-    value: 'comfortable',
-    label: 'Aéré',
-    desc: 'Plus d’espacement, plus lisible',
-  },
-];
 
 export function SectionAppearance({ settings, patch, resetSection }) {
   const a = settings.appearance;

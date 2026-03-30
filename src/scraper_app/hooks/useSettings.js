@@ -1,8 +1,8 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { DEFAULT_SETTINGS } from '../data/defaultSettings';
 
-function deepEqual(a, b) {
-  return JSON.stringify(a) === JSON.stringify(b);
+function stableStr(v) {
+  return JSON.stringify(v, (_, val) => (val === undefined ? null : val));
 }
 
 /** Debounce pour éviter les courses (saving === true qui bloquait les saves suivantes) et garantir la dernière valeur. */
@@ -50,7 +50,9 @@ export function useSettings() {
     })();
   }, []);
 
-  const isDirty = !deepEqual(settings, saved);
+  const settingsStr = useMemo(() => stableStr(settings), [settings]);
+  const savedStr = useMemo(() => stableStr(saved), [saved]);
+  const isDirty = settingsStr !== savedStr;
 
   const patch = useCallback((section, partial) => {
     setSettings((prev) => ({
@@ -101,12 +103,12 @@ export function useSettings() {
   }, []);
 
   useEffect(() => {
-    if (deepEqual(settings, saved)) return;
+    if (settingsStr === savedStr) return;
     const t = setTimeout(() => {
       void persistToDisk(settingsRef.current);
     }, AUTOSAVE_DEBOUNCE_MS);
     return () => clearTimeout(t);
-  }, [settings, saved, persistToDisk]);
+  }, [settingsStr, savedStr, persistToDisk]);
 
   const addProxy = useCallback(
     (proxy) => {
@@ -175,21 +177,18 @@ export function useSettings() {
   );
 
   const testAllProxies = useCallback(async () => {
-    // simple simulated test, sequential
+    const testUrl = settings.proxies.testUrl || 'https://dostats.info';
     for (const proxy of settings.proxies.list) {
       if (!proxy.enabled) continue;
       updateProxy(proxy.id, { status: 'testing' });
       // eslint-disable-next-line no-await-in-loop
-      await new Promise((r) => setTimeout(r, 300 + Math.random() * 700));
-      const ok = Math.random() > 0.2;
+      const result = await (window.electronAPI?.testProxy?.(proxy, testUrl) ?? Promise.resolve({ ok: false, error: 'IPC indisponible', latency: null }));
       updateProxy(proxy.id, {
-        status: ok ? 'ok' : 'error',
-        latency: ok
-          ? Math.floor(200 + Math.random() * 600)
-          : null,
+        status: result.ok ? 'ok' : 'error',
+        latency: result.ok ? result.latency : null,
       });
     }
-  }, [settings.proxies.list, updateProxy]);
+  }, [settings.proxies.list, settings.proxies.testUrl, updateProxy]);
 
   return {
     settings,

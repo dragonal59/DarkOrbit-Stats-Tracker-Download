@@ -3,6 +3,7 @@ import { useLiveLogs } from '../hooks/useLiveLogs';
 
 export function LiveFeed() {
   const { logs, clearLogs } = useLiveLogs();
+  const active = logs.length > 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 10 }}>
@@ -24,8 +25,8 @@ export function LiveFeed() {
             style={{
               padding: '2px 8px',
               borderRadius: 999,
-              backgroundColor: 'rgba(248,113,113,0.12)',
-              color: '#fecaca',
+              backgroundColor: active ? 'rgba(74,222,128,0.12)' : 'rgba(148,163,184,0.08)',
+              color: active ? '#4ade80' : 'var(--text-muted)',
               fontSize: 11,
               display: 'inline-flex',
               alignItems: 'center',
@@ -33,8 +34,13 @@ export function LiveFeed() {
             }}
           >
             <span
-              className="status-dot error"
-              style={{ width: 7, height: 7, backgroundColor: '#f87171' }}
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: '50%',
+                backgroundColor: active ? '#4ade80' : 'rgba(148,163,184,0.4)',
+                boxShadow: active ? '0 0 6px #4ade80' : 'none',
+              }}
             />
             LIVE
           </span>

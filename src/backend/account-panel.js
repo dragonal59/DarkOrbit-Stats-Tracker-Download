@@ -6,7 +6,9 @@
 (function () {
   'use strict';
 
-  var CONFIRM_DELETE_TEXT = 'SUPPRIMER';
+  function getConfirmDeleteText() {
+    return (typeof window.i18nT === 'function') ? window.i18nT('delete_confirm_word') || 'SUPPRIMER' : 'SUPPRIMER';
+  }
 
   function escapeHtml(s) {
     if (s == null) return '';
@@ -118,10 +120,47 @@
     return meta && typeof meta === 'object' ? meta : {};
   }
 
+  function renderAdminPrivilegeCard(badge) {
+    var card = document.getElementById('accountAdminPrivilegeCard');
+    var statusSection = document.getElementById('accountAboutStatusSection');
+    var expirySection = document.getElementById('accountAboutExpirySection');
+    var b = String(badge || '').toUpperCase();
+    var isPrivileged = b === 'ADMIN' || b === 'SUPERADMIN';
+
+    if (statusSection) statusSection.style.display = isPrivileged ? 'none' : '';
+    if (expirySection) expirySection.style.display = isPrivileged ? 'none' : '';
+
+    if (!card) return;
+    if (!isPrivileged) { card.style.display = 'none'; return; }
+
+    var isSA = b === 'SUPERADMIN';
+    var T = function (k, fb) { return (typeof window.i18nT === 'function' ? window.i18nT(k) : null) || fb; };
+    var icon = isSA ? '👑' : '🛡️';
+    var modifier = isSA ? 'superadmin' : 'admin';
+    var title = isSA ? T('superadmin_role_name', 'Super Administrateur') : T('admin_role_name', 'Administrateur');
+    var desc = isSA ? T('admin_privilege_desc_superadmin', 'Vous bénéficiez d\'un accès <strong>PRO gratuit et illimité</strong> en tant que super administrateur.') : T('admin_privilege_desc_admin', 'Vous bénéficiez d\'un accès <strong>PRO gratuit et illimité</strong> en tant qu\'administrateur.');
+    var tagLabel = isSA ? T('admin_privilege_tag_superadmin', '♾ Super Admin · PRO illimité') : T('admin_privilege_tag_admin', '♾ Admin · PRO illimité');
+    var youAre = T('admin_privilege_you_are', 'Vous êtes');
+
+    card.innerHTML =
+      '<div class="account-admin-privilege-inner account-admin-privilege-inner--' + modifier + '">' +
+        '<div class="account-admin-privilege-icon">' + icon + '</div>' +
+        '<div class="account-admin-privilege-body">' +
+          '<div class="account-admin-privilege-title">' + youAre + ' ' + title + '</div>' +
+          '<p class="account-admin-privilege-desc">' + desc + '</p>' +
+          '<span class="account-admin-privilege-tag">✦ ' + tagLabel + '</span>' +
+        '</div>' +
+      '</div>';
+    card.style.display = '';
+  }
+
   function updateAboutSubscriptionSection(profile, badge) {
+    renderAdminPrivilegeCard(badge);
+    var b = String(badge || '').toUpperCase();
+    if (b === 'ADMIN' || b === 'SUPERADMIN') return;
+
     var subStatus = profile && profile.subscription_status ? profile.subscription_status : 'free';
     var trialExpires = profile && profile.trial_expires_at ? profile.trial_expires_at : null;
-    var b = String(badge || '').toUpperCase();
     var isPro = b === 'PRO' || subStatus === 'premium';
     var meta = parseProfileMetadata(profile);
     var subMeta = meta.subscription || meta.paypal || {};
@@ -259,19 +298,36 @@
     var newEl = document.getElementById('accountNewPassword');
     var confirmEl = document.getElementById('accountConfirmPassword');
     if (!btn || !newEl || !confirmEl) return;
+    var t = function (k, fb) { return (typeof window.i18nT === 'function' ? window.i18nT(k) : null) || fb; };
     btn.addEventListener('click', async function () {
+      var currentPwd = currentEl ? currentEl.value : '';
       var newPwd = newEl.value;
       var confirmPwd = confirmEl.value;
+      if (currentEl && !currentPwd) {
+        if (typeof showToast === 'function') showToast(t('current_password_required', 'Mot de passe actuel requis'), 'warning');
+        return;
+      }
       if (!newPwd || newPwd.length < 6) {
-        if (typeof showToast === 'function') showToast(typeof window.i18nT === 'function' ? window.i18nT('password_min_length') : 'Le mot de passe doit faire au moins 6 caractères', 'warning');
+        if (typeof showToast === 'function') showToast(t('password_min_length', 'Le mot de passe doit faire au moins 6 caractères'), 'warning');
         return;
       }
       if (newPwd !== confirmPwd) {
-        if (typeof showToast === 'function') showToast(typeof window.i18nT === 'function' ? window.i18nT('passwords_dont_match') : 'Les mots de passe ne correspondent pas', 'error');
+        if (typeof showToast === 'function') showToast(t('passwords_dont_match', 'Les mots de passe ne correspondent pas'), 'error');
         return;
       }
       var supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
       if (!supabase) return;
+      if (currentEl && currentPwd) {
+        var userRes = await supabase.auth.getUser();
+        var email = userRes.data && userRes.data.user ? userRes.data.user.email : null;
+        if (email) {
+          var { error: reAuthErr } = await supabase.auth.signInWithPassword({ email: email, password: currentPwd });
+          if (reAuthErr) {
+            if (typeof showToast === 'function') showToast(t('current_password_incorrect', 'Mot de passe actuel incorrect'), 'error');
+            return;
+          }
+        }
+      }
       var { error } = await supabase.auth.updateUser({ password: newPwd });
       if (error) {
         if (typeof showToast === 'function') showToast(error.message || 'Erreur', 'error');
@@ -280,7 +336,7 @@
       if (currentEl) currentEl.value = '';
       newEl.value = '';
       confirmEl.value = '';
-      if (typeof showToast === 'function') showToast(typeof window.i18nT === 'function' ? window.i18nT('password_updated') : 'Mot de passe mis à jour', 'success');
+      if (typeof showToast === 'function') showToast(t('password_updated', 'Mot de passe mis à jour'), 'success');
     });
   }
 
@@ -332,7 +388,7 @@
     if (confirmOk) {
       confirmOk.addEventListener('click', async function () {
         var typed = confirmInput && confirmInput.value ? confirmInput.value.trim() : '';
-        if (typed !== CONFIRM_DELETE_TEXT) {
+        if (typed !== getConfirmDeleteText()) {
           if (typeof showToast === 'function') showToast(typeof window.i18nT === 'function' ? window.i18nT('type_supprimer_to_confirm') : 'Tapez SUPPRIMER pour confirmer', 'error');
           return;
         }
@@ -712,7 +768,10 @@
         var id = btn.getAttribute('data-id');
         var pseudo = btn.getAttribute('data-pseudo') || 'ce compte';
         var server = btn.getAttribute('data-server') || '';
-        if (!confirm('Supprimer ' + pseudo + ' sur ' + server + ' ? Toutes ses sessions seront perdues.')) return;
+        var confirmMsg = (typeof window.i18nT === 'function')
+          ? (window.i18nT('confirm_remove_tracked_player') || '').replace('%name%', pseudo).replace('%server%', server)
+          : 'Supprimer ' + pseudo + ' sur ' + server + ' ? Toutes ses sessions seront perdues.';
+        if (!confirm(confirmMsg || ('Supprimer ' + pseudo + ' sur ' + server + ' ?'))) return;
         var activeAcc = await api.getActive();
         var wasActive = activeAcc && activeAcc.id === id;
         var r = await api.remove(id);

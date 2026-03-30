@@ -2,6 +2,7 @@
   "id": "trinity_trials",
   "visible": true,
   "image": "img/events/trinity_trials.jpg",
+  "image_urls": ["breaking_news_trinitytrials"],
   "names": {
     "fr": "Épreuves de la Trinité",
     "en": "Trinity Trials",

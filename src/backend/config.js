@@ -105,7 +105,7 @@ const RANKS_DATA = [
   { rank_id: 17, rank: "colonel", name: "Général de brigade", honor: 655350000, xp: 1310700000, rankPoints: 6553500, img: "img/ranks/colonel.png" },
   { rank_id: 18, rank: "chief_colonel", name: "Général de division", honor: 1310710000, xp: 2621420000, rankPoints: 13107100, img: "img/ranks/chief_colonel.png" },
   { rank_id: 19, rank: "basic_general", name: "Général de corps d'armée", honor: 2621430000, xp: 5242860000, rankPoints: 26214300, img: "img/ranks/basic_general.png" },
-  { rank_id: 20, rank: "general", name: "Général d'Armée", honor: 5242870000, xp: 10485740000, rankPoints: 52428700, img: "img/ranks/general.png" },
+  { rank_id: 20, rank: "general", name: "Général d'armée", honor: 5242870000, xp: 10485740000, rankPoints: 52428700, img: "img/ranks/general.png" },
   { rank_id: 21, rank: "chief_general", name: "Maréchal", honor: 10485750000, xp: 20971500000, rankPoints: 104857500, img: "img/ranks/chief_general.png" }
 ];
 
@@ -170,7 +170,7 @@ const GRADES_TRANSLATIONS = {
   colonel: { fr: 'Général de brigade', en: 'Colonel', es: 'Coronel', ru: 'Генерал-майор', tr: 'Albay' },
   chief_colonel: { fr: 'Général de division', en: 'Chief Colonel', es: 'Coronel mayor', ru: 'Генерал-лейтенант', tr: 'Kurmay Albay' },
   basic_general: { fr: 'Général de corps d\'armée', en: 'Basic General', es: 'General básico', ru: 'Генерал-полковник', tr: 'Tümgeneral' },
-  general: { fr: 'Général d\'Armée', en: 'General', es: 'General', ru: 'Генерал', tr: 'General' },
+  general: { fr: 'Général d\'armée', en: 'General', es: 'General', ru: 'Генерал', tr: 'General' },
   chief_general: { fr: 'Maréchal', en: 'Chief General', es: 'General Mayor', ru: 'Маршал', tr: 'Genel Kurmay Başkanı' }
 };
 

@@ -300,7 +300,10 @@ const DataSync = {
         if (Array.isArray(settingsRow.current_events_json)) UnifiedStorage.set(sk.CURRENT_EVENTS || 'darkOrbitCurrentEvents', settingsRow.current_events_json);
         if (settingsRow.theme) localStorage?.setItem(sk.THEME || 'darkOrbitTheme', settingsRow.theme);
         if (settingsRow.view_mode) localStorage?.setItem(sk.VIEW_MODE || 'darkOrbitViewMode', settingsRow.view_mode);
-        if (settingsRow.language) localStorage?.setItem(sk.LANGUAGE || 'darkOrbitLanguage', settingsRow.language);
+        if (settingsRow.language) {
+          localStorage?.setItem(sk.LANGUAGE || 'darkOrbitLanguage', settingsRow.language);
+          if (typeof window.setLanguage === 'function') window.setLanguage(settingsRow.language);
+        }
         if (settingsRow.theme_auto !== undefined) localStorage?.setItem(sk.THEME_AUTO || 'darkOrbitThemeAuto', settingsRow.theme_auto ? 'true' : 'false');
       }
       UnifiedStorage?.set(LAST_SYNC_KEY, Date.now());
@@ -321,6 +324,10 @@ const DataSync = {
       if (typeof window.refreshFollowedPlayersSidebar === 'function') window.refreshFollowedPlayersSidebar();
       if (typeof window.refreshCouponsUI === 'function') window.refreshCouponsUI();
       if (typeof window.initSettingsTab === 'function') window.initSettingsTab();
+      if (typeof window.applyScrollbarsSetting === 'function') {
+        var scrollEnabled = (mergedSettings && mergedSettings.scrollbarsEnabled !== undefined) ? mergedSettings.scrollbarsEnabled !== false : true;
+        window.applyScrollbarsSetting(scrollEnabled);
+      }
       return { success: true };
     } catch (e) {
       Logger.error('[DataSync] Pull erreur:', { message: e?.message, error: e });

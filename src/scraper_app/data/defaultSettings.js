@@ -1,48 +1,7 @@
 export const DEFAULT_SETTINGS = {
   // ── Proxies ──────────────────────────────────────
   proxies: {
-    list: [
-      {
-        id: 'px_1',
-        host: '104.28.19.83',
-        port: 8080,
-        username: '',
-        password: '',
-        enabled: true,
-        status: 'ok',
-        latency: 290,
-      },
-      {
-        id: 'px_2',
-        host: '192.168.1.47',
-        port: 3128,
-        username: '',
-        password: '',
-        enabled: true,
-        status: 'ok',
-        latency: 340,
-      },
-      {
-        id: 'px_3',
-        host: '103.21.244.0',
-        port: 8080,
-        username: '',
-        password: '',
-        enabled: false,
-        status: 'idle',
-        latency: null,
-      },
-      {
-        id: 'px_4',
-        host: '185.220.101.5',
-        port: 9050,
-        username: '',
-        password: '',
-        enabled: true,
-        status: 'error',
-        latency: null,
-      },
-    ],
+    list: [],
     rotationMode: 'round_robin', // 'round_robin' | 'random' | 'least_used'
     testUrl: 'https://dostats.info',
     rotateOnError: true,

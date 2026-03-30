@@ -1,24 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { MOCK_SCHEDULES, MOCK_BANNED, getNextRun } from '../data/mockPlanning';
 
-function slotsToSchedules(slots) {
-  if (!Array.isArray(slots) || slots.length === 0) return [];
-  const times = [...new Set(slots.map((s) => s.time).filter(Boolean))].sort();
-  if (times.length === 0) return [];
-  return [
-    {
-      id: 'sch_loaded',
-      hours: times,
-      targetLabel: 'Événements',
-      targetType: 'HoF',
-      targetId: 'events',
-      types: ['HoF'],
-      periods: ['current'],
-      enabled: true,
-      createdAt: new Date().toISOString(),
-    },
-  ];
-}
 
 function schedulesToSlots(schedules) {
   // Contract main.js:
@@ -171,7 +153,7 @@ export function usePlanning() {
           return;
         }
       }
-      if (scheduler?.saveConfig && slots.length > 0) {
+      if (scheduler?.saveConfig) {
         const res = await scheduler.saveConfig({ slots });
         if (res && !res.ok) {
           setSavePlanningError(res.error || 'Erreur sauvegarde créneaux');
@@ -188,23 +170,21 @@ export function usePlanning() {
     }
   }, [schedules, banned]);
 
-  // Auto-sauvegarde : après chaque modification (debounce) et au démontage
+  // Auto-sauvegarde : debounce après chaque modification
   const savePlanningRef = useRef(null);
   savePlanningRef.current = savePlanning;
   useEffect(() => {
     if (!planningLoaded) return;
     const t = setTimeout(() => {
-      if (typeof savePlanningRef.current === 'function') {
-        savePlanningRef.current();
-      }
+      savePlanningRef.current?.();
     }, 1200);
-    return () => {
-      clearTimeout(t);
-      if (typeof savePlanningRef.current === 'function') {
-        savePlanningRef.current();
-      }
-    };
+    return () => clearTimeout(t);
   }, [schedules, banned, planningLoaded]);
+
+  // Sauvegarde unique au démontage (séparée du debounce pour éviter le double-trigger)
+  useEffect(() => {
+    return () => { savePlanningRef.current?.(); };
+  }, []);
 
   // ── Stats globales ───────────────────────────────
 

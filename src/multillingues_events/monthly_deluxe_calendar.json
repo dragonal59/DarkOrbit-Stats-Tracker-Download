@@ -2,6 +2,7 @@
   "id": "monthly_deluxe_calendar",
   "visible": true,
   "image": "img/events/monthly_deluxe_calendar.jpg",
+  "image_urls": ["breaking_news_monthlydeluxepack"],
   "names": {
     "fr": "Calendrier Deluxe mensuel",
     "en": "Monthly Deluxe Calendar",

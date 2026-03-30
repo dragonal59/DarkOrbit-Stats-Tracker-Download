@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { kpiData, scrapers } from './mockData';
 import { AppearanceProvider } from './context/AppearanceContext';
 import { TitleBar } from './components/TitleBar';
 import { Sidebar } from './components/Sidebar';
@@ -27,6 +26,7 @@ export default function ScraperUI() {
   const [scraperLogs, setScraperLogs] = useState([]);
   const [doEventsState, setDoEventsState] = useState(initialDoEventsState);
   const [doEventsDefinitions, setDoEventsDefinitions] = useState(initialDoEventsDefinitions);
+  const [proxyCount, setProxyCount] = useState({ active: 0, total: 0 });
   const serverState = useServersState();
 
   useEffect(() => {
@@ -48,6 +48,15 @@ export default function ScraperUI() {
         setDoEventsDefinitions({ definitions: res.definitions, baseUrlForImages: res.baseUrlForImages || '' });
       }
     });
+  }, []);
+
+  useEffect(() => {
+    window.electronAPI?.loadSettings?.()
+      .then((s) => {
+        const list = Array.isArray(s?.proxies?.list) ? s.proxies.list : [];
+        setProxyCount({ active: list.filter((p) => p.enabled).length, total: list.length });
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -73,8 +82,39 @@ export default function ScraperUI() {
         ].slice(-MAX_SCRAPER_LOGS)
       );
     };
-    onLog(handler);
+    const unsub = onLog(handler);
+    return () => unsub?.();
   }, []);
+
+  const allServers = useMemo(() => serverState.groups.flatMap((g) => g.servers), [serverState.groups]);
+
+  const kpiData = useMemo(() => {
+    const total = allServers.reduce((s, sv) => s + sv.totalCount, 0);
+    const success = allServers.reduce((s, sv) => s + sv.successCount, 0);
+    const errors = allServers.reduce((s, sv) => s + sv.errorCount, 0);
+    const rate = total > 0 ? (success / total) * 100 : 0;
+    return [
+      { id: 'total', label: 'Total scrappé', value: total, trend: 0, unit: '', color: 'cyan' },
+      { id: 'success', label: 'Taux de succès', value: rate, trend: 0, unit: '%', color: 'emerald' },
+      { id: 'proxies', label: 'Proxies actifs', value: proxyCount.active, total: proxyCount.total || undefined, trend: 0, unit: '', color: 'violet' },
+      { id: 'errors', label: 'Erreurs session', value: errors, trend: 0, unit: '', color: 'rose' },
+    ];
+  }, [allServers, proxyCount]);
+
+  const scrapers = useMemo(() => {
+    return allServers
+      .filter((s) => s.totalCount > 0 || s.status === 'running')
+      .sort((a, b) => (b.lastScrape || 0) - (a.lastScrape || 0))
+      .slice(0, 15)
+      .map((s) => ({
+        id: s.id,
+        name: s.label,
+        url: `dostats.info · ${s.code}`,
+        status: s.status === 'idle' ? 'paused' : s.status,
+        speed: s.speed ? `${s.speed}/s` : '—',
+        lastRun: s.lastScrape ? serverState.timeAgo(s.lastScrape) : '—',
+      }));
+  }, [allServers, serverState.timeAgo]);
 
   return (
     <AppearanceProvider>
@@ -127,10 +167,10 @@ export default function ScraperUI() {
                     }}
                   >
                     <div className="glass" style={{ padding: 16 }}>
-                      <VolumeAreaChart />
+                      <VolumeAreaChart logs={scraperLogs} />
                     </div>
                     <div className="glass" style={{ padding: 16 }}>
-                      <SuccessErrorBarChart />
+                      <SuccessErrorBarChart groups={serverState.groups} />
                     </div>
                   </section>
                 </>
@@ -194,38 +234,4 @@ export default function ScraperUI() {
   );
 }
 
-function EmptyPanel({ title, description }) {
-  return (
-    <div
-      style={{
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        textAlign: 'center',
-        gap: 8,
-      }}
-    >
-      <div
-        style={{
-          fontFamily: 'Syne, system-ui',
-          fontSize: 18,
-          color: 'var(--text-primary)',
-        }}
-      >
-        {title}
-      </div>
-      <div
-        style={{
-          maxWidth: 420,
-          fontSize: 13,
-          color: 'var(--text-secondary)',
-        }}
-      >
-        {description}
-      </div>
-    </div>
-  );
-}
 

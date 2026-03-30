@@ -327,14 +327,16 @@
           btn.setAttribute('aria-expanded', 'false');
         } else {
           var entries = getHistoryForCoupon(id);
+          var esc = typeof escapeHtml === 'function' ? escapeHtml : function (s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
           body.innerHTML = entries.length === 0
             ? '<p class="coupon-history-empty">Aucun historique</p>'
             : '<ul class="coupon-history-list">' + entries.map(function (h) {
-                return '<li>' + (h.created_at ? new Date(h.created_at).toLocaleString() : '') + ' — ' +
-                  (h.ancien_solde != null ? h.ancien_solde : h.ancienSolde) + ' TL → ' +
-                  (h.nouveau_solde != null ? h.nouveau_solde : h.nouveauSolde) + ' TL (' +
-                  ((h.difference != null ? h.difference : h.difference) >= 0 ? '+' : '') + (h.difference != null ? h.difference : h.difference) + ' TL)' +
-                  (h.note ? ' — ' + h.note : '') + '</li>';
+                var diff = h.difference != null ? h.difference : null;
+                return '<li>' + esc(h.created_at ? new Date(h.created_at).toLocaleString() : '') + ' — ' +
+                  esc(h.ancien_solde != null ? h.ancien_solde : h.ancienSolde) + ' TL → ' +
+                  esc(h.nouveau_solde != null ? h.nouveau_solde : h.nouveauSolde) + ' TL (' +
+                  (diff != null ? ((Number(diff) >= 0 ? '+' : '') + esc(diff)) : '—') + ' TL)' +
+                  (h.note ? ' — ' + esc(h.note) : '') + '</li>';
               }).join('') + '</ul>';
           body.hidden = false;
           btn.setAttribute('aria-expanded', 'true');

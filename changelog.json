@@ -1,6 +1,38 @@
 {
   "versions": [
     {
+      "version": "2.5.8",
+      "date": "2026-03-30",
+      "type": "standard",
+      "changes": {
+        "nouveautés": [
+          "Ajout de l'onglet \"Coupon\" pour stocker en toutes sécurité les coupon **MTCGames.\n**Nouveau bouton dans \"Paramètres\" pour masquer/afficher les scrollbar**.****\n**"
+        ],
+        "améliorations": [
+          "Amélioration de \"SUIVI JOUEURS\" dans la sidebar."
+        ],
+        "corrections": [
+          "Correction de \"SUIVI JOUEURS\" dans la sidebar."
+        ]
+      }
+    },
+    {
+      "version": "2.5.7",
+      "date": "2026-03-26",
+      "type": "standard",
+      "changes": {
+        "nouveautés": [
+          "Ajout d'une barre de progression pour voir le grade juste au dessous de vous. Ajout d'une colonne \"24h\" dans le classement honneur, expérience et général."
+        ],
+        "améliorations": [
+          "Amélioration du classement."
+        ],
+        "corrections": [
+          "Correction du classement et de l'application."
+        ]
+      }
+    },
+    {
       "version": "2.5.6",
       "date": "2026-03-22",
       "type": "standard",

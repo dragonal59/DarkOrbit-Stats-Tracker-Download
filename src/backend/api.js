@@ -6,7 +6,7 @@
 const PROFILE_CACHE_TTL_MS = 5 * 60 * 1000;
 const PERMISSIONS_CACHE_TTL_MS = 5 * 60 * 1000;
 const PERMISSIONS_STORAGE_KEY = 'userPermissionsCache';
-const PERMISSIONS_STORAGE_TTL_MS = 24 * 60 * 60 * 1000;
+const PERMISSIONS_STORAGE_TTL_MS = 2 * 60 * 60 * 1000;
 
 const BackendAPI = {
   _profileCache: null,

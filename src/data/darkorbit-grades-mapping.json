@@ -24,7 +24,7 @@
     { "id": 17, "rank": "colonel", "level": 17, "en": "Colonel", "fr": "Général de brigade", "es": "Coronel", "ru": "Генерал-майор", "tr": "Albay", "pl": null },
     { "id": 18, "rank": "chief_colonel", "level": 18, "en": "Chief Colonel", "fr": "Général de division", "es": "Coronel mayor", "ru": "Генерал-лейтенант", "tr": "Kurmay Albay", "pl": null },
     { "id": 19, "rank": "basic_general", "level": 19, "en": "Basic General", "fr": "Général de corps d'armée", "es": "General básico", "ru": "Генерал-полковник", "tr": "Tümgeneral", "pl": null },
-    { "id": 20, "rank": "general", "level": 20, "en": "General", "fr": "Général d'Armée", "es": "General", "ru": "Генерал", "tr": "General", "pl": null },
+    { "id": 20, "rank": "general", "level": 20, "en": "General", "fr": "Général d'armée", "es": "General", "ru": "Генерал", "tr": "General", "pl": null },
     { "id": 21, "rank": "chief_general", "level": 21, "en": "Chief General", "fr": "Maréchal", "es": "General Mayor", "ru": "Маршал", "tr": "Genel Kurmay Başkanı", "pl": null }
   ],
 

@@ -2,6 +2,7 @@
   "id": "discord",
   "visible": true,
   "image": "img/events/discord.jpg",
+  "image_urls": ["discord_s"],
   "names": {
     "fr": "Rejoignez DO Discord",
     "en": "Join DO Discord",

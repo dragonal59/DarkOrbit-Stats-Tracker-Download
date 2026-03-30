@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ServeursLeftPanel } from '../components/serveurs/ServeursLeftPanel';
 import { ServerGroup } from '../components/serveurs/ServerGroup';
@@ -125,7 +125,7 @@ export function ServeursPage({
               color: 'var(--text-secondary)',
             }}
           >
-            Vue d’ensemble des serveurs DOStats (mock données locales).
+            Vue d'ensemble des serveurs DOStats.
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <button

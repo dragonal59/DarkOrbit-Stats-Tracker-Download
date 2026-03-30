@@ -35,6 +35,12 @@ export function VisualisationPage() {
         if (server && AVAILABLE_SERVERS.some((s) => s.code === server)) {
           setSelectedServer(server);
         }
+        if (typeof visu.selectedType === 'string' && visu.selectedType) {
+          setSelectedType(visu.selectedType);
+        }
+        if (typeof visu.selectedPeriod === 'string' && visu.selectedPeriod) {
+          setSelectedPeriod(visu.selectedPeriod);
+        }
       })
       .catch(() => {});
     return () => {
@@ -207,6 +213,8 @@ export function VisualisationPage() {
           visualisation: {
             ...visu,
             selectedServer: nextServer,
+            selectedType: nextType,
+            selectedPeriod: nextPeriod,
           },
         };
         return api.saveSettings(payload);
@@ -264,11 +272,11 @@ export function VisualisationPage() {
         }}
         onTypeChange={(type) => {
           setSelectedType(type);
-          // ne pas persister le type
+          persistSelection(selectedServer, type, selectedPeriod);
         }}
         onPeriodChange={(period) => {
           setSelectedPeriod(period);
-          // ne pas persister la période
+          persistSelection(selectedServer, selectedType, period);
         }}
         onClearAllData={handleClearAllData}
         meta={ranking.meta}

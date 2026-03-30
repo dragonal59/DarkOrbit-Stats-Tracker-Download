@@ -33,7 +33,11 @@ contextBridge.exposeInMainWorld('electronScraper', {
 });
 
 contextBridge.exposeInMainWorld('electronRequestFreshToken', {
-  onRequest: (cb) => { ipcRenderer.on('request-fresh-token', () => { try { cb(); } catch (e) { console.warn('[Supabase] request-fresh-token callback error:', e?.message); } }); },
+  onRequest: (cb) => {
+    const handler = () => { try { cb(); } catch (e) { console.warn('[Supabase] request-fresh-token callback error:', e?.message); } };
+    ipcRenderer.removeAllListeners('request-fresh-token');
+    ipcRenderer.on('request-fresh-token', handler);
+  },
   sendResponse: (userId, accessToken) => { ipcRenderer.send('fresh-token-response', { userId, accessToken }); }
 });
 
@@ -48,6 +52,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   minimizeWindow: () => ipcRenderer.send('window:controls:minimize'),
   maximizeToggle: () => ipcRenderer.send('window:controls:maximize-toggle'),
   closeWindow: () => ipcRenderer.send('window:controls:close'),
+  testProxy: (proxy, testUrl) => ipcRenderer.invoke('scraper-app:test-proxy', { ...(proxy || {}), testUrl }),
+  testWebhook: (url, type) => ipcRenderer.invoke('scraper-app:test-webhook', { url, type }),
+  pickDirectory: () => ipcRenderer.invoke('scraper-app:pick-directory'),
   loadSettings: () => ipcRenderer.invoke('scraper-app:load-settings'),
   saveSettings: (settings) => ipcRenderer.invoke('scraper-app:save-settings', settings),
   loadPlanningExtra: () => ipcRenderer.invoke('scraper-app:load-planning-extra'),
@@ -57,6 +64,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setScrapeProfilesPreference: (serverCode, value) => ipcRenderer.invoke('scraper-app:set-scrape-profiles-preference', { serverCode, value }),
   getServerScrapeConfig: (serverCode) => ipcRenderer.invoke('scraper-app:get-server-scrape-config', serverCode),
   setServerScrapeConfig: (serverCode, config) => ipcRenderer.invoke('scraper-app:set-server-scrape-config', { serverCode, ...(config || {}) }),
+  listMultillinguesEventJsonFiles: () => ipcRenderer.invoke('events:list-multillingues-json'),
+  /** Relaie vers la fenêtre scraper (même canal que do-events:scrape → dostats:log). */
+  sendScraperLogToWindow: (payload) => { ipcRenderer.send('renderer:scraper-log', payload || {}); },
 });
 
 contextBridge.exposeInMainWorld('electronApp', {
@@ -130,7 +140,7 @@ contextBridge.exposeInMainWorld('electronDostatsScraper', {
       : { groupId: payloadOrGroupId };
     return ipcRenderer.invoke('dostats-scraper:start', payload);
   },
-  onLog: (cb) => { ipcRenderer.on('dostats:log', (_e, d) => { try { cb(d); } catch (e) {} }); },
+  onLog: (cb) => { const fn = (_e, d) => { try { cb(d); } catch (e) {} }; ipcRenderer.on('dostats:log', fn); return () => ipcRenderer.removeListener('dostats:log', fn); },
   getRanking: (serverCode, typeKey, periodKey) =>
     ipcRenderer.invoke('dostats:get-ranking', {
       serverCode: serverCode != null ? String(serverCode).trim() : '',
@@ -190,9 +200,9 @@ contextBridge.exposeInMainWorld('electronScheduler', {
   getConfig: () => ipcRenderer.invoke('scheduler:getConfig'),
   saveConfig: (config) => ipcRenderer.invoke('scheduler:saveConfig', config),
   reload: () => ipcRenderer.invoke('scheduler:reload'),
-  onStarted: (cb) => { ipcRenderer.on('scheduler-started', () => { try { cb(); } catch (e) {} }); },
-  onFinished: (cb) => { ipcRenderer.on('scheduler-finished', () => { try { cb(); } catch (e) {} }); },
-  onLog: (cb) => { ipcRenderer.on('scheduler-log', (_e, d) => { try { cb(d); } catch (e) {} }); },
+  onStarted: (cb) => { const fn = () => { try { cb(); } catch (e) {} }; ipcRenderer.on('scheduler-started', fn); return () => ipcRenderer.removeListener('scheduler-started', fn); },
+  onFinished: (cb) => { const fn = () => { try { cb(); } catch (e) {} }; ipcRenderer.on('scheduler-finished', fn); return () => ipcRenderer.removeListener('scheduler-finished', fn); },
+  onLog: (cb) => { const fn = (_e, d) => { try { cb(d); } catch (e) {} }; ipcRenderer.on('scheduler-log', fn); return () => ipcRenderer.removeListener('scheduler-log', fn); },
 });
 
 contextBridge.exposeInMainWorld('electronHofPlanning', {

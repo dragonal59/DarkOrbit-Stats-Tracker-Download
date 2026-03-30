@@ -2,6 +2,7 @@
   "id": "instagram",
   "visible": true,
   "image": "img/events/instagram.jpg",
+  "image_urls": ["do_instagram_breakingnews"],
   "names": {
     "fr": "DarkOrbit sur Instagram !",
     "en": "DarkOrbit on Instagram!",

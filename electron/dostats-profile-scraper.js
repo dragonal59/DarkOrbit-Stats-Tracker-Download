@@ -1,4 +1,4 @@
-const { BrowserWindow, app } = require('electron');
+﻿const { BrowserWindow, app } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -121,6 +121,8 @@ const {
   getProfilesConcurrency,
   getUserAgentString,
   applyScraperSessionProxyPolicy,
+  applyResourceBlockingPolicy,
+  captureScreenshotOnError,
 } = require('./scraper-app-settings');
 
 /**
@@ -187,6 +189,7 @@ async function loadPlayerWindow(url) {
   });
   win.webContents.setUserAgent(getUserAgentString());
   await applyScraperSessionProxyPolicy(win.webContents.session);
+  applyResourceBlockingPolicy(win.webContents.session);
 
   const ok = await new Promise((resolve) => {
     const wc = win.webContents;
@@ -1150,6 +1153,7 @@ async function scrapeOneProfile(serverCode, userId, mainWindowRef, scrapeOpts = 
     const { win: w, ok } = await loadPlayerWindow(url);
     win = w;
     if (!ok) {
+      await captureScreenshotOnError(win, `profile_${serverCode}_${playerId}`);
       if (!quietLogs && mainWindowRef?.webContents) {
         mainWindowRef.webContents.send('dostats:log', {
           type: 'error',

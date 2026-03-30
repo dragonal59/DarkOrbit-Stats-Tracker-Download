@@ -11,7 +11,8 @@ const DEFAULT_SETTINGS = {
   confettiEnabled: true,
   notificationsEnabled: false,
   autoSaveEnabled: true,
-  streakEnabled: true
+  streakEnabled: true,
+  scrollbarsEnabled: true
 };
 
 // ==========================================
@@ -101,7 +102,8 @@ function initSettingsTab() {
     { id: 'settingsConfettiEnabled', key: 'confettiEnabled' },
     { id: 'settingsNotificationsEnabled', key: 'notificationsEnabled' },
     { id: 'settingsAutoSaveEnabled', key: 'autoSaveEnabled' },
-    { id: 'settingsStreakEnabled', key: 'streakEnabled' }
+    { id: 'settingsStreakEnabled', key: 'streakEnabled' },
+    { id: 'settingsScrollbarsEnabled', key: 'scrollbarsEnabled' }
   ];
   
   checkboxes.forEach(({ id, key }) => {
@@ -162,7 +164,14 @@ function sendNotification(title, body) {
 // EVENT LISTENERS
 // ==========================================
 
+function applyScrollbarsSetting(enabled) {
+  document.body.classList.toggle('scrollbars-hidden', !enabled);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  // Appliquer le paramètre scrollbars dès le chargement
+  applyScrollbarsSetting(getSetting('scrollbarsEnabled') !== false);
+
   // Boutons de thème
   document.querySelectorAll('.settings-theme-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -235,6 +244,19 @@ document.addEventListener('DOMContentLoaded', () => {
         streakCounter.style.display = e.target.checked ? 'inline-flex' : 'none';
       }
       showToast(e.target.checked ? '🔥 Streak affiché' : '🔥 Streak masqué', 'success');
+    });
+  }
+
+  // Checkbox scrollbars
+  const scrollbarsCheckbox = document.getElementById('settingsScrollbarsEnabled');
+  if (scrollbarsCheckbox) {
+    scrollbarsCheckbox.addEventListener('change', (e) => {
+      saveSetting('scrollbarsEnabled', e.target.checked);
+      applyScrollbarsSetting(e.target.checked);
+      const lang = typeof window.getCurrentLang === 'function' ? window.getCurrentLang() : 'fr';
+      const key = e.target.checked ? 'scrollbars_shown' : 'scrollbars_hidden';
+      const msg = (typeof window.i18nT === 'function' ? window.i18nT(key, lang) : null) || (e.target.checked ? '↕ Scrollbars affichées' : '↕ Scrollbars masquées');
+      showToast(msg, 'success');
     });
   }
   
@@ -324,4 +346,5 @@ window.isSettingsDirty = isSettingsDirty;
 window.clearSettingsDirtyFlag = clearSettingsDirtyFlag;
 window.initSettingsTab = initSettingsTab;
 window.mergeSettingsForPull = mergeSettingsForPull;
+window.applyScrollbarsSetting = applyScrollbarsSetting;
 

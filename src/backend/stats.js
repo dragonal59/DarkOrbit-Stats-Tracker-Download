@@ -87,8 +87,8 @@ function getCurrentStats() {
     return { honor: 0, xp: 0, rankPoints: 0, nextRankPoints: 0, currentRank: 'Inconnu', note: '', timestamp: Date.now() };
   }
   const selected = document.getElementById("selected");
-  const currentRankText = selected ? selected.innerText.trim() : '';
-  const currentRank = currentRankText === "Sélectionner votre grade actuel" ? "" : currentRankText;
+  const isGradePlaceholder = !selected || !!selected.querySelector('[data-i18n="select_grade"]');
+  const currentRank = isGradePlaceholder ? "" : selected.innerText.trim();
   const rawHonor = parseFormattedNumber(honorEl.value || '');
   const rawXp = parseFormattedNumber((document.getElementById("xp") || {}).value || '');
   const rawRankPoints = parseFormattedNumber((document.getElementById("rankPoints") || {}).value || '');
@@ -112,8 +112,7 @@ function isStatsFormEmpty() {
   });
   
   const selected = document.getElementById("selected");
-  const currentRankText = selected ? selected.innerText.trim() : "";
-  const hasRank = currentRankText && currentRankText !== "Sélectionner votre grade actuel";
+  const hasRank = selected && !selected.querySelector('[data-i18n="select_grade"]') && selected.innerText.trim();
   return !hasNumericValue && !hasRank;
 }
 
@@ -218,7 +217,8 @@ function normalizeStatsForDisplay(s) {
   if (!s) return null;
   const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
   const rankPoints = num(s.rankPoints ?? s.rank_points);
-  const nextRankPoints = num(s.nextRankPoints ?? s.next_rank_points);
+  const rawNrp = s.nextRankPoints ?? s.next_rank_points;
+  const nextRankPoints = (rawNrp != null && Number.isFinite(Number(rawNrp))) ? Number(rawNrp) : rankPoints;
   const belowPts = s.belowRankPoints ?? s.below_rank_points;
   const belowN = belowPts != null && belowPts !== '' ? Number(belowPts) : NaN;
   return {
@@ -226,7 +226,7 @@ function normalizeStatsForDisplay(s) {
     honor: num(s.honor),
     xp: num(s.xp),
     rankPoints: rankPoints,
-    nextRankPoints: nextRankPoints || rankPoints,
+    nextRankPoints: nextRankPoints,
     currentRank: ((s.currentRank ?? s.current_rank ?? '').toString().trim()) || s.currentRank || s.current_rank,
     belowRankPoints: Number.isFinite(belowN) && belowN > 0 ? belowN : null,
     belowRankRaw: (s.belowRankRaw ?? s.below_rank_raw ?? '').toString().trim() || null
@@ -522,11 +522,8 @@ function updateStatsDisplay() {
   if (currentRankData) {
     const rankImg = document.getElementById("currentRankImg");
     const rankName = document.getElementById("currentRankName");
-    if (rankImg) rankImg.src = currentRankData.img;
-    rankImg.style.display = 'block';
-    if (rankName) {
-      rankName.textContent = currentRankData.name;
-    }
+    if (rankImg) { rankImg.src = currentRankData.img; rankImg.style.display = 'block'; }
+    if (rankName) rankName.textContent = currentRankData.name;
   } else {
     const rankImg = document.getElementById("currentRankImg");
     const rankName = document.getElementById("currentRankName");
@@ -551,9 +548,12 @@ function updateStatsDisplay() {
   const xpVal = Number(stats.xp);
   const rankPointsVal = Number(stats.rankPoints);
   
-  document.getElementById("honorDisplay").textContent = formatNumberDisplay(honorVal);
-  document.getElementById("xpDisplay").textContent = formatNumberDisplay(xpVal);
-  document.getElementById("rankPointsDisplay").textContent = formatNumberDisplay(rankPointsVal);
+  const hEl = document.getElementById("honorDisplay");
+  const xEl = document.getElementById("xpDisplay");
+  const rpEl = document.getElementById("rankPointsDisplay");
+  if (hEl) hEl.textContent = formatNumberDisplay(honorVal);
+  if (xEl) xEl.textContent = formatNumberDisplay(xpVal);
+  if (rpEl) rpEl.textContent = formatNumberDisplay(rankPointsVal);
 
   if (typeof updateCurrentPlayerRankingCounters === 'function') {
     Promise.resolve(updateCurrentPlayerRankingCounters()).catch(function (e) {
@@ -566,48 +566,43 @@ function updateStatsDisplay() {
   // Calculate progress to next rank
   const currentRankIndex = RANKS_DATA.indexOf(currentRankData);
   
+  const nextRankImg = document.getElementById("nextRankImg");
+  const nextRankText = document.getElementById("nextRankText");
+  const rankProgressEl = document.getElementById("rankProgress");
+  const rankBarEl = document.getElementById("rankBar");
+  const rankDetailsEl = document.getElementById("rankDetails");
+
   if (currentRankIndex === -1) {
-    const nextRankImg = document.getElementById("nextRankImg");
-    const nextRankText = document.getElementById("nextRankText");
-    nextRankImg.style.display = 'none';
-    nextRankText.textContent = "-";
-      document.getElementById("rankProgress").textContent = "0%";
-    document.getElementById("rankBar").style.width = "0%";
-    document.getElementById("rankDetails").textContent = "-";
+    if (nextRankImg) nextRankImg.style.display = 'none';
+    if (nextRankText) nextRankText.textContent = "-";
+    if (rankProgressEl) rankProgressEl.textContent = "0%";
+    if (rankBarEl) rankBarEl.style.width = "0%";
+    if (rankDetailsEl) rankDetailsEl.textContent = "-";
     updateBelowRankProgress(stats);
   } else if (currentRankIndex === RANKS_DATA.length - 1) {
-    const nextRankImg = document.getElementById("nextRankImg");
-    const nextRankText = document.getElementById("nextRankText");
-    nextRankImg.style.display = 'none';
-    nextRankText.textContent = "Grade maximum atteint ! 🎉";
-    document.getElementById("rankProgress").textContent = "100%";
-    document.getElementById("rankBar").style.width = "100%";
-    document.getElementById("rankDetails").textContent = "Vous êtes au grade maximum";
+    if (nextRankImg) nextRankImg.style.display = 'none';
+    if (nextRankText) nextRankText.textContent = (typeof window.i18nT === 'function' ? window.i18nT('max_rank_reached') : null) || "Grade maximum atteint ! 🎉";
+    if (rankProgressEl) rankProgressEl.textContent = "100%";
+    if (rankBarEl) rankBarEl.style.width = "100%";
+    if (rankDetailsEl) rankDetailsEl.textContent = "Vous êtes au grade maximum";
     updateBelowRankProgress(stats);
   } else {
     const nextRankData = RANKS_DATA[currentRankIndex + 1];
-    
-    // Display next rank with image
-    const nextRankImg = document.getElementById("nextRankImg");
-    const nextRankText = document.getElementById("nextRankText");
-    nextRankImg.src = nextRankData.img;
-    nextRankImg.style.display = 'block';
-    nextRankText.textContent = nextRankData.name;
-    
+    if (nextRankImg) { nextRankImg.src = nextRankData.img; nextRankImg.style.display = 'block'; }
+    if (nextRankText) nextRankText.textContent = nextRankData.name;
+
     const currentRankPts = Number.isFinite(rankPointsVal) ? rankPointsVal : 0;
-    
-    // Rank points progress
     const targetPoints = Number(stats.nextRankPoints) || nextRankData.rankPoints;
     const rankPercent = targetPoints > 0
       ? Math.min(100, Math.max(0, (currentRankPts / targetPoints) * 100))
       : 100;
     const rankRemaining = Math.max(0, targetPoints - currentRankPts);
-    
-    document.getElementById("rankProgress").textContent = `${rankPercent.toFixed(1)}%`;
-    document.getElementById("rankBar").style.width = `${rankPercent}%`;
-    document.getElementById("rankDetails").textContent = 
-      rankRemaining > 0 
-        ? `Il vous reste ${formatNumberDisplay(rankRemaining)} points` 
+
+    if (rankProgressEl) rankProgressEl.textContent = `${rankPercent.toFixed(1)}%`;
+    if (rankBarEl) rankBarEl.style.width = `${rankPercent}%`;
+    if (rankDetailsEl) rankDetailsEl.textContent =
+      rankRemaining > 0
+        ? `Il vous reste ${formatNumberDisplay(rankRemaining)} points`
         : "✅ Objectif atteint !";
     updateBelowRankProgress(stats);
   }
@@ -622,17 +617,22 @@ function updateStatsDisplay() {
       : 100;
     const xpRemaining = nextLevelData.xp - xpVal;
     
-    document.getElementById("levelProgress").textContent = `${levelPercent.toFixed(1)}%`;
-    document.getElementById("levelBar").style.width = `${levelPercent}%`;
-    document.getElementById("levelDetails").textContent = 
-      xpRemaining > 0 
-        ? `Il vous reste ${formatNumberDisplay(xpRemaining)} XP pour le niveau ${nextLevelData.level}` 
+    const lvlProgEl = document.getElementById("levelProgress");
+    const lvlBarEl = document.getElementById("levelBar");
+    const lvlDetailsEl = document.getElementById("levelDetails");
+    if (lvlProgEl) lvlProgEl.textContent = `${levelPercent.toFixed(1)}%`;
+    if (lvlBarEl) lvlBarEl.style.width = `${levelPercent}%`;
+    if (lvlDetailsEl) lvlDetailsEl.textContent =
+      xpRemaining > 0
+        ? `Il vous reste ${formatNumberDisplay(xpRemaining)} XP pour le niveau ${nextLevelData.level}`
         : "✅ Niveau suivant atteint !";
   } else {
-    // Max level reached
-    document.getElementById("levelProgress").textContent = "100%";
-    document.getElementById("levelBar").style.width = "100%";
-    document.getElementById("levelDetails").textContent = "🎉 Niveau maximum atteint !";
+    const lvlProgEl = document.getElementById("levelProgress");
+    const lvlBarEl = document.getElementById("levelBar");
+    const lvlDetailsEl = document.getElementById("levelDetails");
+    if (lvlProgEl) lvlProgEl.textContent = "100%";
+    if (lvlBarEl) lvlBarEl.style.width = "100%";
+    if (lvlDetailsEl) lvlDetailsEl.textContent = "🎉 Niveau maximum atteint !";
   }
 }
 
@@ -696,7 +696,7 @@ function updateHeaderProgressBar(data) {
       nextImg.style.display = 'none';
     }
     if (nextName) {
-      nextName.textContent = currentRankData ? "Grade maximum" : "-";
+      nextName.textContent = currentRankData ? ((typeof window.i18nT === 'function' ? window.i18nT('max_rank') : null) || "Grade maximum") : "-";
     }
   }
   
