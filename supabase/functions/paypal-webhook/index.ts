@@ -157,6 +157,31 @@ Deno.serve(async (req) => {
     });
   }
 
+  const paypalEventId = typeof event.id === "string" && event.id.trim() !== "" ? event.id : null;
+  if (paypalEventId) {
+    const { error: dedupeErr } = await supabase.from("paypal_webhook_events").insert({
+      event_id: paypalEventId,
+      event_type: eventType ?? null,
+    });
+    const dup =
+      dedupeErr &&
+      (dedupeErr.code === "23505" ||
+        /duplicate|unique constraint/i.test(dedupeErr.message || ""));
+    if (dup) {
+      return new Response(JSON.stringify({ received: true, duplicate: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    if (dedupeErr) {
+      console.error("paypal_webhook_events insert:", dedupeErr);
+      return new Response(JSON.stringify({ received: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+  }
+
   const result = await updateProfile(supabase, subscriptionId, handler.badge, handler.subscriptionStatus);
   if (!result.ok) {
     console.error("Update profile:", result.error);

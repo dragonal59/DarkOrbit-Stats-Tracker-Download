@@ -1,5 +1,7 @@
 # Documentation — DarkOrbit Stats Tracker Pro
 
+**Scraper admin :** projet **DO Stats Scraper** séparé sur ta machine (hors de ce dépôt). **Non publié, non distribué.** Non inclus dans le tracker.
+
 ## Document de référence (à jour)
 
 | Fichier | Contenu |

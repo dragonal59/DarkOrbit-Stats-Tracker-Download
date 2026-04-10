@@ -287,8 +287,9 @@
       } catch (_) {}
       if (last === current) return;
 
-      var url = 'https://raw.githubusercontent.com/dragonal59/DarkOrbit-Stats-Tracker-Download/master/changelog.json';
-      fetch(url).then(function (r) { return r.json(); }).then(function (json) {
+      var loadFn = typeof window.loadChangelogJson === 'function' ? window.loadChangelogJson : null;
+      if (!loadFn) return;
+      loadFn().then(function (json) {
         var versions = json && json.versions;
         if (!Array.isArray(versions)) return;
         var entry = versions.find(function (e) { return String(e.version || '') === current; });
@@ -311,9 +312,7 @@
           try { localStorage.setItem(key, current); } catch (_) {}
           overlay.remove();
         });
-      }).catch(function () {
-        try { localStorage.setItem(key, current); } catch (_) {}
-      });
+      }).catch(function () {});
     }).catch(function () {});
   }
 

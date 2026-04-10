@@ -214,7 +214,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // ========== NOTIFICATIONS WINDOWS — scraper terminé (SUPERADMIN) et planificateur (SUPERADMIN) ==========
+  // ========== NOTIFICATIONS WINDOWS — scraper terminé (SUPERADMIN) ==========
   if (!window._scrapingNotificationListenersRegistered && typeof window.sendNotification === 'function') {
     window._scrapingNotificationListenersRegistered = true;
     if (window.electronScraper && window.electronScraper.onScrapingFinished) {
@@ -228,24 +228,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         } else if (d && d.action === 'statistics_completed') {
           window.sendNotification('Scraper classement & profils', 'Collecte classement et profils terminée.');
         }
-      });
-    }
-    if (window.electronScheduler && window.electronScheduler.onStarted) {
-      window.electronScheduler.onStarted(() => {
-        var badge = typeof getCurrentBadge === 'function' ? getCurrentBadge() : '';
-        if (badge !== 'SUPERADMIN') return;
-        if (typeof getSetting !== 'function' || !getSetting('notificationsEnabled')) return;
-        if (typeof currentHasFeature === 'function' && !currentHasFeature('notificationsWindows')) return;
-        window.sendNotification('Planificateur', 'Scraping automatique programmé démarré.');
-      });
-    }
-    if (window.electronScheduler && window.electronScheduler.onFinished) {
-      window.electronScheduler.onFinished(() => {
-        var badge = typeof getCurrentBadge === 'function' ? getCurrentBadge() : '';
-        if (badge !== 'SUPERADMIN') return;
-        if (typeof getSetting !== 'function' || !getSetting('notificationsEnabled')) return;
-        if (typeof currentHasFeature === 'function' && !currentHasFeature('notificationsWindows')) return;
-        window.sendNotification('Planificateur', 'Scraping automatique programmé terminé à 100 %.');
       });
     }
   }

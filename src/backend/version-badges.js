@@ -110,7 +110,6 @@ const BADGE_FEATURES = Object.freeze({
     dashboardMessages: false,
     dashboardLogsSecurite: false,
     dashboardClesLicence: false,
-    dashboardPlanificateur: false,
     dashboardPermissionsAdmin: false,
     dashboardLogs: false
   }),
@@ -142,7 +141,6 @@ const BADGE_FEATURES = Object.freeze({
     dashboardMessages: true,
     dashboardLogsSecurite: true,
     dashboardClesLicence: true,
-    dashboardPlanificateur: true,
     dashboardPermissionsAdmin: true,
     dashboardLogs: true,
     couponsTab: true
@@ -193,22 +191,43 @@ function getTabsFromBadge(badge) {
 }
 
 /**
+ * Badge brut (caches + stockage local) — peut être falsifié via localStorage tant que le serveur n’a pas répondu.
+ */
+function getRawCurrentBadge() {
+  if (_permissionsCache?.badge && BADGE_LEVEL[_permissionsCache.badge] !== undefined) return _permissionsCache.badge;
+  if (_profileCache?.badge && BADGE_LEVEL[_profileCache.badge] !== undefined) return _profileCache.badge;
+  if (typeof UnifiedStorage !== 'undefined') {
+    const stored = UnifiedStorage.get(STORAGE_KEY_BADGE, null);
+    if (stored && BADGE_LEVEL[stored] !== undefined) return stored;
+  }
+  if (typeof localStorage !== 'undefined') {
+    const stored = localStorage.getItem(STORAGE_KEY_BADGE);
+    if (stored && BADGE_LEVEL[stored] !== undefined) return stored;
+  }
+  return DEFAULT_BADGE;
+}
+
+/**
  * Récupère le badge courant
- * Priorité : 1) Cache permissions RPC  2) Cache profil Supabase  3) localStorage  4) FREE
+ * Priorité lecture : 1) Cache permissions RPC  2) Cache profil  3) UnifiedStorage  4) localStorage  5) FREE
+ * Plafond : jamais au-dessus du dernier badge confirmé par le serveur (BackendAPI), si disponible.
  */
 function getCurrentBadge() {
   try {
-    if (_permissionsCache?.badge && BADGE_LEVEL[_permissionsCache.badge] !== undefined) return _permissionsCache.badge;
-    if (_profileCache?.badge && BADGE_LEVEL[_profileCache.badge] !== undefined) return _profileCache.badge;
-    if (typeof UnifiedStorage !== 'undefined') {
-      const stored = UnifiedStorage.get(STORAGE_KEY_BADGE, null);
-      if (stored && BADGE_LEVEL[stored] !== undefined) return stored;
+    const raw = getRawCurrentBadge();
+    let srv = null;
+    try {
+      if (typeof BackendAPI !== 'undefined' && typeof BackendAPI.getServerConfirmedBadge === 'function') {
+        srv = BackendAPI.getServerConfirmedBadge();
+      }
+    } catch (_) {}
+    if (srv && BADGE_LEVEL[srv] !== undefined && BADGE_LEVEL[raw] !== undefined && BADGE_LEVEL[raw] > BADGE_LEVEL[srv]) {
+      if (typeof Logger !== 'undefined' && Logger.warn) {
+        Logger.warn('[Badge] Écart détecté localStorage vs serveur — badge serveur appliqué');
+      }
+      return srv;
     }
-    if (typeof localStorage !== 'undefined') {
-      const stored = localStorage.getItem(STORAGE_KEY_BADGE);
-      if (stored && BADGE_LEVEL[stored] !== undefined) return stored;
-    }
-    return DEFAULT_BADGE;
+    return raw;
   } catch (e) {
     if (typeof Logger !== 'undefined' && Logger.warn) {
       Logger.warn('[Badges] getCurrentBadge error:', e && e.message ? e.message : e);

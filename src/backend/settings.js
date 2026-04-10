@@ -278,14 +278,16 @@ document.addEventListener('DOMContentLoaded', () => {
 // CHANGELOG (Paramètres)
 // ==========================================
 
-var CHANGELOG_FETCH_URL = 'https://raw.githubusercontent.com/dragonal59/DarkOrbit-Stats-Tracker-Download/master/changelog.json';
-
 function initChangelogSection() {
   var container = document.getElementById('settingsChangelogList');
   if (!container) return;
   container.innerHTML = '<p class="settings-description">Chargement…</p>';
-  fetch(CHANGELOG_FETCH_URL)
-    .then(function (r) { return r.json(); })
+  var loadFn = typeof window.loadChangelogJson === 'function' ? window.loadChangelogJson : null;
+  if (!loadFn) {
+    container.innerHTML = '<p class="settings-description">Impossible de charger le changelog.</p>';
+    return;
+  }
+  loadFn()
     .then(function (data) {
       var versions = (data && data.versions) ? data.versions : [];
       if (versions.length === 0) {

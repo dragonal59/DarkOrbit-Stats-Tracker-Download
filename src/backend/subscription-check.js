@@ -16,14 +16,18 @@
   }
 
   async function expireTrialAndRedirect(supabase, userId) {
-    const { error } = await supabase.from('profiles').update({
-      subscription_status: 'free',
-      badge: 'FREE',
-      trial_expires_at: null,
-      updated_at: new Date().toISOString()
-    }).eq('id', userId);
+    const { data, error } = await supabase.rpc('sync_subscription_status', {
+      p_user_id: userId,
+      p_subscription_status: 'free',
+      p_badge: 'FREE',
+      p_trial_expires_at: null
+    });
     if (error) {
       if (typeof Logger !== 'undefined' && Logger.warn) Logger.warn('[SubscriptionCheck] expireTrialAndRedirect DB error:', error?.message || error);
+      return;
+    }
+    if (!data || data.success !== true) {
+      if (typeof Logger !== 'undefined' && Logger.warn) Logger.warn('[SubscriptionCheck] expireTrialAndRedirect DB error:', (data && data.error) || 'sync_subscription_status failed');
       return;
     }
     if (typeof BackendAPI !== 'undefined') BackendAPI.invalidateProfileCache();
@@ -135,4 +139,8 @@
     startHourlyCheck: startHourlyCheck,
     stopHourlyCheck: stopHourlyCheck
   };
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('beforeunload', stopHourlyCheck);
+  }
 })();

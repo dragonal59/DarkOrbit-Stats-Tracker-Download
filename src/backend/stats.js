@@ -741,7 +741,7 @@ function updateHeaderProgressBar(data) {
  * pour le joueur actif.
  *
  * Ordre de priorité pour la source de données :
- *   1) Table player_profiles (profil DOStats du joueur actif : player_id + server)
+ *   1) Table profiles_players (profil DOStats du joueur actif : player_id + server)
  *   2) Snapshots importés localement (getImportedRanking)
  *   3) Dernier classement affiché en mémoire (_lastRankingData)
  *   4) Appel loadRanking(server actif, type 'honor')
@@ -795,12 +795,12 @@ async function updateCurrentPlayerRankingCounters() {
 
   var row = null;
 
-  // 2) Priorité 1 : profil DOStats du joueur actif dans player_profiles (user_id DO + server)
+  // 2) Priorité 1 : profil DOStats du joueur actif dans profiles_players (user_id DO + server)
   var supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
   if (supabase) {
     try {
       var ppRes = await supabase
-        .from('player_profiles')
+        .from('profiles_players')
         .select('npc_kills, ship_kills, galaxy_gates, server')
         .eq('user_id', playerId)
         .eq('server', serverCode)

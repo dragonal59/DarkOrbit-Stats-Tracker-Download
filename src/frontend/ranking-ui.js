@@ -50,11 +50,404 @@ const RANKING_SERVERS = typeof SERVERS_LIST !== 'undefined' && Array.isArray(SER
 
 const INVALID_GRADE_PATTERN = /^(splitter_|spacer_|line_|decoration|unknown)/i;
 
+function parseLooseRankingNumber(n) {
+  if (n == null || n === undefined || n === '') return NaN;
+  if (typeof n === 'number') return Number.isFinite(n) ? n : NaN;
+  const s = String(n).replace(/,/g, '').replace(/\s/g, '');
+  const num = parseFloat(s);
+  return Number.isFinite(num) ? num : NaN;
+}
+
 function formatRankingNumber(n) {
   if (n == null || n === undefined) return '—';
-  const num = Number(n);
-  if (Number.isNaN(num)) return '—';
-  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const num = parseLooseRankingNumber(n);
+  if (!Number.isFinite(num)) return '—';
+  const parts = String(num).split('.');
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return parts.join('.');
+}
+
+function normalizeGgJson(raw) {
+  if (raw == null) return null;
+  if (typeof raw === 'string') {
+    try {
+      const p = JSON.parse(raw);
+      return p && typeof p === 'object' && !Array.isArray(p) ? p : null;
+    } catch (_e) {
+      return null;
+    }
+  }
+  return typeof raw === 'object' && !Array.isArray(raw) ? raw : null;
+}
+
+function ggBucketNumeric(v) {
+  if (v == null) return NaN;
+  if (typeof v === 'object' && !Array.isArray(v)) {
+    const x =
+      v.score != null
+        ? v.score
+        : v.points != null
+          ? v.points
+          : v.value != null
+            ? v.value
+            : v.kills != null
+              ? v.kills
+              : v.total != null
+                ? v.total
+                : null;
+    return parseLooseRankingNumber(x);
+  }
+  return parseLooseRankingNumber(v);
+}
+
+function formatGgJsonCell(v) {
+  const n = ggBucketNumeric(v);
+  return Number.isFinite(n) ? formatRankingNumber(n) : '—';
+}
+
+/** 6 tuiles périodes (clés DOStats / scraper : last_100d, last_365d pour année). */
+var GG_PERIOD_TILES_DEF = [
+  { i18nKey: 'gg_period_label_total', keys: ['current'] },
+  { i18nKey: 'gg_period_label_24h', keys: ['last_24h', 'last_24'] },
+  { i18nKey: 'gg_period_label_7d', keys: ['last_7d'] },
+  { i18nKey: 'gg_period_label_30d', keys: ['last_30d'] },
+  { i18nKey: 'gg_period_label_90d', keys: ['last_90d', 'last_100d'] },
+  { i18nKey: 'gg_period_label_year', keys: ['last_365d', 'last_year'] }
+];
+
+var GG_GATE_ORDER = ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'kappa', 'lambda', 'kronos', 'hades', 'kuipper', 'other'];
+
+var GG_IMG_MAP = { lambda: 'lamba_gate', other: 'kuipper_gate', kuiper: 'kuipper_gate' };
+
+var _ggModalState = { row: null, tree: null, drillKey: null, drillI18nKey: null };
+
+function ggTranslate(i18nKey) {
+  if (typeof window.i18nT === 'function' && i18nKey) {
+    var s = window.i18nT(i18nKey);
+    if (s != null && String(s).trim() !== '') return String(s);
+  }
+  return String(i18nKey || '');
+}
+
+function ggParseStatsMaybe(raw) {
+  if (raw == null) return null;
+  if (typeof raw === 'string') {
+    try {
+      var p = JSON.parse(raw);
+      return p && typeof p === 'object' && !Array.isArray(p) ? p : null;
+    } catch (_e) {
+      return null;
+    }
+  }
+  return typeof raw === 'object' && !Array.isArray(raw) ? raw : null;
+}
+
+function ggResolvePeriodEntry(tree, keyCandidates) {
+  if (!tree || typeof tree !== 'object') return null;
+  for (var i = 0; i < keyCandidates.length; i++) {
+    var k = keyCandidates[i];
+    if (tree[k] != null && typeof tree[k] === 'object') return { storageKey: k, node: tree[k] };
+  }
+  return null;
+}
+
+function ggSumPeriodTotal(node) {
+  if (!node || typeof node !== 'object') return NaN;
+  if (node.galaxy_gates && typeof node.galaxy_gates === 'object') {
+    var sum = 0;
+    var any = false;
+    for (var gk in node.galaxy_gates) {
+      if (gk === 'total') continue;
+      var gv = node.galaxy_gates[gk];
+      if (gv == null) continue;
+      var n = parseLooseRankingNumber(gv);
+      if (Number.isFinite(n)) {
+        sum += n;
+        any = true;
+      }
+    }
+    if (any) return sum;
+  }
+  if (node.score != null || node.points != null || node.value != null || node.rank != null) {
+    return ggBucketNumeric(node);
+  }
+  return NaN;
+}
+
+function ggGetGatesMapForPeriod(node) {
+  if (!node || typeof node !== 'object') return null;
+  if (node.galaxy_gates && typeof node.galaxy_gates === 'object') {
+    var out = {};
+    var any = false;
+    for (var k in node.galaxy_gates) {
+      var v = node.galaxy_gates[k];
+      if (v == null) continue;
+      out[k] = v;
+      any = true;
+    }
+    return any ? out : null;
+  }
+  var skip = {
+    rank: 1,
+    score: 1,
+    points: 1,
+    value: 1,
+    hours: 1,
+    galaxy_gates: 1,
+    top_user: 1,
+    experience: 1,
+    honor: 1,
+    alien_kills: 1,
+    ship_kills: 1
+  };
+  var out2 = {};
+  var any2 = false;
+  for (var pk in node) {
+    if (skip[pk]) continue;
+    var nv = node[pk];
+    if (nv != null && typeof nv !== 'object') {
+      out2[pk] = nv;
+      any2 = true;
+    }
+  }
+  return any2 ? out2 : null;
+}
+
+/** Portail avec la plus grande valeur sur la période (ex aequo → ordre GG_GATE_ORDER). */
+function ggMaxGateEntry(node) {
+  var map = ggGetGatesMapForPeriod(node);
+  if (!map || !Object.keys(map).length) {
+    var tOnly = ggSumPeriodTotal(node);
+    return Number.isFinite(tOnly) ? { gateKey: null, value: tOnly } : null;
+  }
+  var bestK = null;
+  var bestV = -Infinity;
+  var bestRank = 999;
+  for (var k in map) {
+    if (k === 'total') continue;
+    var n = parseLooseRankingNumber(map[k]);
+    if (!Number.isFinite(n)) continue;
+    var ir = GG_GATE_ORDER.indexOf(String(k).toLowerCase());
+    var rnk = ir === -1 ? 500 : ir;
+    if (n > bestV || (n === bestV && rnk < bestRank)) {
+      bestV = n;
+      bestK = k;
+      bestRank = rnk;
+    }
+  }
+  if (bestK == null) {
+    var t2 = ggSumPeriodTotal(node);
+    return Number.isFinite(t2) ? { gateKey: null, value: t2 } : null;
+  }
+  return { gateKey: bestK, value: bestV };
+}
+
+function buildGgTreeFromRow(row) {
+  var gj = normalizeGgJson(row && row.galaxy_gates_json);
+  var st = ggParseStatsMaybe(row && row.stats);
+  var list = [];
+  if (st) list.push(st);
+  if (gj) list.push(gj);
+  var li;
+  for (li = 0; li < list.length; li++) {
+    var raw = list[li];
+    if (!raw || typeof raw !== 'object') continue;
+    var nPeriod = 0;
+    var pi;
+    for (pi = 0; pi < GG_PERIOD_TILES_DEF.length; pi++) {
+      if (ggResolvePeriodEntry(raw, GG_PERIOD_TILES_DEF[pi].keys)) nPeriod++;
+    }
+    if (nPeriod >= 2) return raw;
+  }
+  if (gj && typeof gj === 'object') {
+    var gateKeys = {
+      alpha: 1,
+      beta: 1,
+      gamma: 1,
+      delta: 1,
+      epsilon: 1,
+      zeta: 1,
+      kappa: 1,
+      lambda: 1,
+      kronos: 1,
+      hades: 1,
+      other: 1,
+      kuiper: 1
+    };
+    var tops = Object.keys(gj);
+    var nGate = tops.filter(function (k) {
+      return gateKeys[k.toLowerCase()];
+    }).length;
+    if (nGate >= 1) {
+      var inner = {};
+      var ti;
+      for (ti = 0; ti < tops.length; ti++) {
+        var tk = tops[ti];
+        if (gateKeys[tk.toLowerCase()]) inner[tk] = gj[tk];
+      }
+      return { current: { galaxy_gates: Object.keys(inner).length ? inner : gj } };
+    }
+  }
+  return gj || st || null;
+}
+
+function rowHasGalaxyGatesPopupData(row) {
+  var t = buildGgTreeFromRow(row);
+  return t != null && typeof t === 'object' && Object.keys(t).length > 0;
+}
+
+function ggModalGetGridEl() {
+  var modal = document.getElementById('ranking-gg-modal');
+  return modal ? modal.querySelector('[data-gg-modal-tbody]') : null;
+}
+
+function ggModalRenderPeriodTilesView() {
+  var grid = ggModalGetGridEl();
+  if (!grid) return;
+  var tree = _ggModalState.tree;
+  var html = [];
+  var i;
+  for (i = 0; i < GG_PERIOD_TILES_DEF.length; i++) {
+    var def = GG_PERIOD_TILES_DEF[i];
+    var hit = tree ? ggResolvePeriodEntry(tree, def.keys) : null;
+    var sk = hit ? hit.storageKey : '';
+    var node = hit ? hit.node : null;
+    var maxEntry = node ? ggMaxGateEntry(node) : null;
+    var fmt = maxEntry && Number.isFinite(maxEntry.value) ? formatRankingNumber(maxEntry.value) : '—';
+    var active = maxEntry && Number.isFinite(maxEntry.value) && maxEntry.value > 0;
+    var cls = 'gg-gate-card gg-period-tile' + (active ? ' gg-gate-card--active' : '') + (sk ? '' : ' gg-period-tile--empty');
+    var periodText = ggTranslate(def.i18nKey);
+    var imgHtml = '';
+    if (maxEntry && maxEntry.gateKey) {
+      var lk = String(maxEntry.gateKey).toLowerCase();
+      var imgKey = GG_IMG_MAP[lk] || lk + '_gate';
+      var imgSrc = 'img/gates/' + imgKey + '.png';
+      imgHtml =
+        '<div class="gg-period-tile-img-wrap">' +
+        '<img class="gg-period-tile-img" src="' +
+        escapeHtml(imgSrc) +
+        '" alt="" onerror="this.style.opacity=\'0.15\'">' +
+        '</div>';
+    } else {
+      imgHtml = '<div class="gg-period-tile-img-wrap gg-period-tile-img-wrap--empty"></div>';
+    }
+    var inner =
+      '<div class="gg-period-tile-stack">' +
+      '<span class="gg-period-tile-label">' +
+      escapeHtml(periodText) +
+      '</span>' +
+      imgHtml +
+      '<span class="gg-period-tile-value gg-gate-count' +
+      (active ? ' gg-gate-count--active' : '') +
+      '">' +
+      fmt +
+      '</span>' +
+      '</div>';
+    if (sk) {
+      html.push(
+        '<button type="button" class="' +
+          cls +
+          '" data-gg-period-key="' +
+          escapeHtml(sk) +
+          '" data-gg-period-i18n="' +
+          escapeHtml(def.i18nKey) +
+          '">' +
+          inner +
+          '</button>'
+      );
+    } else {
+      html.push('<div class="' + cls + '">' + inner + '</div>');
+    }
+  }
+  grid.innerHTML = html.join('');
+}
+
+function ggModalRenderDrillGatesView(gatesMap) {
+  var grid = ggModalGetGridEl();
+  if (!grid) return;
+  var entries = Object.entries(gatesMap || {});
+  entries.sort(function (a, b) {
+    var ia = GG_GATE_ORDER.indexOf(String(a[0]).toLowerCase());
+    var ib = GG_GATE_ORDER.indexOf(String(b[0]).toLowerCase());
+    if (ia !== -1 && ib !== -1) return ia - ib;
+    if (ia !== -1) return -1;
+    if (ib !== -1) return 1;
+    return String(a[0]).localeCompare(String(b[0]));
+  });
+  var parts = [];
+  var j;
+  for (j = 0; j < entries.length; j++) {
+    var k = entries[j][0];
+    var v = entries[j][1];
+    var lk = String(k).toLowerCase();
+    var n = parseLooseRankingNumber(v);
+    var active = Number.isFinite(n) && n > 0;
+    var display = Number.isFinite(n) ? formatRankingNumber(n) : '—';
+    var label = k.charAt(0).toUpperCase() + k.slice(1);
+    var noImg = lk === 'total';
+    var imgKey = GG_IMG_MAP[lk] || lk + '_gate';
+    var imgSrc = 'img/gates/' + imgKey + '.png';
+    var imgBlock = noImg
+      ? ''
+      : '<div class="gg-gate-img-wrap">' +
+        '<img class="gg-gate-img" src="' +
+        escapeHtml(imgSrc) +
+        '" alt="' +
+        escapeHtml(label) +
+        '" onerror="this.parentElement.style.display=\'none\'">' +
+        '</div>';
+    var cardCls = 'gg-gate-card' + (noImg ? ' gg-gate-card--period' : '') + (active ? ' gg-gate-card--active' : '');
+    parts.push(
+      '<div class="' +
+        cardCls +
+        '">' +
+        imgBlock +
+        '<div class="gg-gate-info">' +
+        '<span class="gg-gate-name">' +
+        escapeHtml(label) +
+        '</span>' +
+        '<span class="gg-gate-count' +
+        (active ? ' gg-gate-count--active' : '') +
+        '">' +
+        display +
+        '</span>' +
+        '</div>' +
+        '</div>'
+    );
+  }
+  grid.innerHTML = parts.join('');
+}
+
+function ggModalShowPeriodView() {
+  _ggModalState.drillKey = null;
+  _ggModalState.drillI18nKey = null;
+  var modal = document.getElementById('ranking-gg-modal');
+  var sub = modal && modal.querySelector('[data-gg-modal-sub]');
+  if (sub) sub.textContent = '';
+  var back = modal && modal.querySelector('[data-gg-back]');
+  if (back) back.hidden = true;
+  ggModalRenderPeriodTilesView();
+}
+
+function ggModalDrillToPeriod(storageKey, periodI18nKey) {
+  var tree = _ggModalState.tree;
+  if (!tree || !storageKey) return;
+  var node = tree[storageKey];
+  if (!node || typeof node !== 'object') return;
+  var gatesMap = ggGetGatesMapForPeriod(node);
+  if (!gatesMap || !Object.keys(gatesMap).length) {
+    var t = ggSumPeriodTotal(node);
+    gatesMap = Number.isFinite(t) ? { total: t } : {};
+  }
+  ggModalRenderDrillGatesView(gatesMap);
+  _ggModalState.drillKey = storageKey;
+  _ggModalState.drillI18nKey = periodI18nKey || null;
+  var modal = document.getElementById('ranking-gg-modal');
+  var sub = modal && modal.querySelector('[data-gg-modal-sub]');
+  var ptxt = periodI18nKey ? ggTranslate(periodI18nKey) : '';
+  if (sub) sub.textContent = ptxt ? ' · ' + ptxt : '';
+  var back = modal && modal.querySelector('[data-gg-back]');
+  if (back) back.hidden = false;
 }
 
 function normalizeRankName(s) {
@@ -65,6 +458,16 @@ function normalizeRankName(s) {
 function normalizeRankKey(s) {
   if (!s || typeof s !== 'string') return '';
   return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/['']/g, "'").replace(/\s+/g, ' ').trim();
+}
+
+function normalizeRankKeyTr(s) {
+  if (!s || typeof s !== 'string') return '';
+  return s.toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/['']/g, "'").replace(/\s+/g, ' ').trim();
+}
+
+function rankLower(s, lang) {
+  if (!s || typeof s !== 'string') return '';
+  return lang === 'tr' ? s.toLocaleLowerCase('tr-TR') : s.toLowerCase();
 }
 
 const COMPANY_LETTERS = { mmo: 'MMO', eic: 'EIC', vru: 'VRU' };
@@ -124,6 +527,13 @@ function getGradeTooltip(rawRank, fallback) {
 function getRankImg(rankName, server) {
   if (!rankName) return '';
   var s = String(rankName).trim();
+  if (/^\d+$/.test(s) && typeof RANK_ID_TO_KEY !== 'undefined' && typeof GRADE_KEY_TO_IMG !== 'undefined') {
+    var rid = parseInt(s, 10);
+    if (rid >= 1 && rid <= 21) {
+      var rkey = RANK_ID_TO_KEY[rid];
+      if (rkey && GRADE_KEY_TO_IMG[rkey]) return GRADE_KEY_TO_IMG[rkey];
+    }
+  }
   if (typeof RANK_KEY_TO_RANK_NAME !== 'undefined' && s.startsWith('rank_') && RANK_KEY_TO_RANK_NAME[s]) s = RANK_KEY_TO_RANK_NAME[s];
   if (typeof GRADE_KEY_TO_IMG !== 'undefined') {
     var key = s.toLowerCase().replace(/-/g, '_').replace(/^(rank_|hof_|hof_rank_)/, '');
@@ -134,12 +544,24 @@ function getRankImg(rankName, server) {
     var lang = SERVER_TO_LANG[serverCode] || 'en';
     var namesForLang = RANK_NAMES_BY_LANG[lang] || RANK_NAMES_BY_LANG.en;
     var normalized = normalizeRankName(rankName);
-    var nLower = normalized.toLowerCase();
-    for (var i = 0; i < namesForLang.length && i < RANKS_DATA.length; i++) {
-      var refName = namesForLang[i];
-      if (!refName) continue;
-      if (normalized === refName || normalizeRankName(refName) === normalized) return RANKS_DATA[i].img;
-      if (nLower && normalizeRankName(refName).toLowerCase() === nLower) return RANKS_DATA[i].img;
+    var nLower = rankLower(normalized, lang);
+    function matchNameList(list, langForLower) {
+      if (!list) return '';
+      for (var i = 0; i < list.length && i < RANKS_DATA.length; i++) {
+        var refName = list[i];
+        if (!refName) continue;
+        var refNorm = normalizeRankName(refName);
+        if (normalized === refName || refNorm === normalized) return RANKS_DATA[i].img;
+        if (nLower && rankLower(refNorm, langForLower) === nLower) return RANKS_DATA[i].img;
+      }
+      return '';
+    }
+    var hit = matchNameList(namesForLang, lang);
+    if (hit) return hit;
+    // DOStats TR peut afficher le grade en anglais : éviter de bloquer sur la liste turque seule (fr exclu : Colonel FR ≠ EN).
+    if (lang !== 'fr' && typeof EN_RANK_NAMES !== 'undefined') {
+      hit = matchNameList(EN_RANK_NAMES, 'en');
+      if (hit) return hit;
     }
   }
   var normalized = normalizeRankName(rankName);
@@ -153,6 +575,10 @@ function getRankImg(rankName, server) {
   if (typeof RANK_NAME_TO_IMG !== 'undefined') {
     var key = normalizeRankKey(rankName);
     if (RANK_NAME_TO_IMG[key]) return RANK_NAME_TO_IMG[key];
+    if (serverCode && typeof SERVER_TO_LANG !== 'undefined' && SERVER_TO_LANG[serverCode] === 'tr') {
+      var keyTr = normalizeRankKeyTr(rankName);
+      if (keyTr && keyTr !== key && RANK_NAME_TO_IMG[keyTr]) return RANK_NAME_TO_IMG[keyTr];
+    }
   }
   return '';
 }
@@ -165,6 +591,9 @@ if (typeof window !== 'undefined') {
 
 function initRankingTab() {
   const filterServer = document.getElementById('ranking-filter-server');
+  const filterServerTrigger = document.getElementById('ranking-filter-server-trigger');
+  const filterServerList = document.getElementById('ranking-filter-server-listbox');
+  const serverDropdownRoot = filterServer && filterServer.closest('.ranking-server-dropdown');
   const filterType = document.getElementById('ranking-filter-type');
   const tableWrap = document.getElementById('ranking-table-wrap');
   const table = document.getElementById('ranking-table');
@@ -176,6 +605,54 @@ function initRankingTab() {
 
   if (typeof UserPreferencesAPI !== 'undefined' && UserPreferencesAPI.getActivePlayerInfo) {
     UserPreferencesAPI.getActivePlayerInfo().catch(function () {});
+  }
+
+  var RETIRED_RANKING_SERVER_CODE = 'gbl2';
+
+  function syncRankingServerRetiredStyle() {
+    if (!filterServerTrigger || !filterServer) return;
+    filterServerTrigger.classList.toggle('ranking-filter-server--retired-active', filterServer.value === RETIRED_RANKING_SERVER_CODE);
+  }
+
+  function updateTriggerTextFromSelect() {
+    if (!filterServerTrigger || !filterServer) return;
+    var sel = filterServer.options[filterServer.selectedIndex];
+    filterServerTrigger.textContent = sel ? sel.textContent : '';
+  }
+
+  function setServerPanelOpen(open) {
+    if (!filterServerList || !filterServerTrigger) return;
+    if (open) {
+      filterServerList.removeAttribute('hidden');
+      filterServerTrigger.setAttribute('aria-expanded', 'true');
+      buildServerListboxFromSelect();
+    } else {
+      filterServerList.setAttribute('hidden', '');
+      filterServerTrigger.setAttribute('aria-expanded', 'false');
+    }
+  }
+
+  function buildServerListboxFromSelect() {
+    if (!filterServerList || !filterServer) return;
+    filterServerList.innerHTML = '';
+    for (var i = 0; i < filterServer.options.length; i++) {
+      var opt = filterServer.options[i];
+      var li = document.createElement('li');
+      li.setAttribute('role', 'option');
+      li.setAttribute('data-value', opt.value);
+      li.textContent = opt.textContent;
+      if (opt.className) li.className = opt.className;
+      li.setAttribute('aria-selected', opt.selected ? 'true' : 'false');
+      li.addEventListener('click', function (ev) {
+        var v = ev.currentTarget.getAttribute('data-value');
+        filterServer.value = v;
+        updateTriggerTextFromSelect();
+        syncRankingServerRetiredStyle();
+        setServerPanelOpen(false);
+        filterServer.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      filterServerList.appendChild(li);
+    }
   }
 
   async function updateFilterServerOptions() {
@@ -198,8 +675,16 @@ function initRankingTab() {
         opts.push({ value: code, label: mapping[code] || c });
       }
     });
-    filterServer.innerHTML = opts.map(function(o) { return '<option value="' + escapeHtml(String(o.value)) + '">' + escapeHtml(o.label) + '</option>'; }).join('');
+    filterServer.innerHTML = opts.map(function(o) {
+      var v = escapeHtml(String(o.value));
+      var lbl = escapeHtml(o.label);
+      var optCls = String(o.value) === RETIRED_RANKING_SERVER_CODE ? ' class="ranking-server-option--retired"' : '';
+      return '<option value="' + v + '"' + optCls + '>' + lbl + '</option>';
+    }).join('');
     if (opts.some(function(o) { return String(o.value) === prevVal; })) filterServer.value = prevVal;
+    syncRankingServerRetiredStyle();
+    updateTriggerTextFromSelect();
+    if (filterServerList && !filterServerList.hasAttribute('hidden')) buildServerListboxFromSelect();
   }
 
   async function getFavoriteServer() {
@@ -216,28 +701,69 @@ function initRankingTab() {
     }
   }
 
-  if (filterServer) {
-    updateFilterServerOptions().then(function () {
-      return getFavoriteServer();
-    }).then(function (savedFav) {
+  /** Attend la liste serveurs + favori / serveur profil avant le 1er chargement (évite course au refresh). */
+  async function applySavedServerSelectionThenLoad() {
+    if (!filterServer) {
+      load();
+      return;
+    }
+    try {
+      await updateFilterServerOptions();
+      var savedFav = null;
+      try {
+        savedFav = await getFavoriteServer();
+      } catch (_e) {}
       if (savedFav) {
-        var hasFavOpt = Array.from(filterServer.options).some(function(o) { return o.value === savedFav; });
+        var hasFavOpt = Array.from(filterServer.options).some(function (o) {
+          return o.value === savedFav;
+        });
         if (hasFavOpt) filterServer.value = savedFav;
       }
-      if (!savedFav && typeof UserPreferencesAPI !== 'undefined') {
-        UserPreferencesAPI.getUserServer().then(function(profileServer) {
+      syncRankingServerRetiredStyle();
+      if (!savedFav && typeof UserPreferencesAPI !== 'undefined' && UserPreferencesAPI.getUserServer) {
+        try {
+          var profileServer = await UserPreferencesAPI.getUserServer();
           if (profileServer) {
-            var hasOpt = Array.from(filterServer.options).some(function(o) { return o.value === profileServer; });
+            var hasOpt = Array.from(filterServer.options).some(function (o) {
+              return o.value === profileServer;
+            });
             if (hasOpt) filterServer.value = profileServer;
           }
-        }).catch(function () {});
+        } catch (_e2) {}
       }
-    }).catch(function () {});
+      syncRankingServerRetiredStyle();
+      updateTriggerTextFromSelect();
+    } catch (_e3) {}
+    load();
+  }
+
+  if (filterServer) {
+    applySavedServerSelectionThenLoad();
 
     filterServer.addEventListener('change', function () {
+      syncRankingServerRetiredStyle();
+      updateTriggerTextFromSelect();
+      if (filterServerList && !filterServerList.hasAttribute('hidden')) buildServerListboxFromSelect();
       saveFavoriteServer(filterServer.value);
       load();
     });
+
+    if (filterServerTrigger && filterServerList && serverDropdownRoot) {
+      filterServerTrigger.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var willOpen = filterServerList.hasAttribute('hidden');
+        setServerPanelOpen(willOpen);
+      });
+      document.addEventListener('click', function rankingServerDropdownOutside(e) {
+        if (filterServerList.hasAttribute('hidden')) return;
+        if (serverDropdownRoot.contains(e.target)) return;
+        setServerPanelOpen(false);
+      });
+      document.addEventListener('keydown', function rankingServerDropdownEsc(e) {
+        if (e.key !== 'Escape' || filterServerList.hasAttribute('hidden')) return;
+        setServerPanelOpen(false);
+      });
+    }
   }
 
   // Bouton \"📍 Ma position\" dans la carte de filtres
@@ -472,7 +998,7 @@ function initRankingTab() {
               const dailyRow = mapById[key];
               if (!dailyRow) return;
               const raw = dailyRow[valField];
-              const n = raw != null ? Number(raw) : NaN;
+              const n = raw != null && raw !== '' ? parseLooseRankingNumber(raw) : NaN;
               row._daily_24h = Number.isFinite(n) ? n : null;
             });
           }
@@ -569,7 +1095,9 @@ function initRankingTab() {
     }
   });
 
-  load();
+  if (!filterServer) {
+    load();
+  }
   tryRegisterRankingCdpRefreshHook();
 }
 
@@ -697,8 +1225,13 @@ function renderRanking(data, sortType) {
     var txt  = row._pos_delta === 0 ? '=' : (row._pos_delta > 0 ? '+' + row._pos_delta : String(row._pos_delta));
     return `<span class="ranking-pos-delta ${cls}" title="Variation de position">${icon}${txt}</span>`;
   }
+  var RANKING_DELTA_ZERO_STYLE = 'color:#555';
+
   function _statDeltaBadge(delta) {
     if (delta == null) return '';
+    if (Number(delta) === 0) {
+      return '<small class="ranking-stat-delta ranking-stat-delta--zero" title="Variation" style="' + RANKING_DELTA_ZERO_STYLE + '">—</small>';
+    }
     var cls  = _deltaClass(delta);
     var icon = _deltaIcon(delta);
     return `<small class="ranking-stat-delta ${cls}" title="Variation">${icon} ${_fmtDelta(delta)}</small>`;
@@ -716,7 +1249,8 @@ function renderRanking(data, sortType) {
   function _buildDaily24hArrowHtml(dailyVal) {
     if (!shouldShow24hCol) return '<span>—</span>';
     var n = Number(dailyVal);
-    if (!Number.isFinite(n) || n === 0) return '<span>—</span>';
+    if (!Number.isFinite(n)) return '<span>—</span>';
+    if (n === 0) return '<span class="ranking-delta24h-zero" style="' + RANKING_DELTA_ZERO_STYLE + '">—</span>';
     var isPos = n > 0;
     var wrapperClass = isPos ? 'delta24h-tooltip-wrap--pos' : 'delta24h-tooltip-wrap--neg';
     var arrowSrc = isPos ? 'img/icon_btn/delta24h_arrow_green.png' : 'img/icon_btn/delta24h_arrow_red.png';
@@ -781,6 +1315,9 @@ function renderRanking(data, sortType) {
     // Mode progression : delta principal
     function buildDeltaMain(deltaValue) {
       if (deltaValue == null) return '—';
+      if (Number(deltaValue) === 0) {
+        return '<span class="ranking-delta-main ranking-delta-main--zero" style="' + RANKING_DELTA_ZERO_STYLE + '">—</span>';
+      }
       var cls = deltaValue > 0 ? 'stat-up' : deltaValue < 0 ? 'stat-down' : 'stat-neutral';
       var abs = Math.abs(deltaValue).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
       var sign = deltaValue >= 0 ? '+' : '-';
@@ -810,15 +1347,13 @@ function renderRanking(data, sortType) {
       rpCellContent    = rankPoints + (typeCol === 'rank_points' ? rpDelta : '');
     }
     var serverCellHtml = '';
-    var pseudoSuffix = '';
     if (isAllServers) {
-      pseudoSuffix = '<span class="ranking-server-badge">' + escapeHtml(serverLabel) + '</span>';
       serverCellHtml = '<td class="ranking-col-server">' + escapeHtml(serverLabel) + '</td>';
     }
 
     tr.innerHTML = `
       <td class="ranking-pos ${posClass}">${pos}${posDeltaBadge}</td>
-      <td class="ranking-pseudo">${escapeHtml(pseudo)}${dostatsBadge}${pseudoSuffix}</td>
+      <td class="ranking-pseudo">${escapeHtml(pseudo)}${dostatsBadge}</td>
       ${serverCellHtml}
       <td class="ranking-firme">${companyCellHtml}</td>
       <td class="ranking-grade" data-fallback="${escapeHtml(rankAlt || '—')}">${gradeCellContent}</td>
@@ -2224,21 +2759,28 @@ function showPlayerDetails(row) {
   const dostatsBody = document.getElementById('ranking-detail-dostats-body');
   function renderDostatsSection(srcRow) {
     if (!dostatsWrap || !dostatsBody) return;
-    if (srcRow.dostats_updated_at && (srcRow.total_hours != null || srcRow.registered || srcRow.npc_kills != null || srcRow.ship_kills != null || srcRow.galaxy_gates != null)) {
+    if (typeof window !== 'undefined') window._rankingDetailDostatsGgRow = null;
+    if (srcRow.dostats_updated_at && (srcRow.total_hours != null || srcRow.registered || srcRow.npc_kills != null || srcRow.ship_kills != null || srcRow.galaxy_gates != null || rowHasGalaxyGatesPopupData(srcRow))) {
       dostatsWrap.style.display = '';
-      var lines = [];
-      if (srcRow.total_hours != null) lines.push('⏱️ Temps de jeu : ' + formatRankingNumber(srcRow.total_hours) + 'h');
-      if (srcRow.registered) lines.push('📅 Inscrit le : ' + String(srcRow.registered));
-      if (srcRow.npc_kills != null) lines.push('🎯 NPCs détruits : ' + formatRankingNumber(srcRow.npc_kills));
-      if (srcRow.ship_kills != null) lines.push('⚔️ Vaisseaux détruits : ' + formatRankingNumber(srcRow.ship_kills));
-      if (srcRow.galaxy_gates != null || (srcRow.galaxy_gates_json && Object.keys(srcRow.galaxy_gates_json).length)) {
-        if (srcRow.galaxy_gates_json && Object.keys(srcRow.galaxy_gates_json).length) {
-          const parts = Object.entries(srcRow.galaxy_gates_json).map(([k, v]) => k.charAt(0).toUpperCase() + k.slice(1) + ':' + formatRankingNumber(v));
-          lines.push('🌀 Galaxy Gates : ' + parts.join(', '));
-        } else lines.push('🌀 Galaxy Gates : ' + formatRankingNumber(srcRow.galaxy_gates));
+      var blocks = [];
+      if (srcRow.total_hours != null) blocks.push({ text: '⏱️ Temps de jeu : ' + formatRankingNumber(srcRow.total_hours) + 'h' });
+      if (srcRow.registered) blocks.push({ text: '📅 Inscrit le : ' + String(srcRow.registered) });
+      if (srcRow.npc_kills != null) blocks.push({ text: '🎯 NPCs détruits : ' + formatRankingNumber(srcRow.npc_kills) });
+      if (srcRow.ship_kills != null) blocks.push({ text: '⚔️ Vaisseaux détruits : ' + formatRankingNumber(srcRow.ship_kills) });
+      if (rowHasGalaxyGatesPopupData(srcRow)) {
+        if (typeof window !== 'undefined') window._rankingDetailDostatsGgRow = srcRow;
+        var gv = srcRow.galaxy_gates != null ? formatRankingNumber(srcRow.galaxy_gates) : '—';
+        blocks.push({
+          html: '🌀 Galaxy Gates : <span class="ranking-gg-cell ranking-dostats-gg-cell">' + escapeHtml(gv) + ' <button type="button" class="ranking-gg-eye ranking-dostats-gg-eye" title="Voir le détail" aria-label="Voir le détail">👁</button></span>'
+        });
+      } else if (srcRow.galaxy_gates != null) {
+        var ggt = parseLooseRankingNumber(srcRow.galaxy_gates);
+        if (Number.isFinite(ggt) && ggt >= 1) blocks.push({ text: '🌀 Galaxy Gates : Total : ' + formatRankingNumber(ggt) });
       }
-      dostatsBody.innerHTML = lines.length
-        ? lines.map(function (l) { return '<div class="ranking-modal-dostats-line">' + escapeHtml(l) + '</div>'; }).join('')
+      dostatsBody.innerHTML = blocks.length
+        ? blocks.map(function (b) {
+          return '<div class="ranking-modal-dostats-line">' + (b.html != null ? b.html : escapeHtml(b.text)) + '</div>';
+        }).join('')
         : '';
     } else {
       dostatsWrap.style.display = '';
@@ -2246,6 +2788,16 @@ function showPlayerDetails(row) {
     }
   }
   if (dostatsWrap && dostatsBody) {
+    if (dostatsWrap.dataset.ggDostatsBound !== '1') {
+      dostatsWrap.dataset.ggDostatsBound = '1';
+      dostatsWrap.addEventListener('click', function (e) {
+        if (!e.target.closest || !e.target.closest('.ranking-dostats-gg-eye')) return;
+        e.preventDefault();
+        e.stopPropagation();
+        var ref = typeof window !== 'undefined' ? window._rankingDetailDostatsGgRow : null;
+        if (ref) showGalaxyGatesPopup(ref);
+      });
+    }
     renderDostatsSection(row);
   }
 
@@ -2299,7 +2851,7 @@ function showPlayerDetails(row) {
     }
   }
 
-  // Enrichissement All Time indépendant du filtre période : player_profiles + classements globaux
+  // Enrichissement All Time indépendant du filtre période : profiles_players + classements globaux
   (async function enrichFromProfilesAndAllTime() {
     try {
       var supabase = (typeof getSupabaseClient === 'function') ? getSupabaseClient() : null;
@@ -2309,8 +2861,8 @@ function showPlayerDetails(row) {
       var pp = null;
       if (rowUserId) {
         var { data: ppData } = await supabase
-          .from('player_profiles')
-          .select('user_id, server, pseudo, company, grade, level, honor, experience, top_user, estimated_rp, total_hours, registered, npc_kills, ship_kills, galaxy_gates, galaxy_gates_json, dostats_updated_at')
+          .from('profiles_players')
+          .select('user_id, server, pseudo, company, grade, level, honor, experience, top_user, estimated_rp, total_hours, registered, npc_kills, ship_kills, galaxy_gates, galaxy_gates_json, stats, scraped_at')
           .eq('server', serverCode)
           .eq('user_id', rowUserId)
           .maybeSingle();
@@ -2318,8 +2870,8 @@ function showPlayerDetails(row) {
       }
       if (!pp) {
         var { data: ppData2 } = await supabase
-          .from('player_profiles')
-          .select('user_id, server, pseudo, company, grade, level, honor, experience, top_user, estimated_rp, total_hours, registered, npc_kills, ship_kills, galaxy_gates, galaxy_gates_json, dostats_updated_at')
+          .from('profiles_players')
+          .select('user_id, server, pseudo, company, grade, level, honor, experience, top_user, estimated_rp, total_hours, registered, npc_kills, ship_kills, galaxy_gates, galaxy_gates_json, stats, scraped_at')
           .eq('server', serverCode)
           .eq('pseudo', pseudo)
           .maybeSingle();
@@ -2370,11 +2922,12 @@ function showPlayerDetails(row) {
         ship_kills: pp.ship_kills != null ? pp.ship_kills : row.ship_kills,
         galaxy_gates: pp.galaxy_gates != null ? pp.galaxy_gates : row.galaxy_gates,
         galaxy_gates_json: pp.galaxy_gates_json || row.galaxy_gates_json,
-        dostats_updated_at: pp.dostats_updated_at || row.dostats_updated_at
+        stats: pp.stats != null ? pp.stats : row.stats,
+        dostats_updated_at: pp.scraped_at || pp.dostats_updated_at || row.dostats_updated_at
       });
       renderDostatsSection(mergedRow);
 
-      // Propagation des stats absolues (player_profiles) dans row pour que "Suivre ce joueur"
+      // Propagation des stats absolues (profiles_players) dans row pour que "Suivre ce joueur"
       // enregistre toujours les totaux, peu importe le filtre de période actif.
       if (pp.honor != null) row.honor = Number(pp.honor);
       if (pp.experience != null) row.xp = Number(pp.experience);
@@ -2432,43 +2985,25 @@ function showGalaxyGatesPopup(row) {
   const overlay = document.getElementById('ranking-gg-overlay');
   if (!modal || !overlay) return;
 
-  const pseudo = row.game_pseudo != null ? String(row.game_pseudo) : '—';
+  _ggModalState.row = row;
+  _ggModalState.tree = buildGgTreeFromRow(row);
+  _ggModalState.drillKey = null;
+  _ggModalState.drillI18nKey = null;
+
+  const pseudo = row.game_pseudo != null ? String(row.game_pseudo)
+    : row.name != null ? String(row.name)
+      : row.pseudo != null ? String(row.pseudo)
+        : '—';
   const pseudoEl = modal.querySelector('[data-gg-modal-pseudo]');
   if (pseudoEl) pseudoEl.textContent = pseudo;
+  const sub = modal.querySelector('[data-gg-modal-sub]');
+  if (sub) sub.textContent = '';
+  const back = modal.querySelector('[data-gg-back]');
+  if (back) back.hidden = true;
 
-  const grid = modal.querySelector('[data-gg-modal-tbody]');
-  if (grid) {
-    // lamba_gate.png = typo dans le nom de fichier (lambda → lamba)
-    const GG_IMG_MAP = { lambda: 'lamba_gate' };
-    const GG_ORDER = ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'kappa', 'lambda', 'kronos', 'hades'];
-    const entries = Object.entries(row.galaxy_gates_json || {}).sort((a, b) => {
-      const ia = GG_ORDER.indexOf(a[0]);
-      const ib = GG_ORDER.indexOf(b[0]);
-      if (ia !== -1 && ib !== -1) return ia - ib;
-      if (ia !== -1) return -1;
-      if (ib !== -1) return 1;
-      return a[0].localeCompare(b[0]);
-    });
+  if (typeof window.applyTranslations === 'function') window.applyTranslations();
 
-    grid.innerHTML = entries.map(([k, v]) => {
-      const imgKey = GG_IMG_MAP[k] || (k + '_gate');
-      const imgSrc = 'img/gates/' + imgKey + '.png';
-      const active = v > 0;
-      const label = k.charAt(0).toUpperCase() + k.slice(1);
-      return (
-        '<div class="gg-gate-card' + (active ? ' gg-gate-card--active' : '') + '">' +
-          '<div class="gg-gate-img-wrap">' +
-            '<img class="gg-gate-img" src="' + escapeHtml(imgSrc) + '" alt="' + escapeHtml(label) + '" ' +
-              'onerror="this.parentElement.style.display=\'none\'">' +
-          '</div>' +
-          '<div class="gg-gate-info">' +
-            '<span class="gg-gate-name">' + escapeHtml(label) + '</span>' +
-            '<span class="gg-gate-count' + (active ? ' gg-gate-count--active' : '') + '">' + formatRankingNumber(v) + '</span>' +
-          '</div>' +
-        '</div>'
-      );
-    }).join('');
-  }
+  ggModalRenderPeriodTilesView();
 
   modal.classList.add('active');
   overlay.classList.add('active');
@@ -2479,7 +3014,19 @@ function closeGalaxyGatesModal() {
   const overlay = document.getElementById('ranking-gg-overlay');
   if (modal) modal.classList.remove('active');
   if (overlay) overlay.classList.remove('active');
+  _ggModalState.row = null;
+  _ggModalState.tree = null;
+  _ggModalState.drillKey = null;
+  _ggModalState.drillI18nKey = null;
+  if (modal) {
+    const sub = modal.querySelector('[data-gg-modal-sub]');
+    if (sub) sub.textContent = '';
+    const bk = modal.querySelector('[data-gg-back]');
+    if (bk) bk.hidden = true;
+  }
 }
+
+if (typeof window !== 'undefined') window.closeGalaxyGatesModal = closeGalaxyGatesModal;
 
 function closeRankingDetailModal() {
   const modal = document.getElementById('ranking-detail-modal');
@@ -2523,6 +3070,21 @@ function closeRankingDetailModal() {
     const ggModal = document.getElementById('ranking-gg-modal');
     if (overlay) overlay.addEventListener('click', closeRankingDetailModal);
     if (ggOverlay) ggOverlay.addEventListener('click', closeGalaxyGatesModal);
+    if (ggModal && ggModal.dataset.ggNavBound !== '1') {
+      ggModal.dataset.ggNavBound = '1';
+      ggModal.addEventListener('click', function (e) {
+        var tile = e.target.closest && e.target.closest('.gg-period-tile');
+        if (tile && tile.getAttribute('data-gg-period-key')) {
+          e.preventDefault();
+          ggModalDrillToPeriod(tile.getAttribute('data-gg-period-key'), tile.getAttribute('data-gg-period-i18n') || '');
+          return;
+        }
+        if (e.target.closest && e.target.closest('[data-gg-back]')) {
+          e.preventDefault();
+          ggModalShowPeriodView();
+        }
+      });
+    }
     if (_rankingEscHandler) {
       document.removeEventListener('keydown', _rankingEscHandler);
     }
@@ -2546,6 +3108,14 @@ function closeRankingDetailModal() {
   }
   window.addEventListener('permissionsApplied', function () { setupRanking(); if (typeof renderFollowedPlayersSidebar === 'function') renderFollowedPlayersSidebar(); });
   window.addEventListener('languageChanged', function () {
+    var ggM = document.getElementById('ranking-gg-modal');
+    if (ggM && ggM.classList.contains('active')) {
+      if (_ggModalState.drillKey) {
+        ggModalDrillToPeriod(_ggModalState.drillKey, _ggModalState.drillI18nKey || '');
+      } else {
+        ggModalRenderPeriodTilesView();
+      }
+    }
     var tbody = document.querySelector('#ranking-table tbody');
     if (!tbody) return;
     tbody.querySelectorAll('tr.ranking-row').forEach(function (tr) {

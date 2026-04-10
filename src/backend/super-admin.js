@@ -486,6 +486,17 @@ function initSuperAdmin() {
   let _saConfirmCallback = null;
   let _saEventsCollectedRegistered = false;
 
+  function escapeHtml(str) {
+    if (str == null || str === undefined) return '';
+    var div = document.createElement('div');
+    div.textContent = String(str);
+    return div.innerHTML;
+  }
+  function saSafeCssToken(s) {
+    var t = String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    return t || 'unknown';
+  }
+
   // Nettoyer l'ancien cache utilisateurs démo (plus utilisé)
   try {
     var sk = (typeof window !== 'undefined' && window.APP_KEYS && window.APP_KEYS.STORAGE_KEYS) ? window.APP_KEYS.STORAGE_KEYS : {};
@@ -534,16 +545,18 @@ function initSuperAdmin() {
     const tbody = document.getElementById('superAdminTableBody');
     if (!tbody) return;
     tbody.innerHTML = users.map(u => {
-      const badgeHtml = typeof generateUserBadge === 'function' ? generateUserBadge(u.badge) : (u.badge || '—');
+      const badgeHtml = typeof generateUserBadge === 'function' ? generateUserBadge(u.badge) : ('<span class="user-badge user-badge--free">' + escapeHtml(u.badge || '—') + '</span>');
+      var createdEsc = escapeHtml(SuperAdmin.formatDate(u.createdAt));
+      var lastActEsc = escapeHtml(SuperAdmin.formatDate(u.lastActivity));
       return `
-      <tr class="sa-row ${u.isSuspect ? 'sa-row--suspect' : ''}" data-user-id="${u.id}">
+      <tr class="sa-row ${u.isSuspect ? 'sa-row--suspect' : ''}" data-user-id="${escapeHtml(u.id)}">
         <td><code class="sa-id">${escapeHtml(u.id)}</code></td>
         <td title="${escapeHtml(u.email)}">${escapeHtml(u.email)}</td>
         <td class="sa-col-badge">${badgeHtml}</td>
-        <td>${SuperAdmin.formatDate(u.createdAt)}</td>
-        <td><span class="sa-status sa-status--${u.status}">${SuperAdmin.getStatusLabel(u.status)}</span></td>
+        <td>${createdEsc}</td>
+        <td><span class="sa-status sa-status--${saSafeCssToken(u.status)}">${escapeHtml(SuperAdmin.getStatusLabel(u.status))}</span></td>
         <td>${u.isSuspect ? '<span class="sa-flag" title="Compte suspect">🚩</span>' : '—'}</td>
-        <td class="sa-col-last-activity" title="${SuperAdmin.formatDate(u.lastActivity)}">${SuperAdmin.formatDate(u.lastActivity)}</td>
+        <td class="sa-col-last-activity" title="${lastActEsc}">${lastActEsc}</td>
         <td class="sa-actions-cell sa-col-actions">
           <button class="sa-btn sa-btn-sm" data-action="menu" data-user-id="${u.id}" title="Actions">⋮</button>
         </td>
@@ -563,7 +576,10 @@ function initSuperAdmin() {
     document.getElementById('saPopupPseudo').textContent = user.pseudo || user.email?.split('@')[0] || '—';
     document.getElementById('saPopupEmail').textContent = user.email || '—';
     const popupBadge = document.getElementById('saPopupBadge');
-    if (popupBadge) popupBadge.innerHTML = typeof generateUserBadge === 'function' ? generateUserBadge(user.badge) : (user.badge || '—');
+    if (popupBadge) {
+      if (typeof generateUserBadge === 'function') popupBadge.innerHTML = generateUserBadge(user.badge);
+      else popupBadge.textContent = user.badge || '—';
+    }
     var gradeEl = document.getElementById('saPopupGrade');
     var levelEl = document.getElementById('saPopupLevel');
     var honorEl = document.getElementById('saPopupHonor');
@@ -607,13 +623,12 @@ function initSuperAdmin() {
         }
 
         try {
-          const { data: profile } = await supabase
-            .from('player_profiles')
+          const { data: profRows } = await supabase
+            .from('profiles_players')
             .select('level')
             .eq('user_id', userId)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .single();
+            .limit(1);
+          const profile = Array.isArray(profRows) && profRows[0] ? profRows[0] : null;
           if (profile && profile.level != null && levelEl) {
             levelEl.textContent = String(profile.level);
           }
@@ -818,7 +833,7 @@ function initSuperAdmin() {
     userLabel.textContent = user.email;
     list.innerHTML = (user.adminNotes || []).map(n => `
       <div class="sa-note-item">
-        <div class="sa-note-meta">${SuperAdmin.formatDate(n.timestamp)} — ${n.adminId}</div>
+        <div class="sa-note-meta">${escapeHtml(SuperAdmin.formatDate(n.timestamp))} — ${escapeHtml(n.adminId != null ? String(n.adminId) : '')}</div>
         <div class="sa-note-content">${escapeHtml(n.content)}</div>
       </div>
     `).join('') || '<div class="sa-note-empty">Aucune note</div>';
@@ -849,8 +864,8 @@ function initSuperAdmin() {
     const actionLabels = { ban: 'Bannissement', unban: 'Débannissement', suspend: 'Suspension', mark_suspect: 'Marqué suspect', unmark_suspect: 'Drapeau retiré', add_note: 'Note ajoutée', edit: 'Modification', badge_change: 'Changement badge', role_change: 'Changement rôle' };
     list.innerHTML = logs.map(l => `
       <div class="sa-log-item">
-        <span class="sa-log-action">${actionLabels[l.action] || l.action}</span>
-        <span class="sa-log-meta">${SuperAdmin.formatDate(l.timestamp)} — ${l.adminLabel || l.admin_id || '—'}</span>
+        <span class="sa-log-action">${escapeHtml(actionLabels[l.action] != null ? actionLabels[l.action] : (l.action != null ? String(l.action) : '—'))}</span>
+        <span class="sa-log-meta">${escapeHtml(SuperAdmin.formatDate(l.timestamp))} — ${escapeHtml(l.adminLabel != null ? String(l.adminLabel) : (l.admin_id != null ? String(l.admin_id) : '—'))}</span>
       </div>
     `).join('') || '<div class="sa-log-empty">Aucune action</div>';
   }
@@ -858,12 +873,6 @@ function initSuperAdmin() {
   function closeHistoryModal() {
     const modal = document.getElementById('superAdminHistoryModal');
     if (modal) modal.classList.remove('sa-modal--open');
-  }
-
-  function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
   }
 
   function showConfirmModal(title, message, onConfirm) {
@@ -1024,8 +1033,8 @@ function initSuperAdmin() {
     const actionLabels = { ban: 'Bannissement', unban: 'Débannissement', badge_change: 'Changement badge', role_change: 'Changement rôle', add_note: 'Note', edit: 'Modification' };
     list.innerHTML = logs.length ? logs.map(l => `
       <div class="sa-log-item">
-        <span class="sa-log-action">${actionLabels[l.action] || l.action}</span>
-        <span class="sa-log-meta">${SuperAdmin.formatDate(l.created_at)} — Admin: ${(l.admin_id || '').slice(0, 8)}… → User: ${(l.target_user_id || '').slice(0, 8)}…</span>
+        <span class="sa-log-action">${escapeHtml(actionLabels[l.action] != null ? actionLabels[l.action] : (l.action != null ? String(l.action) : '—'))}</span>
+        <span class="sa-log-meta">${escapeHtml(SuperAdmin.formatDate(l.created_at))} — Admin: ${escapeHtml((l.admin_id || '').slice(0, 8))}… → User: ${escapeHtml((l.target_user_id || '').slice(0, 8))}…</span>
       </div>
     `).join('') : '<div class="sa-log-empty">Aucun log</div>';
   });
@@ -1056,17 +1065,17 @@ function initSuperAdmin() {
     const formatDetails = (d) => {
       if (!d || typeof d !== 'object') return '';
       const parts = [];
-      if (d.field != null) parts.push(d.field + '=' + d.value);
-      if (d.count != null && d.max != null) parts.push(d.count + '/' + d.max);
-      return parts.length ? parts.join(', ') : JSON.stringify(d);
+      if (d.field != null) parts.push(escapeHtml(String(d.field)) + '=' + escapeHtml(String(d.value)));
+      if (d.count != null && d.max != null) parts.push(escapeHtml(String(d.count)) + '/' + escapeHtml(String(d.max)));
+      return parts.length ? parts.join(', ') : escapeHtml(JSON.stringify(d));
     };
     if (events.length === 0) {
       listEl.innerHTML = '<div class="sa-log-empty">Aucun événement de sécurité enregistré</div>';
     } else {
       listEl.innerHTML = events.map(e => `
-        <div class="sa-security-item sa-security-item--${(e.event_type || '').toLowerCase()}">
-          <span class="sa-security-type">${labels[e.event_type] || e.event_type}</span>
-          <span class="sa-security-meta">${SuperAdmin.formatDate(e.created_at)} — RPC: ${e.rpc_name || '—'} — User: ${(e.user_id || '').slice(0, 8)}…</span>
+        <div class="sa-security-item sa-security-item--${saSafeCssToken(e.event_type)}">
+          <span class="sa-security-type">${escapeHtml(labels[e.event_type] != null ? labels[e.event_type] : (e.event_type != null ? String(e.event_type) : '—'))}</span>
+          <span class="sa-security-meta">${escapeHtml(SuperAdmin.formatDate(e.created_at))} — RPC: ${escapeHtml(e.rpc_name != null ? String(e.rpc_name) : '—')} — User: ${escapeHtml((e.user_id || '').slice(0, 8))}…</span>
           ${e.details && Object.keys(e.details).length ? '<span class="sa-security-details">' + formatDetails(e.details) + '</span>' : ''}
         </div>
       `).join('');
@@ -1195,15 +1204,6 @@ function initSuperAdmin() {
       navigator.clipboard?.writeText(output.value).then(() => {
         if (typeof showToast === 'function') showToast('Clés copiées.', 'success');
       }).catch(() => {});
-    }
-  });
-
-  // Planificateur : uniquement le bouton Interface Scraper
-  document.getElementById('superAdminScraperWindowBtn')?.addEventListener('click', function () {
-    if (typeof window.electronScraperWindow?.open === 'function') {
-      window.electronScraperWindow.open();
-    } else if (typeof showToast === 'function') {
-      showToast('Fenêtre Scraper non disponible', 'warning');
     }
   });
 
@@ -1363,7 +1363,6 @@ function initSuperAdmin() {
       { key: 'dashboardMessages', label: 'Messages' },
       { key: 'dashboardLogsSecurite', label: 'Logs de sécurité' },
       { key: 'dashboardClesLicence', label: 'Clés de licence' },
-      { key: 'dashboardPlanificateur', label: 'Planificateur' },
       { key: 'dashboardPermissionsAdmin', label: 'Permissions administrateurs' }
     ];
 
@@ -1405,7 +1404,7 @@ function initSuperAdmin() {
       }).join('');
     } catch (e) {
       Logger.error('[SuperAdmin] loadPermissionsAdmin', e);
-      grid.innerHTML = '<p class="sa-error-msg">Erreur chargement permissions : ' + (e?.message || '') + '</p>';
+      grid.innerHTML = '<p class="sa-error-msg">Erreur chargement permissions : ' + escapeHtml(e?.message || '') + '</p>';
       if (typeof showToast === 'function') showToast('Erreur chargement permissions : ' + (e?.message || ''), 'error');
     }
   }
@@ -1420,7 +1419,6 @@ function initSuperAdmin() {
       { id: 'messages', superOnly: false, feature: 'dashboardMessages' },
       { id: 'logs-securite', superOnly: false, feature: 'dashboardLogsSecurite' },
       { id: 'cles-licence', superOnly: false, feature: 'dashboardClesLicence' },
-      { id: 'planificateur', superOnly: false, feature: 'dashboardPlanificateur' },
       { id: 'permissions-admin', superOnly: false, feature: 'dashboardPermissionsAdmin' },
       { id: 'logs', superOnly: false, feature: 'dashboardLogs' }
     ];

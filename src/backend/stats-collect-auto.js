@@ -1,5 +1,27 @@
 // Récolte auto des stats (client Flash ou scraper login). FREE : 24 h entre deux récoltes ; PRO : 6 h.
 
+function statsCollectEscapeHtml(s) {
+  if (s == null) return '';
+  if (typeof escapeHtml === 'function') return escapeHtml(s);
+  var div = document.createElement('div');
+  div.textContent = String(s);
+  return div.innerHTML;
+}
+
+var _RECAP_COMPANY_LETTERS = { mmo: 'MMO', eic: 'EIC', vru: 'VRU' };
+function recapCompanyBadgeKey(company) {
+  if (!company || typeof company !== 'string') return '';
+  var c = String(company).trim().toLowerCase();
+  return _RECAP_COMPANY_LETTERS[c] ? c : '';
+}
+function recapCompanySlotHtml(company) {
+  var key = recapCompanyBadgeKey(company);
+  var text = key ? _RECAP_COMPANY_LETTERS[key] : (company != null ? String(company).trim().toUpperCase() : '');
+  if (!text) return '';
+  var cls = key ? (key === 'mmo' ? 'company-mmo' : (key === 'eic' ? 'company-eic' : 'company-vru')) : 'company-other';
+  return '<span class="company-badge ' + cls + '">' + statsCollectEscapeHtml(text) + '</span>';
+}
+
 const COLLECT_COOLDOWN_MS_PRO = 6 * 60 * 60 * 1000;
 const COLLECT_COOLDOWN_MS_FREE = 24 * 60 * 60 * 1000;
 
@@ -172,6 +194,21 @@ function profileUpdateOnlyDisplay(data, nowIso) {
   };
 }
 
+async function persistProfileDisplayUpdate(supabase2, update) {
+  if (!supabase2 || !update || Object.keys(update).length === 0) return { ok: true };
+  var rpcRes = await supabase2.rpc('update_profile_display', {
+    p_game_pseudo: update.game_pseudo != null ? update.game_pseudo : null,
+    p_server: update.server != null ? update.server : null,
+    p_company: update.company != null ? update.company : null,
+    p_last_stats_collected_at: update.last_stats_collected_at != null ? update.last_stats_collected_at : null
+  });
+  if (rpcRes.error) return { ok: false, message: rpcRes.error.message || 'Erreur enregistrement' };
+  if (!rpcRes.data || rpcRes.data.success !== true) {
+    return { ok: false, message: (rpcRes.data && rpcRes.data.error) || 'Erreur enregistrement' };
+  }
+  return { ok: true };
+}
+
 function showRecapFromScan(data) {
   var overlay = document.getElementById('statsRecapOverlay');
   if (!overlay) return;
@@ -197,18 +234,8 @@ function showRecapFromScan(data) {
 
   var companySlot = document.getElementById('recapCompanySlot');
   if (companySlot) {
-    var badgeFn = (typeof window !== 'undefined' && typeof window.getCompanyBadgeHtml === 'function') ? window.getCompanyBadgeHtml : null;
-    if (badgeFn) {
-      companySlot.innerHTML = badgeFn(data.company) || '';
-    } else {
-      companySlot.innerHTML = '';
-    }
-    if (!companySlot.innerHTML.trim()) {
-      var rawCo = data.company != null ? String(data.company).trim() : '';
-      companySlot.innerHTML = rawCo
-        ? '<span class="company-badge company-other">' + (typeof escapeHtml === 'function' ? escapeHtml(rawCo.toUpperCase()) : rawCo) + '</span>'
-        : '<span class="stats-recap-value">—</span>';
-    }
+    var companyHtml = recapCompanySlotHtml(data.company);
+    companySlot.innerHTML = companyHtml || '<span class="stats-recap-value">—</span>';
   }
 
   var serverForImg = data.server;
@@ -303,7 +330,9 @@ window.buildManualStatsDropdown = function buildManualStatsDropdown() {
     opt.className = 'option';
     opt.dataset.name = r.name;
     opt.dataset.img = r.img || '';
-    opt.innerHTML = '<div class="grade-block"><div class="grade-block-name">' + (r.name || '') + '</div><div class="grade-block-icon"><img src="' + (r.img || '') + '" alt="' + (r.name || '') + '" class="grade-block-img"></div></div>';
+    var nm = statsCollectEscapeHtml(r.name || '');
+    var im = statsCollectEscapeHtml(r.img || '');
+    opt.innerHTML = '<div class="grade-block"><div class="grade-block-name">' + nm + '</div><div class="grade-block-icon"><img src="' + im + '" alt="' + nm + '" class="grade-block-img"></div></div>';
     optionsEl.appendChild(opt);
   });
 };
@@ -473,8 +502,8 @@ async function runStatsCollectFromGame() {
         Object.keys(update).forEach(function (k) { if (update[k] === undefined) delete update[k]; });
         var supabase2 = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
         if (supabase2 && Object.keys(update).length > 0) {
-          var upRes = await supabase2.from('profiles').update(update).eq('id', user3.id);
-          if (upRes.error) { if (typeof showToast === 'function') showToast('Scan échoué: ' + upRes.error.message, 'error'); return; }
+          var upRes = await persistProfileDisplayUpdate(supabase2, update);
+          if (!upRes.ok) { if (typeof showToast === 'function') showToast('Scan échoué: ' + upRes.message, 'error'); return; }
         }
         onCollectSuccess(data, nowIso);
       } catch (e) {
@@ -518,8 +547,8 @@ async function runStatsCollectFromGame() {
     Object.keys(update).forEach(function (k) { if (update[k] === undefined) delete update[k]; });
     var supabase2 = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
     if (supabase2 && Object.keys(update).length > 0) {
-      var res = await supabase2.from('profiles').update(update).eq('id', user3.id);
-      if (res.error) { if (typeof showToast === 'function') showToast('Scan échoué: ' + (res.error.message || 'Erreur enregistrement'), 'error'); return; }
+      var rpcUp = await persistProfileDisplayUpdate(supabase2, update);
+      if (!rpcUp.ok) { if (typeof showToast === 'function') showToast('Scan échoué: ' + (rpcUp.message || 'Erreur enregistrement'), 'error'); return; }
     }
     onCollectSuccess(data, nowIso);
   } catch (e) {
@@ -660,8 +689,8 @@ async function initCollectStatsFromGameButton() {
         Object.keys(update).forEach(function (k) { if (update[k] === undefined) delete update[k]; });
         var supabase2 = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
         if (supabase2 && Object.keys(update).length > 0) {
-          var upRes = await supabase2.from('profiles').update(update).eq('id', user3.id);
-          if (upRes.error) { if (typeof showToast === 'function') showToast('Scan échoué: ' + upRes.error.message, 'error'); return; }
+          var upRes2 = await persistProfileDisplayUpdate(supabase2, update);
+          if (!upRes2.ok) { if (typeof showToast === 'function') showToast('Scan échoué: ' + upRes2.message, 'error'); return; }
         }
         onCollectSuccess(data, nowIso);
       } catch (e) {

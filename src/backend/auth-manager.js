@@ -94,8 +94,22 @@ const AuthManager = {
       verification_status: 'pending',
       status: 'pending'
     };
-    const { error: updateError } = await supabase.from('profiles').update(profileUpdate).eq('id', user.id);
+    const { data: updData, error: updateError } = await supabase.rpc('update_own_profile', {
+      p_game_pseudo: profileUpdate.game_pseudo,
+      p_server: profileUpdate.server,
+      p_company: profileUpdate.company,
+      p_initial_honor: profileUpdate.initial_honor,
+      p_initial_xp: profileUpdate.initial_xp,
+      p_initial_rank: profileUpdate.initial_rank,
+      p_initial_rank_points: profileUpdate.initial_rank_points,
+      p_next_rank_points: profileUpdate.next_rank_points,
+      p_verification_status: profileUpdate.verification_status,
+      p_status: profileUpdate.status
+    });
     if (updateError) return { error: 'Mise à jour du profil impossible : ' + updateError.message };
+    if (!updData || updData.success !== true) {
+      return { error: 'Mise à jour du profil impossible : ' + ((updData && updData.error) || 'update_own_profile failed') };
+    }
     // Si l'utilisateur a déjà des stats (inscription avec initial_*), supprimer toutes les sessions existantes avant de créer la baseline
     var delRes = await supabase.rpc('delete_all_sessions_for_current_user');
     if (delRes.error) {
@@ -143,6 +157,12 @@ const AuthManager = {
   },
 
   async logout() {
+    if (typeof DataSync !== 'undefined' && typeof DataSync.stopPeriodicSync === 'function') {
+      DataSync.stopPeriodicSync();
+    }
+    if (typeof SubscriptionCheck !== 'undefined' && typeof SubscriptionCheck.stopHourlyCheck === 'function') {
+      SubscriptionCheck.stopHourlyCheck();
+    }
     const supabase = getSupabaseClient();
     var userId = null;
     if (supabase) {
@@ -306,6 +326,12 @@ const AuthManager = {
    * À appeler lors d'un hot-reload ou dans les tests.
    */
   destroy() {
+    if (typeof DataSync !== 'undefined' && typeof DataSync.stopPeriodicSync === 'function') {
+      DataSync.stopPeriodicSync();
+    }
+    if (typeof SubscriptionCheck !== 'undefined' && typeof SubscriptionCheck.stopHourlyCheck === 'function') {
+      SubscriptionCheck.stopHourlyCheck();
+    }
     this._listeners = [];
     if (this._supabaseSubscription) {
       try { this._supabaseSubscription.unsubscribe(); } catch (_) {}

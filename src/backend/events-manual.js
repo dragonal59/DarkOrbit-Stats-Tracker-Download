@@ -743,6 +743,14 @@
 
   function stopAllCarouselIntervals() {
     if (_countdownIntervalId) { clearInterval(_countdownIntervalId); _countdownIntervalId = null; }
+    var carousels = typeof document !== 'undefined' && document.querySelectorAll ? document.querySelectorAll('.events-carousel') : [];
+    for (var ci = 0; ci < carousels.length; ci++) {
+      var el = carousels[ci];
+      if (el && el._intervalId) {
+        clearInterval(el._intervalId);
+        el._intervalId = null;
+      }
+    }
   }
   function cleanupBodyListeners() {
     if (document.body) {

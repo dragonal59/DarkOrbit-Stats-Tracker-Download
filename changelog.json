@@ -1,66 +1,18 @@
 {
   "versions": [
     {
-      "version": "2.5.8",
-      "date": "2026-03-30",
+      "version": "2.5.9",
+      "date": "2026-04-10",
       "type": "standard",
       "changes": {
         "nouveautés": [
-          "Ajout de l'onglet \"Coupon\" pour stocker en toutes sécurité les coupon **MTCGames.\n**Nouveau bouton dans \"Paramètres\" pour masquer/afficher les scrollbar**.****\n**"
+          "Description de la nouvelle fonctionnalité"
         ],
         "améliorations": [
-          "Amélioration de \"SUIVI JOUEURS\" dans la sidebar."
+          "Amélioration des performances et de l'interface"
         ],
         "corrections": [
-          "Correction de \"SUIVI JOUEURS\" dans la sidebar."
-        ]
-      }
-    },
-    {
-      "version": "2.5.7",
-      "date": "2026-03-26",
-      "type": "standard",
-      "changes": {
-        "nouveautés": [
-          "Ajout d'une barre de progression pour voir le grade juste au dessous de vous. Ajout d'une colonne \"24h\" dans le classement honneur, expérience et général."
-        ],
-        "améliorations": [
-          "Amélioration du classement."
-        ],
-        "corrections": [
-          "Correction du classement et de l'application."
-        ]
-      }
-    },
-    {
-      "version": "2.5.6",
-      "date": "2026-03-22",
-      "type": "standard",
-      "changes": {
-        "nouveautés": [
-          "Refonte de l'onglet \"Progression\" Refonte du bouton \"Mon compte\""
-        ],
-        "améliorations": [
-          "Amélioration des notifications windows"
-        ],
-        "corrections": [
-          "Correction des inconsistances \"SUIVI JOUEURS\""
-        ]
-      }
-    },
-    {
-      "version": "2.5.3",
-      "date": "2026-03-21",
-      "type": "standard",
-      "changes": {
-        "nouveautés": [
-          "Aucune nouveauté"
-        ],
-        "améliorations": [
-          "Aucune amélioration"
-        ],
-        "corrections": [
-          "Correction du bouton \"Récupérer mes stats\" qui ne fonctionner plus."
+          "Correction d'un bug mineur"
         ]
       }
     }

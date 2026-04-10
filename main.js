@@ -6,11 +6,21 @@ const { app, BrowserWindow, Menu, Tray, ipcMain, shell, dialog } = require('elec
 const { createClient } = require('@supabase/supabase-js');
 const path = require('path');
 const fs = require('fs');
-const { spawn } = require('child_process');
 const { initAutoUpdater } = require('./electron/auto-updater');
 const { readMergedSupabaseConfigFromDisk } = require('./electron/supabase-config-from-disk');
 
 Menu.setApplicationMenu(null);
+
+if (app.isPackaged) {
+  app.on('web-contents-created', (_, wc) => {
+    wc.on('before-input-event', (event, input) => {
+      if (input.key === 'F12' || (input.control && input.shift && input.key === 'I')) {
+        event.preventDefault();
+      }
+    });
+    wc.debugger?.detach?.();
+  });
+}
 
 // FIX 2 — reset explicite au boot (crash brutal session précédente : le finally peut ne pas s’exécuter)
 global.dostatsPipelineRunning = false;
@@ -22,27 +32,24 @@ let alwaysOnTop = false;
 ipcMain.handle('app:get-version', () => app.getVersion());
 ipcMain.handle('app:is-packaged', () => app.isPackaged);
 
-// Pythscrap — enregistré au démarrage pour être toujours disponible (Dashboard > Planificateur)
-ipcMain.handle('pythscrap:launch', async () => {
-  const pythscrapDir = process.platform === 'win32'
-    ? path.join(process.env.USERPROFILE || '', 'Desktop', 'pythscrap')
-    : path.join(process.env.HOME || '', 'Desktop', 'pythscrap');
-  const appPy = path.join(pythscrapDir, 'app.py');
-  if (!fs.existsSync(appPy)) {
-    return { ok: false, error: 'Pythscrap non trouvé (Desktop/pythscrap/app.py)' };
+function resolveBundledChangelogPath() {
+  if (app.isPackaged) {
+    const unpacked = path.join(process.resourcesPath, 'app.asar.unpacked', 'changelog.json');
+    if (fs.existsSync(unpacked)) return unpacked;
   }
-  const pyCmd = process.platform === 'win32' ? 'py' : 'python3';
+  return path.join(__dirname, 'changelog.json');
+}
+
+ipcMain.handle('app:read-bundled-changelog', () => {
   try {
-    const py = spawn(pyCmd, ['-u', appPy], {
-      cwd: pythscrapDir,
-      stdio: 'ignore',
-      shell: process.platform === 'win32',
-      detached: true,
-    });
-    py.unref();
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: err.message || 'Impossible de lancer Python' };
+    const p = resolveBundledChangelogPath();
+    if (!fs.existsSync(p)) return { ok: false, error: 'not_found' };
+    const raw = fs.readFileSync(p, 'utf8');
+    const data = JSON.parse(raw);
+    if (!data || !Array.isArray(data.versions)) return { ok: false, error: 'invalid_json' };
+    return { ok: true, data: data };
+  } catch (e) {
+    return { ok: false, error: e?.message || String(e) };
   }
 });
 
@@ -94,7 +101,6 @@ const { runDostatsProfilesScraper, getLatestProfile } = require('./electron/dost
 const { loginAndExtractEventsOnly, runEventsScraping } = require('./electron/events-scraper-standalone');
 
 let mainWindow;
-let scraperWindow = null;
 
 /** Une seule exécution DOSTATS (classements + suite profils/Supabase) à la fois : plusieurs `invoke` sans await enchaînés saturaient DOStats / Chromium. */
 let dostatsScraperStartQueue = Promise.resolve();
@@ -102,18 +108,8 @@ let dostatsScraperStartQueue = Promise.resolve();
 let tray;
 let isQuitting = false;
 let schedulerIntervalId = null;
-let hofPlanningIntervalId = null;
-
-const hofPlanningState = {
-  current: { status: 'idle', groupId: null, startedAt: null, endedAt: null },
-  pending: null, // { groupId, scheduledAt, waitMinutesAfterCurrent }
-  pendingTimeoutId: null,
-  next: null,    // { groupId, from, at }
-};
 
 const SCHEDULER_CONFIG_PATH = path.join(app.getPath('userData'), 'scheduler-config.json');
-const HOF_PLANNING_CONFIG_PATH = path.join(app.getPath('userData'), 'hof-planning.json');
-const HOF_PLANNING_HISTORY_PATH = path.join(app.getPath('userData'), 'hof-planning-history.json');
 const SCRAPER_APP_SETTINGS_PATH = path.join(app.getPath('userData'), 'scraper-app-settings.json');
 const SCRAPER_APP_PLANNING_PATH = path.join(app.getPath('userData'), 'scraper-app-planning.json');
 const DO_EVENTS_CACHE_PATH = path.join(app.getPath('userData'), 'do-events-cache.json');
@@ -136,9 +132,6 @@ function getBlockingOperationsState() {
       }
     }
     if (global.dostatsPipelineRunning) reasons.push('dostats');
-  } catch (_) {}
-  try {
-    if (hofPlanningState.current && hofPlanningState.current.status === 'running') reasons.push('hof');
   } catch (_) {}
   try {
     if (ScraperBridge.getState().running) reasons.push('events');
@@ -227,157 +220,6 @@ function saveSchedulerConfig(config) {
   } catch (e) {
     console.error('[Scheduler] saveConfig:', e?.message || e);
     return false;
-  }
-}
-
-function loadHofPlanningConfig() {
-  try {
-    if (fs.existsSync(HOF_PLANNING_CONFIG_PATH)) {
-      const raw = fs.readFileSync(HOF_PLANNING_CONFIG_PATH, 'utf8');
-      const data = JSON.parse(raw);
-      if (data && typeof data === 'object') {
-        return data;
-      }
-    }
-  } catch (e) {
-    console.warn('[HofPlanning] loadConfig:', e?.message || e);
-  }
-  return { groups: {} };
-}
-
-function saveHofPlanningConfig(config) {
-  try {
-    fs.writeFileSync(HOF_PLANNING_CONFIG_PATH, JSON.stringify(config || { groups: {} }, null, 2), 'utf8');
-    return true;
-  } catch (e) {
-    console.error('[HofPlanning] saveConfig:', e?.message || e);
-    return false;
-  }
-}
-
-function loadHofPlanningHistory() {
-  try {
-    if (!fs.existsSync(HOF_PLANNING_HISTORY_PATH)) return [];
-    const raw = fs.readFileSync(HOF_PLANNING_HISTORY_PATH, 'utf8');
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (e) {
-    console.warn('[HofPlanning] Erreur lecture historique:', e?.message || e);
-    return [];
-  }
-}
-
-function appendHofPlanningHistory(entry) {
-  try {
-    if (!entry || typeof entry !== 'object') return;
-    const history = loadHofPlanningHistory();
-    history.push(entry);
-    const MAX = 100;
-    const trimmed = history.length > MAX ? history.slice(history.length - MAX) : history;
-    fs.writeFileSync(HOF_PLANNING_HISTORY_PATH, JSON.stringify(trimmed, null, 2), 'utf8');
-  } catch (e) {
-    console.warn('[HofPlanning] Erreur écriture historique:', e?.message || e);
-  }
-}
-
-function getDayKeyForDate(date) {
-  const d = date.getDay(); // 0 = dimanche
-  switch (d) {
-    case 0: return 'sun';
-    case 1: return 'mon';
-    case 2: return 'tue';
-    case 3: return 'wed';
-    case 4: return 'thu';
-    case 5: return 'fri';
-    case 6: return 'sat';
-    default: return null;
-  }
-}
-
-function checkHofPlanning(now) {
-  const cfg = loadHofPlanningConfig();
-  const groupsCfg = (cfg && typeof cfg === 'object' && cfg.groups) || {};
-  const groupIds = Object.keys(groupsCfg || {});
-  if (groupIds.length === 0 && !hofPlanningState.pending) {
-    return;
-  }
-
-  const dayKey = getDayKeyForDate(now);
-  if (!dayKey) return;
-  const h = now.getHours();
-  const m = now.getMinutes();
-  const keyTime = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-
-  // Créneaux candidats pour cette minute
-  const candidateSet = new Set();
-  for (const groupId of groupIds) {
-    const slots = Array.isArray(groupsCfg[groupId]) ? groupsCfg[groupId] : [];
-    for (const slot of slots) {
-      const slotTime = (slot && typeof slot.time === 'string') ? slot.time : null;
-      const days = Array.isArray(slot?.days) ? slot.days : [];
-      if (!slotTime || slotTime !== keyTime) continue;
-      if (!days.includes(dayKey)) continue;
-      candidateSet.add(groupId);
-      break;
-    }
-  }
-
-  if (candidateSet.size === 0) {
-    return;
-  }
-
-  const candidates = Array.from(candidateSet);
-  // Priorité Groupe Global PvE (id 'g3')
-  let selectedGroupId = null;
-  if (candidates.includes('g3')) {
-    selectedGroupId = 'g3';
-  } else {
-    selectedGroupId = candidates[0];
-  }
-
-  if (!selectedGroupId) return;
-
-  const nowIso = now.toISOString();
-
-  // Si un run HoF est en cours, on programme un run différé (+30 min après fin du run courant, logique affinée plus tard)
-  if (hofPlanningState.current && hofPlanningState.current.status === 'running') {
-    hofPlanningState.pending = {
-      groupId: selectedGroupId,
-      scheduledAt: nowIso,
-      waitMinutesAfterCurrent: 30,
-    };
-    console.log('[HofPlanning] Run en cours — groupe', selectedGroupId, 'planifié comme pending ( +30 min après fin du run ).');
-    appendHofPlanningHistory({
-      at: nowIso,
-      groupId: selectedGroupId,
-      action: 'deferred_30min',
-      source: 'scheduler',
-      note: 'Créneau détecté mais run déjà en cours — différé +30 min après fin.',
-    });
-    return;
-  }
-
-  // Aucun run en cours : on marque simplement qu'un run devrait être lancé maintenant (logique de lancement faite plus tard)
-  hofPlanningState.next = {
-    groupId: selectedGroupId,
-    from: 'immediate',
-    at: nowIso,
-  };
-  console.log('[HofPlanning] Créneau détecté pour groupe', selectedGroupId, 'à', keyTime, `(${dayKey}) — marqué comme nextRun.`);
-  appendHofPlanningHistory({
-    at: nowIso,
-    groupId: selectedGroupId,
-    action: 'slot_matched',
-    source: 'scheduler',
-    note: `Créneau ${keyTime} (${dayKey}) — lancement immédiat demandé.`,
-  });
-  const targetWin = mainWindow;
-  if (targetWin && !targetWin.isDestroyed() && targetWin.webContents) {
-    try {
-      targetWin.webContents.send('hof-planning:next', { groupId: selectedGroupId, at: nowIso });
-    } catch (e) {
-      console.warn('[HofPlanning] send next error:', e?.message || e);
-    }
   }
 }
 
@@ -518,13 +360,15 @@ function createWindow() {
     }
   });
 
-  // Console accessible uniquement via F12 (plus d'ouverture automatique au lancement)
-  mainWindow.webContents.on('before-input-event', (event, input) => {
-    if (input.key === 'F12') {
-      event.preventDefault();
-      mainWindow.webContents.toggleDevTools();
-    }
-  });
+  // DevTools : F12 uniquement en développement (build packagée : désactivé globalement)
+  if (!app.isPackaged) {
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+      if (input.key === 'F12') {
+        event.preventDefault();
+        mainWindow.webContents.toggleDevTools();
+      }
+    });
+  }
 
   // Minimisation dans la barre système au clic sur X
   mainWindow.on('close', (event) => {
@@ -736,22 +580,6 @@ function setupScraper() {
     ScraperBridge.setUserContext(userId, accessToken);
   });
 
-  /** Renderer → fenêtre scraper : même format que sendLog dans do-events:scrape (dostats:log). */
-  ipcMain.on('renderer:scraper-log', (_e, data) => {
-    try {
-      if (scraperWindow && !scraperWindow.isDestroyed()) {
-        scraperWindow.webContents.send('dostats:log', {
-          type: (data && data.type) || 'info',
-          message: (data && data.message) || '',
-          at: (data && data.at) || new Date().toISOString(),
-          server: data && data.server != null ? data.server : null
-        });
-      }
-    } catch (e) {
-      console.warn('[Main] renderer:scraper-log', e?.message);
-    }
-  });
-
   ipcMain.on('fresh-token-response', (_, { userId, accessToken }) => {
     if (userId && accessToken) {
       ScraperBridge.setUserContext(userId, accessToken);
@@ -798,7 +626,6 @@ function setupScraper() {
 
   ipcMain.handle('player-stats-scraper:collect', async (_, opts) => {
     const { serverId, username, password } = opts || {};
-    console.log('[Main] player-stats-scraper:collect', serverId || '');
     const onProgress = (data) => {
       if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents) {
         mainWindow.webContents.send('player-stats-scraper:progress', data);
@@ -808,7 +635,6 @@ function setupScraper() {
   });
   ipcMain.handle('player-stats-scraper:collect-manual', async (_, opts) => {
     const { serverId } = opts || {};
-    console.log('[Main] player-stats-scraper:collect-manual', serverId || '');
     return PlayerStatsScraper.collectPlayerStatsManual({ serverId: serverId || 'gbl5' });
   });
 
@@ -985,25 +811,6 @@ function setupScraper() {
         }
       }
 
-      let supabase = null;
-      try {
-        supabase = await requireSuperadminSupabaseClient(logWin);
-      } catch (e) {
-        sendDostatsSupabaseLog(logWin, null, 'warning', 'DOStats → Supabase désactivé : ' + (e?.message || e));
-      }
-
-      if (supabase) {
-        for (const server of serversForRankings) {
-          const combos = dostatsCombosByServer.get(server) || [];
-          // eslint-disable-next-line no-await-in-loop
-          await pushDostatsServerToSupabase({
-            logWin,
-            server,
-            combos: Array.isArray(combos) ? combos : [],
-          });
-        }
-      }
-
       return rankingResult;
       } finally {
         global.dostatsPipelineRunning = false;
@@ -1118,41 +925,6 @@ function makeMainSupabaseClient(token) {
   return createClient(url, anonKey, opts);
 }
 
-function getDostatsProfilesJsonPath(serverCode) {
-  const safeServer = (serverCode || 'unknown').toString().trim().toLowerCase() || 'unknown';
-  return path.join(app.getPath('userData'), 'rankings_output', 'player_profiles', `${safeServer}.json`);
-}
-
-function mapDostatsTypeKeyToHofType(typeKey) {
-  const k = (typeKey || '').toString().trim().toLowerCase();
-  if (k === 'honor') return 'honor';
-  if (k === 'experience') return 'experience';
-  if (k === 'top_user') return 'topuser';
-  if (k === 'alien_kills') return 'aliens';
-  if (k === 'ship_kills') return 'ships';
-  return null;
-}
-
-function mapDostatsTypeKeyToMetricField(typeKey) {
-  const k = (typeKey || '').toString().trim().toLowerCase();
-  if (k === 'honor') return 'honor';
-  if (k === 'experience') return 'experience';
-  if (k === 'top_user') return 'top_user';
-  if (k === 'alien_kills') return 'npc_kills';
-  if (k === 'ship_kills') return 'ship_kills';
-  return null;
-}
-
-function mapDostatsPeriodKeyToPeriodValue(periodKey) {
-  const k = (periodKey || '').toString().trim().toLowerCase();
-  if (k === 'last_24h') return 1;
-  if (k === 'last_7d') return 7;
-  if (k === 'last_30d') return 30;
-  if (k === 'last_90d') return 90;
-  if (k === 'last_365d') return 365;
-  return null; // current => null (non affiché en mode période)
-}
-
 function sendDostatsSupabaseLog(logWin, server, type, message) {
   if (!logWin || logWin.isDestroyed?.() || !logWin.webContents) return;
   try {
@@ -1167,456 +939,13 @@ function sendDostatsSupabaseLog(logWin, server, type, message) {
   } catch (_) {}
 }
 
-async function requireSuperadminSupabaseClient(logWin) {
-  const superAdminId = process.env.SUPERADMIN_USER_ID || null;
-  let resolvedUserId = global.currentUserId || null;
-  if (!resolvedUserId) resolvedUserId = superAdminId;
-  if (!resolvedUserId) throw new Error('SUP ERADMIN_USER_ID manquant et user non authentifié.');
-
-  if (!global.supabaseAccessToken) {
-    const tokenPollStart = Date.now();
-    while (!global.supabaseAccessToken && (Date.now() - tokenPollStart) < 10000) {
-      // eslint-disable-next-line no-await-in-loop
-      await new Promise((r) => setTimeout(r, 500));
-    }
-  }
-  if (!global.supabaseAccessToken) throw new Error('Token Supabase absent (timeout).');
-
-  const supabase = makeMainSupabaseClient();
-  const { data: profile, error: profileErr } = await supabase
-    .from('profiles')
-    .select('badge')
-    .eq('id', resolvedUserId)
-    .single();
-
-  if (profileErr) {
-    sendDostatsSupabaseLog(logWin, null, 'warning', 'Lecture badge supabase failed : ' + (profileErr?.message || profileErr));
-    throw new Error('Impossible de vérifier le badge utilisateur.');
-  }
-
-  const role = (profile?.badge || '').toLowerCase();
-  if (role !== 'superadmin') {
-    throw new Error('Rôle insuffisant : ' + role);
-  }
-  return supabase;
-}
-
 /**
- * Rafraîchit le JWT via le renderer (refreshSession) et recrée un client Supabase.
- * Indispensable après un scraping long : le client @supabase/supabase-js garde le Bearer du moment de createClient().
- */
-async function getFreshSupabaseClientForDostatsPush(logWin) {
-  const refreshed = await ScraperBridge.refreshSupabaseToken();
-  if (!refreshed) {
-    sendDostatsSupabaseLog(logWin, null, 'info',
-      'DOStats → Supabase : refresh token (timeout ou inchangé) — utilisation du jeton actuel.');
-  }
-  if (!global.supabaseAccessToken) {
-    sendDostatsSupabaseLog(logWin, null, 'error', 'DOStats → Supabase : aucun jeton après refresh.');
-    return null;
-  }
-  return makeMainSupabaseClient();
-}
-
-async function pushDostatsServerToSupabase({ logWin, server, combos }) {
-  const serverNorm = (server || '').toString().trim().toLowerCase();
-  if (!serverNorm) return;
-
-  try {
-    let supabase = await getFreshSupabaseClientForDostatsPush(logWin);
-    if (!supabase) {
-      throw new Error('Jeton Supabase indisponible (refresh).');
-    }
-
-    {
-      const { error: delErr } = await supabase.rpc('delete_dostats_shared_data_for_server', {
-        p_server: serverNorm,
-      });
-      if (delErr) {
-        throw new Error('delete_dostats_shared_data_for_server: ' + (delErr?.message || delErr));
-      }
-      sendDostatsSupabaseLog(logWin, serverNorm, 'info',
-        'DOStats → Supabase : données du serveur vidées (profiles + snapshots), puis push…');
-    }
-
-    sendDostatsSupabaseLog(logWin, serverNorm, 'info', 'DOStats → Supabase : push profiles (overwrite strict)...');
-    const profilesPath = getDostatsProfilesJsonPath(serverNorm);
-    let profileEntries = [];
-    if (fs.existsSync(profilesPath)) {
-      const rawProfiles = fs.readFileSync(profilesPath, 'utf8');
-      const json = JSON.parse(rawProfiles);
-      const entries = Array.isArray(json?.entries) ? json.entries : [];
-      profileEntries = entries;
-
-      // Overwrite strict via RPC dédié (évite de casser les RPC utilisées par le client launcher).
-      const RPC = 'overwrite_player_profile_from_dostats';
-      const chunkSize = 10;
-      for (let i = 0; i < entries.length; i += chunkSize) {
-        const chunk = entries.slice(i, i + chunkSize);
-        // eslint-disable-next-line no-await-in-loop
-        const results = await Promise.allSettled(chunk.map((e) => {
-          if (!e || typeof e !== 'object') return Promise.resolve({ status: 'skipped' });
-          // IMPORTANT : conserver la casse brute DOStats (BjYYD != BjYYd).
-          const userId = e.user_id != null ? String(e.user_id).trim() : null;
-          if (!userId) return Promise.resolve({ status: 'skipped' });
-
-          const galaxy = e.galaxy_gates && typeof e.galaxy_gates === 'object' ? e.galaxy_gates : null;
-          const total = galaxy && galaxy.total != null ? Number(galaxy.total) : null;
-          const gateKeys = ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'kappa', 'lambda', 'kronos', 'hades', 'other'];
-          const gateObj = {};
-          if (galaxy) {
-            gateKeys.forEach((k) => {
-              const v = galaxy[k];
-              if (v != null) gateObj[k] = v;
-            });
-          }
-          const gatesJson = Object.keys(gateObj).length ? gateObj : null;
-
-          const lastUpdate = e.last_update != null ? String(e.last_update).trim() : null;
-          const companyUpdatedAt = lastUpdate && /^\d{4}-\d{2}-\d{2}$/.test(lastUpdate)
-            ? (lastUpdate + 'T00:00:00.000Z')
-            : (e.company_updated_at != null ? e.company_updated_at : null);
-
-          return supabase.rpc(RPC, {
-            p_user_id: userId,
-            p_server: serverNorm,
-            p_pseudo: e.name != null ? String(e.name) : null,
-            p_company: e.company != null ? String(e.company) : null,
-            p_company_updated_at: companyUpdatedAt,
-            p_estimated_rp: e.estimated_rp != null ? Number(e.estimated_rp) : null,
-            p_total_hours: e.total_hours != null ? Number(e.total_hours) : null,
-            p_registered: e.registered != null ? String(e.registered) : null,
-            p_npc_kills: e.npc_kills != null ? Number(e.npc_kills) : null,
-            p_ship_kills: e.ship_kills != null ? Number(e.ship_kills) : null,
-            p_galaxy_gates: total != null ? Number(total) : null,
-            p_galaxy_gates_json: gatesJson,
-            p_grade: e.grade != null ? String(e.grade) : null,
-            p_level: e.level != null ? Number(e.level) : null,
-            p_top_user: e.top_user != null ? Number(e.top_user) : null,
-            p_experience: e.experience != null ? Number(e.experience) : null,
-            p_honor: e.honor != null ? Number(e.honor) : null,
-          });
-        }));
-
-        const rejected = results.filter((r) => r.status === 'rejected');
-        if (rejected.length) {
-          sendDostatsSupabaseLog(logWin, serverNorm, 'warning', `profiles RPC erreurs: ${rejected.length} (chunk ${i + 1}-${i + chunk.length}).`);
-        }
-      }
-      sendDostatsSupabaseLog(logWin, serverNorm, 'success', `Profiles DOStats upsert OK — ${entries.length} entrées.`);
-    } else {
-      sendDostatsSupabaseLog(logWin, serverNorm, 'warning', 'profiles JSON introuvable (skip player_profiles overwrite).');
-    }
-
-    // JWT peut expirer pendant l’upsert profils (nombreuses RPC) — nouveau jeton + client avant les snapshots.
-    {
-      const supFresh = await getFreshSupabaseClientForDostatsPush(logWin);
-      if (supFresh) {
-        supabase = supFresh;
-      } else {
-        throw new Error('Jeton Supabase indisponible avant insert_dostats_snapshot (refresh).');
-      }
-    }
-
-    // ── Snapshots DOStats par période (24h / 7j / 30j …) ────────────────
-    sendDostatsSupabaseLog(logWin, serverNorm, 'info', 'DOStats → Supabase : insert shared_rankings_dostats_snapshots...');
-    const dostatsPlayers = [];
-
-    (combos || []).forEach((c) => {
-      if (!c || !Array.isArray(c.entries)) return;
-      const hofType = mapDostatsTypeKeyToHofType(c.typeKey);
-      const metricField = mapDostatsTypeKeyToMetricField(c.typeKey);
-      const periodValue = mapDostatsPeriodKeyToPeriodValue(c.periodKey);
-      if (!hofType || !metricField) return;
-
-      c.entries.forEach((e) => {
-        if (!e || !e.user_id) return;
-        const uid = String(e.user_id).trim();
-        if (!uid) return;
-        const name = e.name != null ? String(e.name) : null;
-        const company = e.company != null ? String(e.company) : null;
-        const points = e.points != null ? Number(e.points) : null;
-        const rank = e.rank != null ? Number(e.rank) : null;
-
-        const obj = {
-          hof_type: hofType,
-          period: periodValue,
-          userId: uid,
-          user_id: uid,
-          name,
-          company_from_dostats: company,
-          company,
-          // Position dans le tableau DOStats (1-based). Ne jamais la mettre dans `grade` :
-          // le frontend interprète `grade` comme grade militaire (IDs 1–21, clés, etc.).
-          dostats_table_rank: rank != null ? Number(rank) : null,
-        };
-        obj[metricField] = points;
-        dostatsPlayers.push(obj);
-      });
-    });
-
-    {
-      const { error: snapErr } = await supabase.rpc('insert_dostats_snapshot', {
-        p_server_id: serverNorm,
-        p_players: dostatsPlayers,
-      });
-      if (snapErr) {
-        throw new Error('insert_dostats_snapshot: ' + (snapErr?.message || snapErr));
-      }
-      sendDostatsSupabaseLog(logWin, serverNorm, 'success',
-        `shared_rankings_dostats_snapshots OK — ${dostatsPlayers.length} lignes DOStats.`);
-    }
-
-    // ── Snapshot "Current" (classement principal) ─────────────────────
-    sendDostatsSupabaseLog(logWin, serverNorm, 'info', 'DOStats → Supabase : insert shared_rankings_snapshots (current)...');
-    const currentCombos = (combos || []).filter((c) => c && c.periodKey === 'current');
-    const playerMap = new Map(); // uid -> player obj
-
-    currentCombos.forEach((c) => {
-      const metricField = mapDostatsTypeKeyToMetricField(c.typeKey);
-      if (!metricField || !Array.isArray(c.entries)) return;
-      c.entries.forEach((e) => {
-        if (!e || !e.user_id) return;
-        const uid = String(e.user_id).trim();
-        if (!uid) return;
-        if (!playerMap.has(uid)) {
-          playerMap.set(uid, {
-            userId: uid,
-            user_id: uid,
-            name: e.name != null ? String(e.name) : null,
-            company_from_dostats: e.company != null ? String(e.company) : null,
-            company: e.company != null ? String(e.company) : null,
-            // IMPORTANT : NE PAS mettre `grade` ici.
-            // Le RPC get_ranking_with_profiles priorise `grade` venant du snapshot,
-            // alors que le grade attendu (Lieutenant/Major/...) vient de player_profiles.
-          });
-        }
-        const obj = playerMap.get(uid);
-        obj[metricField] = e.points != null ? Number(e.points) : null;
-        // top_user est aussi utilisé via rank_points côté UI
-        if (metricField === 'top_user') obj.rank_points = e.points != null ? Number(e.points) : null;
-      });
-    });
-
-    const currentPlayers = Array.from(playerMap.values());
-    {
-      const { error: snapErr2 } = await supabase.rpc('insert_ranking_snapshot', {
-        p_server_id: serverNorm,
-        p_players: currentPlayers,
-      });
-      if (snapErr2) {
-        throw new Error('insert_ranking_snapshot: ' + (snapErr2?.message || snapErr2));
-      }
-      sendDostatsSupabaseLog(logWin, serverNorm, 'success',
-        `shared_rankings_snapshots OK — ${currentPlayers.length} joueurs.`);
-    }
-
-    // ── Phase 2 (transition) : nouveau modèle normalisé ─────────────────
-    // On écrit en parallèle :
-    // - player_rankings
-    // - player_profiles.rankings_json
-    // via la RPC upsert_player_full.
-    sendDostatsSupabaseLog(logWin, serverNorm, 'info', 'DOStats → Supabase : upsert_player_full (new model)...');
-
-    var NEW_HOF_TYPES = ['topuser', 'experience', 'honor', 'ships', 'aliens'];
-    var NEW_PERIOD_KEYS = ['alltime', 'daily', 'weekly', 'monthly', 'last_90d'];
-
-    function makeEmptyRankingsJson() {
-      var out = {};
-      NEW_HOF_TYPES.forEach(function(t) {
-        out[t] = {};
-        NEW_PERIOD_KEYS.forEach(function(p) {
-          out[t][p] = { rank: null, value: null };
-        });
-      });
-      return out;
-    }
-
-    function mapDostatsPeriodKeyToNewPeriodKey(periodKey) {
-      var k = (periodKey || '').toString().trim().toLowerCase();
-      if (k === 'current') return 'alltime';
-      if (k === 'last_24h') return 'daily';
-      if (k === 'last_7d') return 'weekly';
-      if (k === 'last_30d') return 'monthly';
-      if (k === 'last_90d') return 'last_90d';
-      if (k === 'last_365d') return null; // ignoré pour l'instant
-      return null;
-    }
-
-    // IMPORTANT : conserver la casse brute DOStats sur user_id/userId.
-    var playersByUid = new Map(); // uidRaw -> player object for upsert_player_full
-
-    function ensurePlayer(uidRaw) {
-      if (!uidRaw) return null;
-      if (playersByUid.has(uidRaw)) return playersByUid.get(uidRaw);
-      var p = {
-        user_id: uidRaw,
-        userId: uidRaw,
-        pseudo: null,
-        company: null,
-        company_updated_at: null,
-        estimated_rp: null,
-        total_hours: null,
-        registered: null,
-        npc_kills: null,
-        ship_kills: null,
-        galaxy_gates: null,
-        galaxy_gates_json: null,
-        grade: null,
-        level: null,
-        top_user: null,
-        experience: null,
-        honor: null,
-        dostats_updated_at: null,
-        rankings_json: makeEmptyRankingsJson()
-      };
-      playersByUid.set(uidRaw, p);
-      return p;
-    }
-
-    // 1) Pré-remplissage scalaires depuis le profil scraper (quand disponible)
-    (profileEntries || []).forEach(function(e) {
-      if (!e || !e.user_id) return;
-      var uidRaw = String(e.user_id).trim();
-      if (!uidRaw) return;
-      var p = ensurePlayer(uidRaw);
-
-      var galaxy = e.galaxy_gates && typeof e.galaxy_gates === 'object' ? e.galaxy_gates : null;
-      var total = galaxy && galaxy.total != null ? Number(galaxy.total) : null;
-      var gateKeys = ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'kappa', 'lambda', 'kronos', 'hades', 'other'];
-      var gateObj = {};
-      if (galaxy) {
-        gateKeys.forEach(function(k) {
-          var v = galaxy[k];
-          if (v != null) gateObj[k] = v;
-        });
-      }
-      var gatesJson = Object.keys(gateObj).length ? gateObj : null;
-
-      var lastUpdate = e.last_update != null ? String(e.last_update).trim() : null;
-      var companyUpdatedAt = lastUpdate && /^\d{4}-\d{2}-\d{2}$/.test(lastUpdate)
-        ? (lastUpdate + 'T00:00:00.000Z')
-        : (e.company_updated_at != null ? e.company_updated_at : null);
-
-      p.pseudo = e.name != null ? String(e.name) : null;
-      p.company = e.company != null ? String(e.company) : null;
-      p.company_updated_at = companyUpdatedAt;
-      p.estimated_rp = e.estimated_rp != null ? Number(e.estimated_rp) : null;
-      p.total_hours = e.total_hours != null ? Number(e.total_hours) : null;
-      p.registered = e.registered != null ? String(e.registered) : null;
-      p.npc_kills = e.npc_kills != null ? Number(e.npc_kills) : null;
-      p.ship_kills = e.ship_kills != null ? Number(e.ship_kills) : null;
-      p.galaxy_gates = total != null ? Number(total) : null;
-      p.galaxy_gates_json = gatesJson;
-      p.grade = e.grade != null ? String(e.grade) : null;
-      p.level = e.level != null ? Number(e.level) : null;
-      p.top_user = e.top_user != null ? Number(e.top_user) : null;
-      p.experience = e.experience != null ? Number(e.experience) : null;
-      p.honor = e.honor != null ? Number(e.honor) : null;
-      p.dostats_updated_at = companyUpdatedAt;
-    });
-
-    // 2) Remplissage rankings_json depuis les HoF scrapés
-    (combos || []).forEach(function(c) {
-      if (!c || !Array.isArray(c.entries)) return;
-      var hofType = mapDostatsTypeKeyToHofType(c.typeKey);
-      var newPeriod = mapDostatsPeriodKeyToNewPeriodKey(c.periodKey);
-      if (!hofType || !newPeriod) return;
-
-      c.entries.forEach(function(e) {
-        if (!e || !e.user_id) return;
-        var uidRaw = String(e.user_id).trim();
-        if (!uidRaw) return;
-
-        var p = ensurePlayer(uidRaw);
-        var rank = e.rank != null ? Number(e.rank) : null;
-        var points = e.points != null ? Number(e.points) : null;
-
-        // Rang/points explicitement NULL quand hors top
-        p.rankings_json[hofType][newPeriod] = { rank: rank, value: points };
-      });
-    });
-
-    // 3) Push atomique (remplacement complet par server)
-    var p_players = Array.from(playersByUid.values());
-    var fullErr = null;
-    try {
-      const res = await supabase.rpc('upsert_player_full', {
-        p_server: serverNorm,
-        p_players: p_players,
-        p_snapshot_hof: null,
-        p_snapshot_stats: null,
-        p_scraped_at: new Date().toISOString()
-      });
-      fullErr = res?.error || null;
-    } catch (e) {
-      fullErr = e;
-    }
-
-    if (fullErr) {
-      const msg = String(fullErr?.message || fullErr || '');
-      const isSchemaCacheProblem = msg.toLowerCase().includes('schema cache') &&
-        msg.toLowerCase().includes('upsert_player_full');
-
-      // Si la fonction vient d'être ajoutée (migrations récentes), le SDK
-      // peut encore avoir un schéma cache incomplet dans ce process.
-      if (isSchemaCacheProblem) {
-        const supFresh2 = await getFreshSupabaseClientForDostatsPush(logWin);
-        if (supFresh2) supabase = supFresh2;
-
-        fullErr = null;
-        try {
-          const res2 = await supabase.rpc('upsert_player_full', {
-            p_server: serverNorm,
-            p_players: p_players,
-            p_snapshot_hof: null,
-            p_snapshot_stats: null,
-            p_scraped_at: new Date().toISOString()
-          });
-          fullErr = res2?.error || null;
-        } catch (e2) {
-          fullErr = e2;
-        }
-      }
-    }
-
-    if (fullErr) throw new Error('upsert_player_full: ' + (fullErr?.message || fullErr));
-    sendDostatsSupabaseLog(logWin, serverNorm, 'success',
-      `upsert_player_full OK — ${p_players.length} joueurs.`);
-
-    // Snapshots RP : save top_user (points de grade) pour calcul delta 24h/7j côté SUIVI JOUEURS.
-    // DOStats ne fournit pas de classement top_user par période — on calcule depuis les snapshots.
-    try {
-      const rpSnaps = p_players
-        .filter(function(p) { return p.top_user != null && p.user_id; })
-        .map(function(p) { return { user_id: String(p.user_id), rank_points: Number(p.top_user) }; });
-      if (rpSnaps.length > 0) {
-        await supabase.rpc('insert_rp_snapshots', { p_server: serverNorm, p_snapshots: rpSnaps });
-      }
-    } catch (rpErr) {
-      console.warn('[Main] insert_rp_snapshots:', rpErr?.message || rpErr);
-    }
-  } catch (e) {
-    sendDostatsSupabaseLog(logWin, serverNorm, 'error', 'DOStats → Supabase push error: ' + (e?.message || e));
-  }
-}
-
-/**
- * Persiste la firme d'un joueur : player_profiles (affichage) + snapshot (CDP-only).
- * 1. upsert_player_profile si company + userId (visible dans classement).
- * 2. Lire dernier snapshot, merger company/cdp_grade/game_time, insert_ranking_snapshot.
+ * Persiste firme / CDP dans profiles_players (merge company, cdp_grade, game_time).
  *
  * @param {{ pseudo, userId, company, grade, server, url, date }} payload
  */
 async function saveClientScrapedData(payload) {
   const { pseudo, userId, company, grade, game_time, server, url, date } = payload || {};
-
-  // ── Log de diagnostic systématique ───────────────────────────────────────
-  console.log(
-    `[Main] DEBUG saveClientScrapedData — userId=${global.currentUserId ?? '(null)'} ` +
-    `token=${!!global.supabaseAccessToken} ` +
-    `company="${company}" server="${server}" pseudo="${pseudo}" grade="${grade}"`
-  );
 
   if (!company || !server) {
     console.warn('[Main] saveClientScrapedData — données insuffisantes (company ou server manquant)');
@@ -1627,13 +956,11 @@ async function saveClientScrapedData(payload) {
   let resolvedUserId = global.currentUserId || null;
 
   if (!resolvedUserId) {
-    console.log('[Main] Tentative de récupération de l\'identité différée...');
     const idPollStart = Date.now();
     while (!global.currentUserId && (Date.now() - idPollStart) < 10000) {
       await new Promise((r) => setTimeout(r, 500));
     }
     resolvedUserId = global.currentUserId || null;
-    console.log(`[Main] DEBUG après polling userId — userId=${resolvedUserId ?? '(null)'} token=${!!global.supabaseAccessToken}`);
   }
 
   if (!resolvedUserId) {
@@ -1647,7 +974,6 @@ async function saveClientScrapedData(payload) {
 
   // ── Attente du token (obligatoire pour toute opération SUPERADMIN) ────────
   if (!global.supabaseAccessToken) {
-    console.log('[Main] saveClientScrapedData — token absent, polling (max 10 s)...');
     const tokenPollStart = Date.now();
     while (!global.supabaseAccessToken && (Date.now() - tokenPollStart) < 10000) {
       await new Promise((r) => setTimeout(r, 500));
@@ -1673,7 +999,6 @@ async function saveClientScrapedData(payload) {
       console.warn(`[Main] saveClientScrapedData — lecture profil ÉCHEC: ${profileErr.message} (code: ${profileErr.code})`);
     } else {
       role = (profile?.badge || '').toLowerCase();
-      console.log(`[Main] DEBUG badge Supabase="${profile?.badge}" → role="${role}"`);
     }
   } catch (e) {
     console.warn('[Main] saveClientScrapedData — exception lecture profil:', e?.message);
@@ -1684,138 +1009,64 @@ async function saveClientScrapedData(payload) {
     return;
   }
 
-  console.log(`[Main] Autorisation SuperAdmin confirmée. Synchronisation du grade en cours pour ${pseudo || userId}.`);
-
-  if (company && userId) {
-    try {
-      await supabase.rpc('upsert_player_profile', {
-        p_user_id: userId,
-        p_server: server,
-        p_pseudo: pseudo || null,
-        p_company: company,
-        p_company_updated_at: new Date().toISOString(),
-        p_estimated_rp: null,
-        p_total_hours: null,
-        p_registered: null,
-        p_npc_kills: null,
-        p_ship_kills: null,
-        p_galaxy_gates: null,
-        p_galaxy_gates_json: null,
-        p_grade: grade || null,
-      });
-    } catch (e) {
-      console.warn('[Main] saveClientScrapedData — upsert_player_profile:', e?.message);
-    }
-  }
-
   try {
-    const { data: rows, error: readErr } = await supabase
-      .from('shared_rankings_snapshots')
-      .select('players_json')
-      .eq('server_id', server)
-      .order('scraped_at', { ascending: false })
-      .limit(1)
-      .single();
+    const srv = String(server || '').toLowerCase().trim();
+    const uid = userId ? String(userId).trim() : '';
+    if (!srv || !uid) {
+      console.warn('[Main] saveClientScrapedData — server ou userId manquant pour profiles_players');
+      return;
+    }
+
+    const { data: cur, error: readErr } = await supabase
+      .from('profiles_players')
+      .select('company, cdp_grade, game_time, pseudo')
+      .eq('server', srv)
+      .eq('user_id', uid)
+      .maybeSingle();
 
     if (readErr && readErr.code !== 'PGRST116') {
-      console.error('[Main] saveClientScrapedData — lecture snapshots:', readErr.message);
+      console.error('[Main] saveClientScrapedData — lecture profiles_players:', readErr.message);
       return;
     }
 
-    const allPlayers = Array.isArray(rows?.players_json) ? rows.players_json.map((p) => ({ ...p })) : [];
+    const companyKnown = cur?.company && String(cur.company).trim() !== '';
+    const cdpKnown = cur?.cdp_grade && String(cur.cdp_grade).trim() !== '';
+    const gtKnown = cur?.game_time && String(cur.game_time).trim() !== '';
 
-    // Chercher le joueur par userId d'abord, puis par pseudo (insensible à la casse)
-    let idx = userId ? allPlayers.findIndex((p) => p.userId === userId) : -1;
-    if (idx === -1 && pseudo) {
-      idx = allPlayers.findIndex((p) => (p.name || '').toLowerCase() === pseudo.toLowerCase());
-    }
+    const nowIso = date || new Date().toISOString();
+    const patch = {
+      client_scraped_at: nowIso,
+      scraped_at: new Date().toISOString(),
+    };
+    if (pseudo) patch.pseudo = pseudo;
+    if (!companyKnown && company) patch.company = company;
+    if (!cdpKnown && grade) patch.cdp_grade = grade;
+    if (!gtKnown && game_time) patch.game_time = game_time;
 
-    if (idx !== -1) {
-      const current = allPlayers[idx];
-
-      const companyAlreadyKnown  = current.company   && current.company   !== '';
-      const cdpGradeAlreadyKnown = current.cdp_grade && current.cdp_grade !== '';
-      const gameTimeAlreadyKnown = current.game_time && current.game_time !== '';
-
-      if (companyAlreadyKnown && cdpGradeAlreadyKnown && gameTimeAlreadyKnown) {
-        // Rien de nouveau à compléter — on rafraîchit uniquement le timestamp et on remet le compteur d'échec à 0
-        allPlayers[idx] = {
-          ...current,
-          client_scraped_at: date || new Date().toISOString(),
-          profile_scraper_failures: 0,
-        };
-        console.log(`[Main] saveClientScrapedData — ${pseudo || userId} (${server}) : rien à compléter, timestamp mis à jour`);
-      } else {
-        allPlayers[idx] = {
-          ...current,
-
-          // Règle 1 — company : compléter seulement si absent/vide
-          ...(!companyAlreadyKnown && company ? { company } : {}),
-
-          // Règle 2 — grade Scraper 1 (normalisé) jamais touché
-          //           grade CDP stocké dans cdp_grade, seulement si absent/vide
-          ...(!cdpGradeAlreadyKnown && grade ? { cdp_grade: grade } : {}),
-
-          // Règle 3 — game_time : compléter seulement si absent/vide
-          ...(!gameTimeAlreadyKnown && game_time ? { game_time } : {}),
-
-          // Règle 5 — userId : compléter seulement si absent
-          ...(userId && !current.userId ? { userId } : {}),
-
-          // Règle 6 — timestamp : toujours mis à jour
-          client_scraped_at: date || new Date().toISOString(),
-
-          // Compteur anti-spam : remis à 0 sur chaque passage CDP réussi
-          profile_scraper_failures: 0,
-
-          // Règle 7 — needs_review / blacklisted_until : jamais réinitialisés
-        };
-
-        const logParts = [
-          !companyAlreadyKnown  && company   ? `company=${company}`   : '',
-          !cdpGradeAlreadyKnown && grade     ? `cdp_grade=${grade}`   : '',
-          !gameTimeAlreadyKnown && game_time ? `game_time=${game_time}` : '',
-        ].filter(Boolean).join(' ');
-        console.log(`[Main] saveClientScrapedData — complété ${pseudo || userId} (${server}) : ${logParts || '(aucun champ nouveau)'}`);
-      }
+    let writeErr;
+    if (cur) {
+      const resUp = await supabase.from('profiles_players').update(patch).eq('server', srv).eq('user_id', uid);
+      writeErr = resUp.error;
     } else {
-      // Joueur inconnu du Scraper 1 — entrée temporaire CDP-only
-      // grade absent volontairement : réservé au Scraper 1 (format normalisé)
-      const newPlayer = {
-        name:              pseudo || userId || null,
-        userId:            userId || null,
-        company:           company   || null,
-        cdp_grade:         grade     || null,
-        game_time:         game_time || null,
-        cdp_only:          true,
-        client_scraped_at: date || new Date().toISOString(),
-      };
-      allPlayers.push(newPlayer);
-      console.log(`[Main] saveClientScrapedData — nouveau joueur CDP-only : ${pseudo || userId} (${server}) company=${company}`);
+      const resIn = await supabase.from('profiles_players').insert({
+        server: srv,
+        user_id: uid,
+        pseudo: pseudo || null,
+        company: company || null,
+        cdp_grade: grade || null,
+        game_time: game_time || null,
+        client_scraped_at: nowIso,
+        scraped_at: new Date().toISOString(),
+      });
+      writeErr = resIn.error;
     }
 
-    // Upsert via la RPC commune
-    const { data: insertResult, error: insertErr } = await supabase.rpc(
-      'insert_ranking_snapshot', {
-        p_server_id: server,
-        p_players: allPlayers,
-      }
-    );
-
-    if (insertErr) {
-      console.error('[Main] saveClientScrapedData — insert erreur client:', insertErr.message);
+    if (writeErr) {
+      console.error('[Main] saveClientScrapedData — écriture profiles_players:', writeErr.message);
       return;
     }
-    if (!insertResult?.success) {
-      console.error('[Main] saveClientScrapedData — insert_ranking_snapshot échec:',
-        insertResult?.code, insertResult?.error);
-      return;
-    }
-    console.log('[Main] saveClientScrapedData — snapshot OK');
 
-    // Toast vers l'UI
     const displayName = pseudo || userId || 'Joueur inconnu';
-    console.log(`[Main] saveClientScrapedData — OK — Profil de ${displayName} mis à jour dans la base de données`);
     if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents) {
       mainWindow.webContents.send('client-launcher:save-success', {
         pseudo: displayName,
@@ -1923,25 +1174,7 @@ function setupScheduler() {
     }
   };
   schedulerIntervalId = setInterval(check, 60000);
-  sendSchedulerLog('Planificateur actif — ' + slots.map(s => s.time).join(', '), 'info');
-}
-
-function setupHofPlanningScheduler() {
-  if (hofPlanningIntervalId) {
-    clearInterval(hofPlanningIntervalId);
-    hofPlanningIntervalId = null;
-  }
-  const tick = () => {
-    try {
-      const now = new Date();
-      checkHofPlanning(now);
-    } catch (e) {
-      console.warn('[HofPlanning] tick error:', e?.message || e);
-    }
-  };
-  hofPlanningIntervalId = setInterval(tick, 60000);
-  // Première exécution rapide au démarrage
-  tick();
+  sendSchedulerLog('Créneaux auto actifs — ' + slots.map(s => s.time).join(', '), 'info');
 }
 
 function cleanupBeforeQuit() {
@@ -1949,15 +1182,6 @@ function cleanupBeforeQuit() {
     clearInterval(schedulerIntervalId);
     schedulerIntervalId = null;
     console.log('[Main] Scheduler arrêté');
-  }
-  if (hofPlanningIntervalId) {
-    clearInterval(hofPlanningIntervalId);
-    hofPlanningIntervalId = null;
-    console.log('[Main] HoF planning scheduler arrêté');
-  }
-  if (hofPlanningState.pendingTimeoutId) {
-    clearTimeout(hofPlanningState.pendingTimeoutId);
-    hofPlanningState.pendingTimeoutId = null;
   }
   try {
     ScraperBridge.cleanup();
@@ -2021,142 +1245,6 @@ app.on('ready', async () => {
     return { ok: true };
   });
   ipcMain.handle('scheduler:reload', () => { setupScheduler(); return { ok: true }; });
-  ipcMain.handle('hof-planning:get', () => {
-    try {
-      return { ok: true, config: loadHofPlanningConfig() };
-    } catch (e) {
-      return { ok: false, error: e?.message || 'Erreur lecture planning' };
-    }
-  });
-  ipcMain.handle('hof-planning:history', () => {
-    try {
-      const history = loadHofPlanningHistory();
-      return { ok: true, history };
-    } catch (e) {
-      return { ok: false, error: e?.message || 'Erreur lecture historique planning' };
-    }
-  });
-  ipcMain.handle('hof-planning:save', (_event, config) => {
-    try {
-      const current = loadHofPlanningConfig();
-      const next = config && typeof config === 'object' ? config : current;
-      if (!next.groups || typeof next.groups !== 'object') next.groups = {};
-      if (!next.groupSettings || typeof next.groupSettings !== 'object') next.groupSettings = {};
-      if (!saveHofPlanningConfig(next)) return { ok: false, error: 'Erreur écriture fichier' };
-      return { ok: true };
-    } catch (e) {
-      return { ok: false, error: e?.message || 'Erreur sauvegarde planning' };
-    }
-  });
-
-  ipcMain.on('hof-run:start', (_event, payload = {}) => {
-    const nowIso = new Date().toISOString();
-    const groupId = payload.groupId || null;
-    hofPlanningState.current = {
-      status: 'running',
-      groupId,
-      startedAt: nowIso,
-      endedAt: null,
-    };
-    console.log('[HofPlanning] Run démarré', groupId ? `pour groupe ${groupId}` : '(manuel / sans groupe)');
-    if (hofPlanningState.pendingTimeoutId) {
-      clearTimeout(hofPlanningState.pendingTimeoutId);
-      hofPlanningState.pendingTimeoutId = null;
-    }
-    appendHofPlanningHistory({
-      at: nowIso,
-      groupId,
-      action: 'launched',
-      source: groupId ? 'auto' : 'manual',
-      note: groupId ? 'Run HoF lancé pour un groupe (auto ou pending).' : 'Run HoF lancé manuellement.',
-    });
-  });
-
-  ipcMain.on('hof-run:end', () => {
-    const now = new Date();
-    const nowIso = now.toISOString();
-    const prev = hofPlanningState.current || {};
-    hofPlanningState.current = {
-      status: 'idle',
-      groupId: null,
-      startedAt: prev.startedAt || null,
-      endedAt: nowIso,
-    };
-    console.log('[HofPlanning] Run terminé à', nowIso);
-    appendHofPlanningHistory({
-      at: nowIso,
-      groupId: prev.groupId || null,
-      action: 'ended',
-      source: prev.groupId ? 'auto' : 'manual',
-      note: 'Run HoF terminé.',
-    });
-    if (hofPlanningState.pending && hofPlanningState.pending.groupId) {
-      const pendingGroupId = hofPlanningState.pending.groupId;
-      const delayMs = (hofPlanningState.pending.waitMinutesAfterCurrent || 30) * 60 * 1000;
-      if (hofPlanningState.pendingTimeoutId) {
-        clearTimeout(hofPlanningState.pendingTimeoutId);
-      }
-      hofPlanningState.pendingTimeoutId = setTimeout(() => {
-        hofPlanningState.pendingTimeoutId = null;
-        // Si un autre run est en cours au moment où le délai expire,
-        // on repousse encore de waitMinutesAfterCurrent minutes.
-        if (hofPlanningState.current && hofPlanningState.current.status === 'running') {
-          const againDelayMs = (hofPlanningState.pending && hofPlanningState.pending.waitMinutesAfterCurrent
-            ? hofPlanningState.pending.waitMinutesAfterCurrent
-            : 30) * 60 * 1000;
-          hofPlanningState.pendingTimeoutId = setTimeout(() => {
-            hofPlanningState.pendingTimeoutId = null;
-            if (hofPlanningState.current && hofPlanningState.current.status === 'running') {
-              // Si vraiment on retombe encore sur un run en cours, on redécalera à la prochaine fin via hof-run:end.
-              return;
-            }
-        const atIso2 = new Date().toISOString();
-        hofPlanningState.next = {
-          groupId: pendingGroupId,
-          from: 'pending',
-          at: atIso2,
-        };
-        console.log('[HofPlanning] Pending run déclenché pour groupe', pendingGroupId, 'après second délai post-run.');
-        const targetWin2 = mainWindow;
-        if (targetWin2 && !targetWin2.isDestroyed() && targetWin2.webContents) {
-          try {
-            targetWin2.webContents.send('hof-planning:next', { groupId: pendingGroupId, at: atIso2 });
-          } catch (e) {
-            console.warn('[HofPlanning] send pending next error:', e?.message || e);
-          }
-        }
-            hofPlanningState.pending = null;
-          }, againDelayMs);
-          console.log('[HofPlanning] Pending run reprogrammé pour groupe', pendingGroupId, 'dans', againDelayMs / 60000, 'minutes (run en cours).');
-          return;
-        }
-        const atIso3 = new Date().toISOString();
-        hofPlanningState.next = {
-          groupId: pendingGroupId,
-          from: 'pending',
-          at: atIso3,
-        };
-        console.log('[HofPlanning] Pending run déclenché pour groupe', pendingGroupId, 'après délai post-run.');
-        appendHofPlanningHistory({
-          at: atIso3,
-          groupId: pendingGroupId,
-          action: 'launched_from_pending',
-          source: 'pending',
-          note: 'Run HoF lancé automatiquement après délai différé.',
-        });
-        const targetWin3 = mainWindow;
-        if (targetWin3 && !targetWin3.isDestroyed() && targetWin3.webContents) {
-          try {
-            targetWin3.webContents.send('hof-planning:next', { groupId: pendingGroupId, at: atIso3 });
-          } catch (e) {
-            console.warn('[HofPlanning] send pending next error:', e?.message || e);
-          }
-        }
-        hofPlanningState.pending = null;
-      }, delayMs);
-      console.log('[HofPlanning] Pending run programmé pour groupe', pendingGroupId, 'dans', delayMs / 60000, 'minutes');
-    }
-  });
 
   const pkg = require('./package.json');
   autoUpdateManager = initAutoUpdater(mainWindow, pkg);
@@ -2228,80 +1316,11 @@ app.on('ready', async () => {
   setupPlayerStatsCredentials();
   setupScraper();
   setupScheduler();
-  setupHofPlanningScheduler();
-
-  function openScraperWindow() {
-    try {
-      if (scraperWindow && !scraperWindow.isDestroyed()) {
-        scraperWindow.show();
-        scraperWindow.focus();
-        return;
-      }
-      scraperWindow = new BrowserWindow({
-        width: 1280,
-        height: 800,
-        minWidth: 1100,
-        minHeight: 700,
-        backgroundColor: '#05070f',
-        show: false,
-        frame: false,
-        titleBarStyle: 'hiddenInset',
-        webPreferences: {
-          nodeIntegration: false,
-          contextIsolation: true,
-          preload: path.resolve(getPreloadPath()),
-        },
-      });
-
-      const scraperHtml = getSrcPath(path.join('scraper', 'index.html'));
-      scraperWindow.loadFile(scraperHtml);
-
-      scraperWindow.webContents.on('before-input-event', (event, input) => {
-        if (input.key === 'F12') {
-          event.preventDefault();
-          try {
-            scraperWindow.webContents.toggleDevTools();
-          } catch (_) {}
-        }
-      });
-
-      scraperWindow.once('ready-to-show', () => {
-        if (!scraperWindow.isDestroyed()) {
-          scraperWindow.show();
-        }
-      });
-
-      scraperWindow.on('closed', () => {
-        scraperWindow = null;
-      });
-    } catch (e) {
-      console.warn('[ScraperWindow] open error:', e?.message || e);
-    }
-  }
-
-  ipcMain.handle('scraper-window:open', () => {
-    openScraperWindow();
-    return { ok: true };
-  });
-  ipcMain.handle('scraper-window:start', async () => ({ ok: false, error: 'Scraper Python désactivé' }));
-  ipcMain.handle('scraper-window:stop', () => {});
-  ipcMain.handle('scraper-window:test', async () => ({ ok: false, error: 'Scraper Python désactivé' }));
-  ipcMain.handle('scraper-window:browser-login', async () => ({ ok: false, error: 'Scraper Python désactivé' }));
-  ipcMain.handle('scraper-window:open-output-dir', async () => {
-    try {
-      const rankingsDir = path.join(app.getPath('userData'), 'rankings_output');
-      if (!fs.existsSync(rankingsDir)) fs.mkdirSync(rankingsDir, { recursive: true });
-      await shell.openPath(rankingsDir);
-      return { ok: true };
-    } catch (e) {
-      return { ok: false, error: e?.message || 'Erreur ouverture dossier' };
-    }
-  });
 
   ipcMain.handle('do-events:scrape', async () => {
     const sendLog = (data) => {
-      if (scraperWindow && !scraperWindow.isDestroyed()) {
-        scraperWindow.webContents.send('dostats:log', {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('dostats:log', {
           type: data.type || 'info',
           message: data.message || '',
           at: data.at || new Date().toISOString(),
@@ -2310,7 +1329,7 @@ app.on('ready', async () => {
       }
     };
     try {
-      // Même flux que le planificateur : upsert shared_events + user_settings + IPC events-updated (fenêtre principale).
+      // Upsert shared_events + user_settings + IPC events-updated (fenêtre principale).
       // Sans session Supabase, on garde l'ancien comportement (aperçu local uniquement).
       await ScraperBridge.refreshSupabaseToken();
       if (!global.currentUserId || !global.supabaseAccessToken) {

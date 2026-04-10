@@ -119,12 +119,14 @@
 <div id="ranking-gg-overlay" class="ranking-modal-overlay"></div>
 <div id="ranking-gg-modal" class="ranking-modal ranking-gg-modal">
   <div class="ranking-modal-body">
+    <button type="button" class="gg-modal-back-icon" data-gg-back hidden data-i18n-aria-label="gg_modal_back_aria" aria-label="Retour">←</button>
     <div class="gg-modal-header">
       <div class="gg-modal-title-block">
-        <span class="gg-modal-label">Galaxy Gate</span>
+        <span class="gg-modal-label" data-i18n="galaxy_gate">Galaxy Gate</span>
         <span class="gg-modal-pseudo" data-gg-modal-pseudo></span>
+        <span class="gg-modal-period-context" data-gg-modal-sub></span>
       </div>
-      <button class="gg-modal-close" onclick="closeGalaxyGatesModal()" aria-label="Fermer">✕</button>
+      <button type="button" class="gg-modal-close" onclick="closeGalaxyGatesModal()" data-i18n-aria-label="close" aria-label="Fermer">✕</button>
     </div>
     <div class="gg-gates-grid" data-gg-modal-tbody></div>
   </div>
@@ -772,10 +774,12 @@
     <div class="ranking-filters">
       <p class="ranking-last-update" id="ranking-last-update" aria-live="polite"></p>
       <div class="ranking-filter-group">
-        <label for="ranking-filter-server" data-i18n="server">Serveur</label>
-        <select id="ranking-filter-server">
-          <option value="" data-i18n="all_servers">Tous les serveurs</option>
-        </select>
+        <label for="ranking-filter-server-trigger" data-i18n="server">Serveur</label>
+        <div class="ranking-server-dropdown">
+          <button type="button" id="ranking-filter-server-trigger" class="ranking-server-dropdown__trigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="ranking-filter-server-listbox"></button>
+          <ul id="ranking-filter-server-listbox" class="ranking-server-dropdown__list" role="listbox" hidden></ul>
+          <select id="ranking-filter-server" class="ranking-filter-server-native" hidden aria-hidden="true" tabindex="-1"></select>
+        </div>
       </div>
       <div class="ranking-filter-group">
         <label for="ranking-filter-period" data-i18n="period">Période</label>
@@ -1080,10 +1084,6 @@
           <span class="sa-tile-icon">🔑</span>
           <span class="sa-tile-label">Clés licence</span>
         </button>
-        <button type="button" class="sa-subtab-btn sa-tile sa-tile--teal" data-sa-panel="planificateur">
-          <span class="sa-tile-icon">⏰</span>
-          <span class="sa-tile-label">Planificateur</span>
-        </button>
         <button type="button" class="sa-subtab-btn sa-tile sa-tile--slate" data-sa-panel="permissions-admin">
           <span class="sa-tile-icon">⚙️</span>
           <span class="sa-tile-label">Permissions Admin</span>
@@ -1239,16 +1239,6 @@
               </button>
             </div>
           </div>
-        </div>
-      </section>
-
-      <!-- Panel Planificateur (SUPERADMIN uniquement) -->
-      <section class="sa-panel" id="sa-panel-planificateur" data-sa-panel="planificateur" hidden>
-        <div class="sa-panel-header"><h3>Planificateur</h3></div>
-        <div class="sa-collect-section sa-collect-section--in-planificateur" style="padding: 1rem 1.5rem;">
-          <button type="button" class="sa-collect-btn sa-collect-btn--alt" id="superAdminScraperWindowBtn" title="Ouvrir la fenêtre Scraper (sélection serveurs, monitoring)">
-            <span class="sa-collect-btn-icon">🖥</span> <span data-i18n="sa_scraper_window_open">Interface Scraper</span>
-          </button>
         </div>
       </section>
 
@@ -2203,6 +2193,7 @@
 <script src="backend/ranking-import.js"></script>
 <script src="backend/ranking.js"></script>
 <script src="backend/links.js"></script>
+<script src="backend/changelog-load.js"></script>
 <script src="backend/settings.js"></script>
 <script src="backend/update-ui.js"></script>
 <script src="backend/stats-collect-auto.js"></script>

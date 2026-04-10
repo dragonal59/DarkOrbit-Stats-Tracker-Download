@@ -130,10 +130,111 @@
   text-align-last: center;
 }
 
-#ranking-filter-server,
 #ranking-filter-period {
   display: block;
   margin: 0 auto;
+}
+
+.ranking-server-dropdown {
+  position: relative;
+  display: block;
+  margin: 0 auto;
+  align-self: center;
+}
+
+.ranking-server-dropdown__trigger {
+  min-width: 160px;
+  width: 100%;
+  padding: 0.5rem 1.75rem 0.5rem 0.75rem;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  text-align: center;
+  cursor: pointer;
+  font-family: inherit;
+  position: relative;
+}
+
+.ranking-server-dropdown__trigger::after {
+  content: '▾';
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.7rem;
+  opacity: 0.75;
+  pointer-events: none;
+  text-decoration: none;
+}
+
+.ranking-server-dropdown__list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 100%;
+  width: max-content;
+  max-width: min(92vw, 340px);
+  z-index: 100;
+  margin: 0;
+  padding: 0.35rem 0;
+  list-style: none;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  max-height: min(60vh, 320px);
+  overflow-y: auto;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+}
+
+.ranking-server-dropdown__list[hidden] {
+  display: none !important;
+}
+
+.ranking-server-dropdown__list li {
+  padding: 0.5rem 0.85rem;
+  cursor: pointer;
+  text-align: center;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.ranking-server-dropdown__list li:hover {
+  background: var(--bg-secondary);
+}
+
+/* Ligne rouge visible dans la liste (pas possible avec <option> natif) */
+.ranking-server-dropdown__list li.ranking-server-option--retired {
+  text-decoration: line-through;
+  text-decoration-color: #d32f2f;
+  text-decoration-thickness: 2px;
+}
+
+.ranking-server-dropdown__trigger.ranking-filter-server--retired-active {
+  color: var(--text-primary);
+  text-decoration: line-through;
+  text-decoration-color: #d32f2f;
+  text-decoration-thickness: 2px;
+}
+
+.ranking-server-dropdown__trigger.ranking-filter-server--retired-active::after {
+  text-decoration: none;
+}
+
+.ranking-filter-server-native {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
 #ranking-filter-company {
@@ -180,14 +281,6 @@
   grid-column: 3;
   grid-row: 1;
   justify-self: center;
-}
-
-#ranking-filter-server {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-#ranking-filter-server::-webkit-scrollbar {
-  display: none;
 }
 
 .ranking-favorite-badge {
@@ -349,7 +442,47 @@
 .ranking-gg-eye:hover { opacity: 1; background: var(--border); }
 
 /* ── Galaxy Gates Modal ──────────────────────────────────────────────────── */
+/* Au-dessus du popup joueur (même classes .ranking-modal*, ordre DOM après GG) */
+#ranking-gg-overlay.ranking-modal-overlay {
+  z-index: 10020;
+}
+.ranking-modal.ranking-gg-modal {
+  z-index: 10021;
+}
+
 .ranking-gg-modal { width: 740px; min-width: 340px; }
+
+.ranking-gg-modal .ranking-modal-body {
+  position: relative;
+}
+
+.gg-modal-back-icon {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 3;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s, border-color 0.15s;
+}
+.gg-modal-back-icon:hover {
+  background: var(--border);
+  border-color: var(--text-secondary);
+}
+.gg-modal-back-icon[hidden] {
+  display: none !important;
+}
 
 .gg-modal-header {
   display: flex;
@@ -357,8 +490,10 @@
   justify-content: space-between;
   margin-bottom: 18px;
   gap: 12px;
+  padding-left: 48px;
+  min-height: 36px;
 }
-.gg-modal-title-block { display: flex; flex-direction: column; gap: 2px; }
+.gg-modal-title-block { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
 .gg-modal-label {
   font-size: 0.72rem;
   font-weight: 700;
@@ -371,6 +506,12 @@
   font-weight: 700;
   color: var(--text-primary);
   line-height: 1.2;
+}
+.gg-modal-period-context {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent);
+  margin-top: 2px;
 }
 .gg-modal-close {
   width: 30px;
@@ -412,6 +553,70 @@
 .gg-gate-card--active {
   opacity: 1;
   border-color: var(--accent);
+}
+
+.gg-gate-card--period .gg-gate-img-wrap {
+  display: none;
+}
+
+.gg-period-tile {
+  width: 100%;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  appearance: none;
+  -webkit-appearance: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 152px;
+  gap: 0;
+}
+.gg-period-tile--empty {
+  cursor: default;
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+.gg-period-tile-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.gg-period-tile-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  line-height: 1.2;
+}
+.gg-period-tile-img-wrap {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.gg-period-tile-img-wrap--empty {
+  border: 1px dashed var(--border);
+  opacity: 0.4;
+}
+.gg-period-tile-img {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  display: block;
+}
+.gg-period-tile-value {
+  font-size: 1.05rem;
 }
 
 .gg-gate-img-wrap {
@@ -1182,6 +1387,13 @@
 }
 .ranking-modal-dostats-body { font-size: 0.875rem; color: var(--text-primary); }
 .ranking-modal-dostats-line { margin: 4px 0; }
+.ranking-modal-dostats-line .ranking-dostats-gg-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 2px;
+  vertical-align: middle;
+}
 .ranking-modal-dostats-pending { color: var(--text-secondary); font-style: italic; }
 
 .ranking-modal-comparison {
@@ -1577,6 +1789,17 @@
   object-fit: contain;
   display: inline-block;
   vertical-align: middle;
+}
+
+.watched-player-tooltip-wrap.delta24h-tooltip-wrap--pos::after,
+.watched-player-tooltip-wrap.delta24h-tooltip-wrap--neg::after {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 4px 0;
+  width: auto;
+  max-width: none;
+  white-space: nowrap;
 }
 
 .watched-player-tooltip-wrap.delta24h-tooltip-wrap--pos::after {

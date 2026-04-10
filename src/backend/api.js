@@ -8,11 +8,78 @@ const PERMISSIONS_CACHE_TTL_MS = 5 * 60 * 1000;
 const PERMISSIONS_STORAGE_KEY = 'userPermissionsCache';
 const PERMISSIONS_STORAGE_TTL_MS = 2 * 60 * 60 * 1000;
 
+const _VALID_BADGES = ['FREE', 'PRO', 'ADMIN', 'SUPERADMIN'];
+
 const BackendAPI = {
   _profileCache: null,
   _profileCacheTime: 0,
   _permissionsCache: null,
   _permissionsCacheTime: 0,
+  /** Badge issu du dernier succès réseau (profiles / get_user_permissions) — jamais depuis localStorage seul */
+  _serverConfirmedBadge: null,
+
+  _recordServerConfirmedBadge(badge) {
+    const b = badge != null ? String(badge).toUpperCase() : '';
+    this._serverConfirmedBadge = _VALID_BADGES.includes(b) ? b : null;
+  },
+
+  getServerConfirmedBadge() {
+    return this._serverConfirmedBadge;
+  },
+
+  _fallbackProfileAfterLoadError(badgeKey) {
+    const vm = typeof getProfileCache === 'function' ? getProfileCache() : null;
+    if (vm && vm.badge && _VALID_BADGES.includes(vm.badge)) {
+      Logger.warn('[API] Erreur profil — fallback sur cache existant');
+      const p = {
+        badge: vm.badge,
+        role: vm.role != null ? vm.role : 'USER',
+        status: vm.status || 'active',
+        subscription_status: vm.subscription_status != null ? vm.subscription_status : (vm.badge === 'FREE' ? 'free' : 'pro'),
+        trial_expires_at: vm.trial_expires_at != null ? vm.trial_expires_at : null
+      };
+      if (typeof setProfileCache === 'function') setProfileCache(p);
+      this._profileCache = p;
+      this._profileCacheTime = 0;
+      return p;
+    }
+    if (this._profileCache && this._profileCache.badge && _VALID_BADGES.includes(this._profileCache.badge)) {
+      Logger.warn('[API] Erreur profil — fallback sur cache existant');
+      const p = {
+        badge: this._profileCache.badge,
+        role: this._profileCache.role != null ? this._profileCache.role : 'USER',
+        status: this._profileCache.status || 'active',
+        subscription_status: this._profileCache.subscription_status != null ? this._profileCache.subscription_status : (this._profileCache.badge === 'FREE' ? 'free' : 'pro'),
+        trial_expires_at: this._profileCache.trial_expires_at != null ? this._profileCache.trial_expires_at : null
+      };
+      if (typeof setProfileCache === 'function') setProfileCache(p);
+      this._profileCache = p;
+      this._profileCacheTime = 0;
+      return p;
+    }
+    const stored = typeof UnifiedStorage !== 'undefined' ? UnifiedStorage.get(badgeKey, null) : null;
+    if (stored && _VALID_BADGES.includes(stored)) {
+      Logger.warn('[API] Erreur profil — fallback sur cache existant');
+      const p = {
+        badge: stored,
+        role: null,
+        status: 'active',
+        subscription_status: stored === 'FREE' ? 'free' : 'pro',
+        trial_expires_at: null
+      };
+      if (typeof setProfileCache === 'function') setProfileCache(p);
+      this._profileCache = p;
+      this._profileCacheTime = 0;
+      return p;
+    }
+    Logger.warn('[API] Erreur profil — aucun cache, fallback FREE');
+    const fallback = { badge: 'FREE', role: 'USER', status: 'active', subscription_status: 'free', trial_expires_at: null };
+    if (typeof setProfileCache === 'function') setProfileCache(fallback);
+    if (typeof UnifiedStorage !== 'undefined') UnifiedStorage.set(badgeKey || 'darkOrbitVersionBadge', 'FREE');
+    this._profileCache = fallback;
+    this._profileCacheTime = Date.now();
+    return fallback;
+  },
 
   async loadUserProfile() {
     const supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
@@ -58,6 +125,7 @@ const BackendAPI = {
               if (typeof UnifiedStorage !== 'undefined') UnifiedStorage.set((typeof CONFIG !== 'undefined' && CONFIG.STORAGE_KEYS && CONFIG.STORAGE_KEYS.VERSION_BADGE) || 'darkOrbitVersionBadge', inferredBadge);
               this._profileCache = p;
               this._profileCacheTime = now;
+              this._recordServerConfirmedBadge(inferredBadge);
               return p;
             }
           } catch (rpcE) {
@@ -67,13 +135,8 @@ const BackendAPI = {
         const isRecursion = errMsg.includes('infinite recursion') || errCode === '42P01' || (error?.code && String(error.code).includes('500'));
         Logger.error('[BackendAPI] Erreur Supabase profiles:', { message: errMsg, code: errCode, details: error?.details, hint: error?.hint });
         if (isRecursion || errMsg.includes('500') || errCode === '42P01') {
-          Logger.warn('[BackendAPI] Fallback localStorage (erreur RLS ou serveur) - profil par défaut FREE');
-          const fallback = { badge: 'FREE', role: 'USER', status: 'active', subscription_status: 'free', trial_expires_at: null };
-          if (typeof setProfileCache === 'function') setProfileCache(fallback);
-          if (typeof UnifiedStorage !== 'undefined') UnifiedStorage.set(badgeKey || 'darkOrbitVersionBadge', 'FREE');
-          this._profileCache = fallback;
-          this._profileCacheTime = now;
-          return fallback;
+          Logger.warn('[BackendAPI] Erreur RLS ou serveur sur profiles — fallback cache si disponible');
+          return this._fallbackProfileAfterLoadError(badgeKey);
         }
         return this._syncFromLocalStorage();
       }
@@ -91,6 +154,7 @@ const BackendAPI = {
       if (typeof UnifiedStorage !== 'undefined') UnifiedStorage.set((typeof CONFIG !== 'undefined' && CONFIG.STORAGE_KEYS && CONFIG.STORAGE_KEYS.VERSION_BADGE) || 'darkOrbitVersionBadge', p.badge);
       this._profileCache = p;
       this._profileCacheTime = now;
+      this._recordServerConfirmedBadge(p.badge);
       if (prevBadge && prevBadge !== 'FREE' && prevBadge !== p.badge && typeof UnifiedStorage !== 'undefined') {
         UnifiedStorage.set((typeof CONFIG !== 'undefined' && CONFIG.STORAGE_KEYS && CONFIG.STORAGE_KEYS.MIGRATION_HINT) || 'darkOrbitMigrationHint', { had: prevBadge, now: p.badge });
       }
@@ -117,17 +181,14 @@ const BackendAPI = {
           if (typeof UnifiedStorage !== 'undefined') UnifiedStorage.set((typeof CONFIG !== 'undefined' && CONFIG.STORAGE_KEYS && CONFIG.STORAGE_KEYS.VERSION_BADGE) || 'darkOrbitVersionBadge', inferredBadge);
           this._profileCache = p;
           this._profileCacheTime = Date.now();
+          this._recordServerConfirmedBadge(inferredBadge);
           return p;
         }
       } catch (_) {}
 
-      Logger.warn('[BackendAPI] Fallback localStorage - profil par défaut FREE');
-      const fallback = { badge: 'FREE', role: 'USER', status: 'active', subscription_status: 'free', trial_expires_at: null };
-      if (typeof setProfileCache === 'function') setProfileCache(fallback);
-      if (typeof UnifiedStorage !== 'undefined') UnifiedStorage.set((typeof CONFIG !== 'undefined' && CONFIG.STORAGE_KEYS && CONFIG.STORAGE_KEYS.VERSION_BADGE) || 'darkOrbitVersionBadge', 'FREE');
-      this._profileCache = fallback;
-      this._profileCacheTime = Date.now();
-      return fallback;
+      var bk = (typeof CONFIG !== 'undefined' && CONFIG.STORAGE_KEYS && CONFIG.STORAGE_KEYS.VERSION_BADGE) ? CONFIG.STORAGE_KEYS.VERSION_BADGE : 'darkOrbitVersionBadge';
+      Logger.warn('[BackendAPI] Exception profiles — fallback cache si disponible');
+      return this._fallbackProfileAfterLoadError(bk);
     }
   },
 
@@ -157,6 +218,7 @@ const BackendAPI = {
     this._profileCacheTime = 0;
     this._permissionsCache = null;
     this._permissionsCacheTime = 0;
+    this._serverConfirmedBadge = null;
   },
 
   /**
@@ -177,6 +239,7 @@ const BackendAPI = {
         if (!error && data) {
           this._permissionsCache = data;
           this._permissionsCacheTime = now;
+          this._recordServerConfirmedBadge(data.badge);
           if (typeof setProfileCache === 'function') {
             setProfileCache({ badge: data.badge, role: data.role, status: data.status });
           }

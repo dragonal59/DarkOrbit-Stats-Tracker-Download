@@ -518,9 +518,9 @@
               if (!currentVersion) {
                 throw new Error('no-version');
               }
-              return fetch('https://raw.githubusercontent.com/dragonal59/DarkOrbit-Stats-Tracker-Download/master/changelog.json')
-                .then(function (r) { return r.json(); })
-                .then(function (json) {
+              var loadFn = typeof window.loadChangelogJson === 'function' ? window.loadChangelogJson : null;
+              if (!loadFn) throw new Error('no-loadChangelogJson');
+              return loadFn().then(function (json) {
                   var versions = json && json.versions;
                   if (!Array.isArray(versions)) throw new Error('no-versions');
                   var entry = versions.find(function (e) { return String(e.version || '') === currentVersion.replace(/^v/, ''); }) || null;

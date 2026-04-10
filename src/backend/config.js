@@ -229,8 +229,13 @@ const RANK_NAME_TO_IMG = (function () {
       ['en', 'fr', 'es', 'ru', 'tr', 'pl'].forEach(function (lang) {
         var n = g[lang];
         if (!n) return;
-        var k = String(n).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/['']/g, "'").replace(/\s+/g, ' ').trim();
-        if (k) m[k] = img;
+        var lows = lang === 'tr'
+          ? [String(n).toLowerCase(), String(n).toLocaleLowerCase('tr-TR')]
+          : [String(n).toLowerCase()];
+        lows.forEach(function (low) {
+          var k = low.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/['']/g, "'").replace(/\s+/g, ' ').trim();
+          if (k) m[k] = img;
+        });
       });
     });
   }

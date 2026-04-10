@@ -13,6 +13,8 @@ const PENDING_SYNC_KEY = _k.PENDING_SYNC || 'darkOrbitPendingSync';
 
 const DataSync = {
   _intervalId: null,
+  _heartbeatIntervalId: null,
+  _pendingSyncTimeout: null,
   _migrating: false,
   _lastQueueSyncAt: 0,
 
@@ -437,6 +439,16 @@ const DataSync = {
     }
   },
 
+  _isRecoverableNetworkError(err) {
+    if (!err) return false;
+    var n = err.name || '';
+    if (n === 'NetworkError') return true;
+    var msg = String(err.message != null ? err.message : err).toLowerCase();
+    if (msg.indexOf('failed to fetch') !== -1) return true;
+    if (msg.indexOf('networkerror') !== -1) return true;
+    return false;
+  },
+
   startPeriodicSync() {
     if (this._intervalId) return;
     if (!this.isReady()) return;
@@ -451,24 +463,33 @@ const DataSync = {
     this._heartbeatIntervalId = setInterval(() => { this.sendHeartbeat(); }, HEARTBEAT_INTERVAL_MS);
 
     const run = async () => {
-      if (typeof BackendAPI !== 'undefined') {
-        await BackendAPI.loadUserProfile();
-        const profile = BackendAPI.getUserProfile();
-        if (profile && profile.status === 'banned') {
-          this.stopPeriodicSync();
-          if (typeof AuthManager !== 'undefined') await AuthManager.logout();
-          if (typeof window !== 'undefined') {
-            if (typeof electronAPI !== 'undefined' && electronAPI.navigateToAuth) {
-              electronAPI.navigateToAuth();
-            } else if (window.location) {
-              window.location.href = 'auth.html';
+      try {
+        if (typeof BackendAPI !== 'undefined') {
+          await BackendAPI.loadUserProfile();
+          const profile = BackendAPI.getUserProfile();
+          if (profile && profile.status === 'banned') {
+            this.stopPeriodicSync();
+            if (typeof AuthManager !== 'undefined') await AuthManager.logout();
+            if (typeof window !== 'undefined') {
+              if (typeof electronAPI !== 'undefined' && electronAPI.navigateToAuth) {
+                electronAPI.navigateToAuth();
+              } else if (window.location) {
+                window.location.href = 'auth.html';
+              }
             }
+            return;
           }
+        }
+        await this.pull();
+        await this.sync();
+      } catch (err) {
+        if (this._isRecoverableNetworkError(err)) {
+          Logger.warn('[DataSync] Erreur réseau temporaire dans run:', err?.message || err);
           return;
         }
+        Logger.error('[DataSync] Erreur fatale dans run — stopPeriodicSync', err);
+        this.stopPeriodicSync();
       }
-      await this.pull();
-      await this.sync();
     };
     this._intervalId = setInterval(run, SYNC_INTERVAL_MS);
   },
@@ -525,5 +546,10 @@ if (typeof window !== 'undefined') {
   });
   window.addEventListener('offline', () => {
     if (typeof showToast === 'function') showToast('Hors ligne. Les données seront synchronisées à la reconnexion.', 'warning');
+  });
+  window.addEventListener('beforeunload', () => {
+    if (typeof DataSync !== 'undefined' && typeof DataSync.stopPeriodicSync === 'function') {
+      DataSync.stopPeriodicSync();
+    }
   });
 }

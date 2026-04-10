@@ -15,7 +15,7 @@ async function refreshSessionsFromSupabase() {
   try {
     var user = typeof AuthManager !== 'undefined' && typeof AuthManager.getCurrentUser === 'function' ? await AuthManager.getCurrentUser() : null;
     if (!user || !user.id) return;
-    var res = await supabase.from('user_sessions').select('*').eq('user_id', user.id).order('session_timestamp', { ascending: false });
+    var res = await supabase.from('user_sessions').select('*').eq('user_id', user.id).order('session_timestamp', { ascending: false }).limit(200);
     if (res.error) return;
     var rows = res.data || [];
     var app = (rows || []).map(function (r) {

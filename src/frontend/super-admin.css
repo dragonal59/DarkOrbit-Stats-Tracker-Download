@@ -1093,12 +1093,6 @@ input:checked + .sa-switch-slider:before {
   border-radius: 12px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
-.sa-collect-section--in-planificateur {
-  margin-top: 28px;
-  padding-top: 24px;
-  border-top: 1px solid var(--border);
-}
-
 /* Section génération de clés */
 .sa-keys-section {
   margin-bottom: 24px;
