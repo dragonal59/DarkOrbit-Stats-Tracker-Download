@@ -17,7 +17,6 @@ const path = require('path');
 const fs = require('fs');
 const { readMergedSupabaseConfigFromDisk } = require('./supabase-config-from-disk');
 const { applyScraperSessionProxyPolicy } = require('./scraper-app-settings');
-const { JS_EXTRACT_EVENTS } = require('./extract-events');
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -437,58 +436,6 @@ async function saveRankingToSupabase(serverId, serverName, players) {
   }
 }
 
-async function saveEventsToSupabase(events) {
-  const userId   = global.currentUserId;
-  const supabase = makeSupabaseClient();
-
-  const { data: settings, error: fetchErr } = await supabase
-    .from('user_settings')
-    .select('imported_rankings_json,settings_json,links_json,booster_config_json,current_stats_json,theme,view_mode')
-    .eq('user_id', userId)
-    .single();
-
-  const timestamp = new Date().toISOString();
-  const row = {
-    user_id:             userId,
-    current_events_json: events,
-    updated_at:          timestamp,
-    ...(!fetchErr && settings ? {
-      imported_rankings_json: settings.imported_rankings_json || {},
-      settings_json:          settings.settings_json          || {},
-      links_json:             settings.links_json             || [],
-      booster_config_json:    settings.booster_config_json    || {},
-      current_stats_json:     settings.current_stats_json     || {},
-      theme:                  settings.theme                  || 'dark',
-      view_mode:              settings.view_mode              || 'detailed',
-    } : {}),
-  };
-
-  const { error } = await supabase.from('user_settings').upsert(row, { onConflict: 'user_id' });
-  if (error) throw error;
-
-  try {
-    console.log('[SessionScraper] upsert_shared_events — avant appel', {
-      userId: userId,
-      tokenPresent: !!global.supabaseAccessToken,
-      eventsCount: events.length,
-    });
-    const { data: sharedData, error: sharedError } = await supabase.rpc('upsert_shared_events', { p_events: events, p_uploaded_by: global.currentUserId || null });
-    console.log('[SessionScraper] upsert_shared_events — résultat', {
-      data: sharedData,
-      error: sharedError ? { message: sharedError.message, code: sharedError.code } : null,
-    });
-    if (sharedError || (sharedData && sharedData.success === false)) {
-      console.error('[SessionScraper] upsert_shared_events échoué — token invalide ou Supabase injoignable:', sharedError || sharedData);
-    }
-  } catch (e) {
-    console.error('[SessionScraper] upsert_shared_events — exception (token invalide ou Supabase injoignable):', e?.message || e);
-  }
-
-  if (_mainWindow && !_mainWindow.isDestroyed() && _mainWindow.webContents) {
-    _mainWindow.webContents.send('events-updated', { events, eventsCount: events.length });
-  }
-}
-
 // ─── Login par serveur ────────────────────────────────────────────────────────
 
 async function loginForServer(serverId, username, password) {
@@ -540,7 +487,7 @@ async function loginForServer(serverId, username, password) {
 
 // ─── Scraping d'un serveur ────────────────────────────────────────────────────
 
-async function scrapeOneServer(serverId, serverName, username, password, isFirst, playerId, playerPseudo) {
+async function scrapeOneServer(serverId, serverName, username, password, playerId, playerPseudo) {
   const loginRes = await loginForServer(serverId, username, password);
   if (!loginRes.ok) return { ok: false, error: loginRes.error };
 
@@ -633,41 +580,6 @@ async function scrapeOneServer(serverId, serverName, username, password, isFirst
     return { ok: false, error: e?.message };
   }
 
-  // Événements du jeu — uniquement sur le premier serveur du cycle
-  if (isFirst && !_shouldStop) {
-    try {
-      await navigateTo(`https://${serverId}.darkorbit.com/indexInternal.es`);
-      await delay(DELAY.afterLogin.min, DELAY.afterLogin.max);
-      const evRes = await exec(JS_EXTRACT_EVENTS);
-      if (evRes?.ok && evRes.events?.length > 0) {
-        const nowMs = Date.now();
-        const events = (evRes.events || []).map(ev => ({
-          id: ev.id || '',
-          name: (ev.name || '').trim(),
-          description: (ev.description || '').trim(),
-          timer: (ev.timer || '').trim(),
-          imageUrl: (ev.imageUrl || '').trim(),
-          scrapedAt: ev.scrapedAt || new Date().toISOString(),
-          endTimestamp: ev.endTimestamp != null ? ev.endTimestamp : null
-        })).filter(ev => {
-          const m = (ev.timer || '').match(/(\d+):(\d+):(\d+)/);
-          if (!m) return true;
-          const h = parseInt(m[1], 10) || 0, mn = parseInt(m[2], 10) || 0, s = parseInt(m[3], 10) || 0;
-          const scrapedAt = ev.scrapedAt ? new Date(ev.scrapedAt).getTime() : nowMs;
-          return scrapedAt + (h * 3600 + mn * 60 + s) * 1000 > nowMs;
-        });
-        if (events.length === 0) {
-          console.log(`[SessionScraper] ${serverId} : aucun événement actif après filtrage`);
-        } else {
-          await saveEventsToSupabase(events);
-          console.log(`[SessionScraper] ${serverId} : ${events.length} événements sauvegardés`);
-        }
-      }
-    } catch (e) {
-      console.warn('[SessionScraper] scrape events:', e?.message);
-    }
-  }
-
   return { ok: true, count: players.length };
 }
 
@@ -686,7 +598,7 @@ async function runCycle(accounts) {
     updateState({ currentServer: server_id, currentServerIndex: i + 1 });
 
     try {
-      const res = await scrapeOneServer(server_id, server_name, username, password, i === 0, acc.player_id, acc.player_pseudo);
+      const res = await scrapeOneServer(server_id, server_name, username, password, acc.player_id, acc.player_pseudo);
       if (res.ok) {
         completed.push(server_id);
         updateState({ completed: [...completed] });

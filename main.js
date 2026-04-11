@@ -98,7 +98,6 @@ const PlayerStatsScraper = require('./electron/player-stats-scraper');
 const PlayerStatsCredentials = require('./electron/player-stats-credentials');
 const { DOSTATS_GROUPS, runDostatsRankingScraper, getLatestRanking, checkDostatsHealth, measureDostatsLatency, measureDostatsLatencyAndScanProfiles } = require('./electron/dostats-scraper');
 const { runDostatsProfilesScraper, getLatestProfile } = require('./electron/dostats-profile-scraper');
-const { loginAndExtractEventsOnly, runEventsScraping } = require('./electron/events-scraper-standalone');
 
 let mainWindow;
 
@@ -189,28 +188,22 @@ function loadSchedulerConfig() {
       const raw = fs.readFileSync(SCHEDULER_CONFIG_PATH, 'utf8');
       const data = JSON.parse(raw);
       if (data && Array.isArray(data.slots) && data.slots.length > 0) {
-        const migrated = data.slots.map(s => ({
+        const cleaned = data.slots.map(s => ({
           time: s.time,
-          scrapers: (s.scrapers || []).filter(x => x === 'evenements')
-        })).filter(s => s.scrapers.length > 0);
-        if (migrated.length > 0) {
-          const needsSave = data.slots.some(s => (s.scrapers || []).some(x => x === 'statistiques_joueurs' || x === 'classements' || x === 'dostats'));
-          if (needsSave) saveSchedulerConfig({ slots: migrated });
-          return { slots: migrated };
-        }
+          scrapers: (s.scrapers || []).filter(x => x !== 'evenements')
+        })).filter(s => s.time && /^\d{1,2}:\d{2}$/.test(s.time) && s.scrapers.length > 0);
+        const hadEvenements = data.slots.some(s => (s.scrapers || []).includes('evenements'));
+        const hadLegacy = data.slots.some(s => (s.scrapers || []).some(x => x === 'statistiques_joueurs' || x === 'classements' || x === 'dostats'));
+        if (hadEvenements || hadLegacy) saveSchedulerConfig({ slots: cleaned });
+        return { slots: cleaned };
       }
       if (data && Array.isArray(data.slotsEvents)) {
-        const e = data.slotsEvents || [];
-        const allHours = [...new Set(e)].sort();
-        const slots = allHours.map(time => ({ time, scrapers: ['evenements'] }));
-        if (slots.length > 0) {
-          saveSchedulerConfig({ slots });
-          return { slots };
-        }
+        saveSchedulerConfig({ slots: [] });
+        return { slots: [] };
       }
     }
   } catch (e) { console.warn('[Scheduler] loadConfig:', e?.message || e); }
-  return { slots: [{ time: '00:00', scrapers: ['evenements'] }, { time: '12:00', scrapers: ['evenements'] }] };
+  return { slots: [] };
 }
 
 function saveSchedulerConfig(config) {
@@ -532,22 +525,19 @@ function setupScraper() {
       delayBetweenServers: Math.max(10000, Math.min(600000, parseInt(config.delayBetweenServers, 10) || 60000)),
       scheduledHours: Array.isArray(config.scheduledHours) ? config.scheduledHours.filter(h => /^\d{1,2}:\d{2}$/.test(String(h))) : [],
       enabledServers: Array.isArray(config.enabledServers) ? config.enabledServers : [],
-      enabledScrapers: config.enabledScrapers && typeof config.enabledScrapers === 'object'
-        ? { evenements: !!config.enabledScrapers.evenements }
-        : { evenements: true },
+      enabledScrapers: { evenements: false },
       eventsScraperAccount: config.eventsScraperAccount && typeof config.eventsScraperAccount === 'object'
         ? { username: String(config.eventsScraperAccount.username || '').trim(), password: String(config.eventsScraperAccount.password || '') }
         : { username: '', password: '' }
     };
     setScrapingConfig(merged);
-    const hours = merged.scheduledHours.length > 0 ? merged.scheduledHours : ['00:00', '12:00'];
+    const hours = merged.scheduledHours.length > 0 ? merged.scheduledHours : [];
     const scrapers = [];
-    if (merged.enabledScrapers.evenements) scrapers.push('evenements');
     const newSlots = hours.map(t => {
       const [hh, mm] = t.split(':').map(Number);
       const norm = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
-      return { time: norm, scrapers: scrapers.length > 0 ? scrapers : ['evenements'] };
-    });
+      return { time: norm, scrapers: [...scrapers] };
+    }).filter(s => s.scrapers.length > 0);
     const prev = loadSchedulerConfig();
     const prevSlots = (prev.slots || []).map(s => ({ time: s.time, scrapers: (s.scrapers || []).slice().sort() })).sort((a, b) => a.time.localeCompare(b.time));
     const nextSlots = newSlots.map(s => ({ time: s.time, scrapers: (s.scrapers || []).slice().sort() })).sort((a, b) => a.time.localeCompare(b.time));
@@ -1114,17 +1104,7 @@ async function runScheduledScrapers(scrapers) {
   }
   const unique = [...new Set(scrapers)];
   for (const s of unique) {
-    if (s === 'evenements') {
-      sendSchedulerLog('Déclenchement Événements DarkOrbit', 'info');
-      const refreshed = await ScraperBridge.refreshSupabaseToken();
-      if (!refreshed && (!global.currentUserId || !global.supabaseAccessToken)) {
-        sendSchedulerLog('Événements ignoré : utilisateur non authentifié.', 'warning');
-        continue;
-      }
-      if (!refreshed) { /* token existant utilisé */ }
-      await ScraperBridge.startEventsOnlyScraping();
-      while (global.scrapingState?.running) await new Promise(r => setTimeout(r, 2000));
-    } else if (s === 'serveurs') {
+    if (s === 'serveurs') {
       sendSchedulerLog('Déclenchement Scraping serveurs (SessionScraper)', 'info');
       await SessionScraper.startScraping();
       // SessionScraper n'utilise pas global.scrapingState ; on poll son state interne.
@@ -1317,54 +1297,12 @@ app.on('ready', async () => {
   setupScraper();
   setupScheduler();
 
-  ipcMain.handle('do-events:scrape', async () => {
-    const sendLog = (data) => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('dostats:log', {
-          type: data.type || 'info',
-          message: data.message || '',
-          at: data.at || new Date().toISOString(),
-          server: data.server ?? null
-        });
-      }
-    };
-    try {
-      // Upsert shared_events + user_settings + IPC events-updated (fenêtre principale).
-      // Sans session Supabase, on garde l'ancien comportement (aperçu local uniquement).
-      await ScraperBridge.refreshSupabaseToken();
-      if (!global.currentUserId || !global.supabaseAccessToken) {
-        sendLog({
-          type: 'warning',
-          message: 'Pas de session Supabase — extraction locale uniquement (rien n\'est envoyé au cloud). Ouvrez l\'app principale et connectez-vous.'
-        });
-        return await loginAndExtractEventsOnly({ sendLog });
-      }
-      if (global.scrapingState?.running) {
-        sendLog({ type: 'error', message: 'Un autre scraping est déjà en cours.' });
-        return { ok: false, error: 'Scraping déjà en cours', events: [] };
-      }
-      sendLog({ type: 'info', message: 'Extraction + envoi Supabase (shared_events)…' });
-      const result = await runEventsScraping({ mainWindowRef: mainWindow });
-      if (result?.ok && Array.isArray(result.events)) {
-        sendLog({
-          type: 'success',
-          message: `${result.events.length} événement(s) enregistré(s) dans Supabase.`
-        });
-        return {
-          ok: true,
-          events: result.events,
-          eventsCount: result.eventsCount,
-          pushedToSupabase: true
-        };
-      }
-      const errMsg = result?.error || 'Échec du scraping événements';
-      sendLog({ type: 'error', message: errMsg });
-      return { ok: false, error: errMsg, events: [], pushedToSupabase: false };
-    } catch (e) {
-      console.warn('[Main] do-events:scrape:', e?.message || e);
-      return { ok: false, error: e?.message || 'Erreur', events: [] };
-    }
-  });
+  ipcMain.handle('do-events:scrape', async () => ({
+    ok: false,
+    error: 'Collecte événements DarkOrbit désactivée.',
+    events: [],
+    pushedToSupabase: false
+  }));
 
   const { pathToFileURL } = require('url');
   function listMultillinguesEventJsonFiles() {

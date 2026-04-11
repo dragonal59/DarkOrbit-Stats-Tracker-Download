@@ -1,5 +1,5 @@
 /**
- * Pont entre main.js et les modules de scraping (événements).
+ * Pont entre main.js et les modules de scraping (état / token).
  */
 let mainWindowRef = null;
 
@@ -21,8 +21,7 @@ function resetScrapingState(totalServers = 0, patch = {}) {
 
 /**
  * Émet un événement d'erreur de scraping vers le renderer.
- * Utilisé par les scrapers (events-scraper-standalone, etc.)
- * et par les wrappers start* en cas d'erreur de démarrage.
+ * Utilisé par les wrappers start* en cas d'erreur de démarrage.
  * Le renderer écoute ce canal via window.electronScraper.onError().
  * @param {string} server_id - ID du serveur concerné, ou '' pour une erreur globale
  * @param {string} message   - Message d'erreur lisible
@@ -43,15 +42,7 @@ function sendScrapingError(server_id, message) {
 }
 
 async function startEventsOnlyScraping() {
-  if (global.scrapingState?.running) {
-    sendScrapingError('', 'Scraping déjà en cours');
-    return { ok: false, error: 'Scraping déjà en cours' };
-  }
-  global.scraperShouldStop = false;
-  const { runEventsScraping } = require('./events-scraper-standalone');
-  const result = await runEventsScraping({ mainWindowRef });
-  if (result && !result.ok) sendScrapingError('', result.error || 'Échec du scraping événements');
-  return result;
+  return { ok: false, error: 'Collecte événements DarkOrbit désactivée.' };
 }
 
 function getState() {

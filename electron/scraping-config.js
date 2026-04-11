@@ -1,8 +1,8 @@
 const DEFAULT_SCRAPING_CONFIG = {
   delayBetweenServers: 60000,
-  scheduledHours: ['00:00', '12:00'],
+  scheduledHours: [],
   enabledServers: [],
-  enabledScrapers: { evenements: true },
+  enabledScrapers: { evenements: false },
   eventsScraperAccount: { username: '', password: '' }
 };
 
