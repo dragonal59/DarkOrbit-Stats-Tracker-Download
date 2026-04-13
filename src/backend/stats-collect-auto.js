@@ -473,11 +473,11 @@ async function runStatsCollectFromGame() {
   var doModalPassword = document.getElementById('doModalPassword');
   var doModalServer = document.getElementById('doModalServer');
   var useWebScraper = typeof window.electronPlayerStatsScraper !== 'undefined' && typeof window.electronPlayerStatsScraper.collectWithLogin === 'function';
-  if (typeof window.electronPlayerStatsScraper === 'undefined' && (typeof window.electronClientLauncher === 'undefined' || typeof window.electronClientLauncher.collectPlayerStats !== 'function')) {
+  if (!useWebScraper) {
     if (typeof showToast === 'function') showToast('Récolte disponible uniquement dans l\'application desktop.', 'warning');
     return;
   }
-  if (useWebScraper && doModal) {
+  if (useWebScraper) {
     var creds = typeof window.electronPlayerStatsCredentials !== 'undefined' && typeof window.electronPlayerStatsCredentials.getActiveWithPassword === 'function'
       ? await window.electronPlayerStatsCredentials.getActiveWithPassword() : null;
     if (creds && creds.password) {
@@ -522,43 +522,6 @@ async function runStatsCollectFromGame() {
     var doModalEl = document.getElementById('doCredentialsModal');
     if (doModalEl) { doModalEl.style.display = 'flex'; doModalEl.style.opacity = '1'; doModalEl.style.visibility = 'visible'; doModalEl.classList.add('active'); }
     return;
-  }
-  var path = typeof getSetting === 'function' ? getSetting('flashClientPath') : '';
-  if (btn) btn.disabled = true;
-  showCollectProgress(true);
-  updateCollectProgress(50, 'Récolte en cours…');
-  if (typeof showToast === 'function') showToast('Récolte en cours…', 'info');
-  var result;
-  try {
-    var collectPromise = window.electronClientLauncher.collectPlayerStats({ clientPath: path || undefined });
-    var timeoutMs = 120000;
-    result = await Promise.race([collectPromise, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('Timeout récolte (2 min)')); }, timeoutMs); })]);
-    if (!result || !result.ok) {
-      if (typeof showToast === 'function') showToast('Scan échoué' + (result && result.error ? ': ' + result.error : ''), 'error');
-      var u2 = typeof AuthManager !== 'undefined' && typeof AuthManager.getCurrentUser === 'function' ? await AuthManager.getCurrentUser() : null;
-      if (u2 && supabase) { var _r2 = await supabase.from('profiles').select('last_stats_collected_at').eq('id', u2.id).single(); updateCollectStatsUI(_r2.data || null); }
-      return;
-    }
-    var data = result.data || {};
-    var user3 = typeof AuthManager !== 'undefined' && typeof AuthManager.getCurrentUser === 'function' ? await AuthManager.getCurrentUser() : null;
-    if (!user3 || !user3.id) { if (typeof showToast === 'function') showToast('Non connecté.', 'error'); return; }
-    var nowIso = new Date().toISOString();
-    var update = profileUpdateOnlyDisplay(data, nowIso);
-    Object.keys(update).forEach(function (k) { if (update[k] === undefined) delete update[k]; });
-    var supabase2 = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
-    if (supabase2 && Object.keys(update).length > 0) {
-      var rpcUp = await persistProfileDisplayUpdate(supabase2, update);
-      if (!rpcUp.ok) { if (typeof showToast === 'function') showToast('Scan échoué: ' + (rpcUp.message || 'Erreur enregistrement'), 'error'); return; }
-    }
-    onCollectSuccess(data, nowIso);
-  } catch (e) {
-    if (typeof showToast === 'function') showToast('Scan échoué: ' + (e && e.message ? e.message : 'inconnue'), 'error');
-    var u4 = typeof AuthManager !== 'undefined' && typeof AuthManager.getCurrentUser === 'function' ? await AuthManager.getCurrentUser() : null;
-    if (u4 && typeof getSupabaseClient === 'function') { var sb = getSupabaseClient(); if (sb) { var _r3 = await sb.from('profiles').select('last_stats_collected_at').eq('id', u4.id).single(); updateCollectStatsUI(_r3.data || null); } }
-  } finally {
-    showCollectProgress(false);
-    try { if (typeof window.electronClientLauncher !== 'undefined' && typeof window.electronClientLauncher.stop === 'function') window.electronClientLauncher.stop(); } catch (_) {}
-    if (btn) btn.disabled = false;
   }
 }
 

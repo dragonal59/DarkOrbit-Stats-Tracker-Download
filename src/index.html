@@ -313,8 +313,8 @@
         window.__supabaseAuthenticated = true;
         var sessionCount = typeof getSessions === 'function' ? getSessions().length : 0;
         if (typeof setAppAccessFromSessions === 'function') setAppAccessFromSessions(sessionCount > 0 ? sessionCount : 1);
-        if (typeof window.electronScraper === 'object' && window.electronScraper.setUserContext && session?.user?.id && session?.access_token) {
-          window.electronScraper.setUserContext(session.user.id, session.access_token);
+        if (typeof window.electronAuth === 'object' && window.electronAuth.setUserContext && session?.user?.id && session?.access_token) {
+          window.electronAuth.setUserContext(session.user.id, session.access_token);
         }
       } else {
         window.__supabaseAuthenticated = false;

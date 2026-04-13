@@ -1,8 +1,9 @@
 {
   "id": "super_subscription",
   "visible": true,
+  "dom_ids": ["subscriptions"],
   "image": "img/events/best_subscriptions.jpg",
-  "image_urls": ["best_subscriptions", "best-subscriptions"],
+  "image_urls": ["best_subscriptions", "best-subscriptions", "subscriptions"],
   "names": {
     "fr": "Super Abonnement",
     "en": "Super Subscription",

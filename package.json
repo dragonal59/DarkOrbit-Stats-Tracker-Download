@@ -1,6 +1,6 @@
 {
   "name": "do-stats-tracker",
-  "version": "2.5.9",
+  "version": "2.5.10",
   "description": "DO Stats Tracker",
   "main": "main.js",
   "repository": {

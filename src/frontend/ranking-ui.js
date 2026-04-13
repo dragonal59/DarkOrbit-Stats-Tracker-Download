@@ -18,18 +18,8 @@ var _lastRefreshRankingAt = 0;
 var REFRESH_RANKING_THROTTLE_MS = 30000;
 var _rankingCdpSaveHookRegistered = false;
 
-/** Un seul hook CDP : appelé depuis setupRanking/onReady pour ne pas rater electronClientLauncher si retardé au preload */
 function tryRegisterRankingCdpRefreshHook() {
-  if (_rankingCdpSaveHookRegistered) return;
-  if (typeof window.electronClientLauncher?.onSaveSuccess !== 'function') return;
   _rankingCdpSaveHookRegistered = true;
-  var _cdpRefreshTimer = null;
-  window.electronClientLauncher.onSaveSuccess(function () {
-    clearTimeout(_cdpRefreshTimer);
-    _cdpRefreshTimer = setTimeout(function () {
-      if (typeof window.refreshRanking === 'function') window.refreshRanking();
-    }, 3000);
-  });
 }
 
 // Cache local pour les classements All Time (indépendants des filtres période)
@@ -1641,11 +1631,14 @@ function _rowToPersistedFollowedStatsPayload(row) {
   if (estRp == null || !Number.isFinite(estRp)) {
     estRp = _computeEstimatedRpFromStats(row.honor, row.xp, row.rank_points);
   }
+  var estScrape = row.estimated_rp_delta_scrape != null ? Number(row.estimated_rp_delta_scrape) : null;
+  if (estScrape != null && !Number.isFinite(estScrape)) estScrape = null;
   return {
     honor: row.honor != null ? Number(row.honor) : null,
     xp: row.xp != null ? Number(row.xp) : null,
     rank_points: row.rank_points != null ? Number(row.rank_points) : null,
     estimated_rp: estRp,
+    estimated_rp_delta_scrape: estScrape,
     level: row.level != null ? Number(row.level) : null,
     company: row.company != null ? String(row.company) : null,
     grade: gradeName || rawRank || null,
@@ -1691,11 +1684,14 @@ function _statsFromFollowedSnapshot(followed) {
   try {
     companyBadgeHtml = getCompanyBadgeHtml(followed.company) || '';
   } catch (_) {}
+  var scrapeDelta = followed.estimated_rp_delta_scrape != null ? Number(followed.estimated_rp_delta_scrape) : null;
+  if (scrapeDelta != null && !Number.isFinite(scrapeDelta)) scrapeDelta = null;
   return {
     honor: followed.honor != null ? Number(followed.honor) : null,
     xp: followed.xp != null ? Number(followed.xp) : null,
     rank_points: followed.rank_points != null ? Number(followed.rank_points) : null,
     estimated_rp: est,
+    estimated_rp_delta_scrape: scrapeDelta,
     level: followed.level != null ? Number(followed.level) : null,
     company: followed.company != null ? String(followed.company) : null,
     gradeImg: gradeImgSnap,
@@ -1771,11 +1767,16 @@ function _buildLiveStatsFromImports(srv, pseudoNorm, userId) {
     companyBadgeHtml = getCompanyBadgeHtml(found.company) || '';
   } catch (_) {}
   var gradeNameFromRow = (found.grade && String(found.grade).trim()) || (found.current_rank && String(found.current_rank).trim()) || (found.grade_normalized && String(found.grade_normalized).trim()) || '';
+  var scrapeDelta = null;
+  if (rowR && rowR.estimated_rp_delta_scrape != null) scrapeDelta = Number(rowR.estimated_rp_delta_scrape);
+  else if (found.estimated_rp_delta_scrape != null) scrapeDelta = Number(found.estimated_rp_delta_scrape);
+  if (scrapeDelta != null && !Number.isFinite(scrapeDelta)) scrapeDelta = null;
   return {
     honor: rowH && rowH.honor != null ? Number(rowH.honor) : (found.honor != null ? Number(found.honor) : null),
     xp: rowX && rowX.xp != null ? Number(rowX.xp) : (found.xp != null ? Number(found.xp) : null),
     rank_points: rowR && rowR.rank_points != null ? Number(rowR.rank_points) : (found.rank_points != null ? Number(found.rank_points) : null),
     estimated_rp: estRp,
+    estimated_rp_delta_scrape: scrapeDelta,
     gradeImg: gradeImg || '',
     companyBadgeHtml: companyBadgeHtml || '',
     company: found.company != null ? String(found.company) : null,
@@ -1819,6 +1820,15 @@ function _getFollowedPlayerCurrentStats(followed) {
   var rank_points = _pickFirstNonEmptyStat(live && live.rank_points, cache && cache.rank_points, snap && snap.rank_points);
   var level = _pickFirstNonEmptyStat(live && live.level, cache && cache.level, snap && snap.level);
   var estimated_rp = _pickFirstNonEmptyStat(live && live.estimated_rp, cache && cache.estimated_rp, snap && snap.estimated_rp);
+  var estimated_rp_delta_scrape = _pickFirstNonEmptyStat(
+    live && live.estimated_rp_delta_scrape,
+    cache && cache.estimated_rp_delta_scrape,
+    snap && snap.estimated_rp_delta_scrape
+  );
+  if (estimated_rp_delta_scrape != null) {
+    var _sd = Number(estimated_rp_delta_scrape);
+    estimated_rp_delta_scrape = Number.isFinite(_sd) ? _sd : null;
+  }
   var gradeImg = _pickFirstNonEmptyStat(live && live.gradeImg, cache && cache.gradeImg, snap && snap.gradeImg);
   var companyBadgeHtml = _pickFirstNonEmptyStat(live && live.companyBadgeHtml, cache && cache.companyBadgeHtml, snap && snap.companyBadgeHtml);
   var gradeName = _pickFirstNonEmptyStat(live && live.gradeName, cache && cache.gradeName, snap && snap.gradeName);
@@ -1849,6 +1859,7 @@ function _getFollowedPlayerCurrentStats(followed) {
     xp: xp,
     rank_points: rank_points,
     estimated_rp: estimated_rp,
+    estimated_rp_delta_scrape: estimated_rp_delta_scrape,
     level: level,
     gradeImg: gradeImg || '',
     companyBadgeHtml: companyBadgeHtml || '',
@@ -2051,7 +2062,13 @@ function _build24hDeltasRowHtml(deltas) {
     var cls = n > 0 ? 'watched-player-delta-24h-value comparison-diff-positive' : (n < 0 ? 'watched-player-delta-24h-value comparison-diff-negative' : 'watched-player-delta-24h-value');
     return '<div class="watched-player-stat-group watched-player-delta-24h-cell"><span class="' + cls + '">' + escapeHtml(formatted) + '</span></div>';
   }
-  return cell(deltas && deltas.honorDelta) + cell(deltas && deltas.xpDelta) + cell(deltas && deltas.rpDelta);
+  function cellRp(d) {
+    if (d && d._rpScrapeMissing) {
+      return '<div class="watched-player-stat-group watched-player-delta-24h-cell"><span class="watched-player-delta-24h-value comparison-diff-negative">null</span></div>';
+    }
+    return cell(d && d.rpDelta);
+  }
+  return cell(deltas && deltas.honorDelta) + cell(deltas && deltas.xpDelta) + cellRp(deltas);
 }
 
 function _formatFollowedDelta(followed, userStats) {
@@ -2239,6 +2256,16 @@ function renderFollowedPlayersSidebar() {
     var userStats = _getUserStatsForComparison();
     var comparisonDeltasHtml = _formatFollowedDelta(p, userStats);
     var deltas24h = _getFollowedPlayer24hDelta(srv, pseudo, p.userId || p.user_id || '');
+    if (!deltas24h) deltas24h = { honorDelta: null, xpDelta: null, rpDelta: null };
+    else deltas24h = Object.assign({}, deltas24h);
+    var scrapeRp = playerStats && playerStats.estimated_rp_delta_scrape != null ? Number(playerStats.estimated_rp_delta_scrape) : null;
+    if (scrapeRp != null && Number.isFinite(scrapeRp)) {
+      deltas24h.rpDelta = scrapeRp;
+      deltas24h._rpScrapeMissing = false;
+    } else {
+      deltas24h.rpDelta = null;
+      deltas24h._rpScrapeMissing = true;
+    }
     var row24hHtml = _build24hDeltasRowHtml(deltas24h);
 
     // FIX 6 — icône grade en priorité ; texte si pas d’image ou erreur de chargement

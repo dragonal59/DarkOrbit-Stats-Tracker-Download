@@ -202,36 +202,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // ========== SCRAPER IPC — sync locale après écriture Supabase directe ==========
-  if (typeof window.electronScraper === 'object' && window.electronScraper.onRankingsUpdated) {
-    window.electronScraper.onRankingsUpdated(async () => {
-      try {
-        // pull() invalide déjà le cache (IMPORTED_RANKINGS, etc.) et appelle window.refreshRanking()
-        if (typeof DataSync !== 'undefined' && DataSync.pull) await DataSync.pull();
-      } catch (e) {
-        if (window.DEBUG) Logger.warn('[Script] Pull après rankings-updated:', e?.message || e);
-      }
-    });
-  }
-
-  // ========== NOTIFICATIONS WINDOWS — scraper terminé (SUPERADMIN) ==========
-  if (!window._scrapingNotificationListenersRegistered && typeof window.sendNotification === 'function') {
-    window._scrapingNotificationListenersRegistered = true;
-    if (window.electronScraper && window.electronScraper.onScrapingFinished) {
-      window.electronScraper.onScrapingFinished((d) => {
-        var badge = typeof getCurrentBadge === 'function' ? getCurrentBadge() : '';
-        if (badge !== 'SUPERADMIN') return;
-        if (typeof getSetting !== 'function' || !getSetting('notificationsEnabled')) return;
-        if (typeof currentHasFeature === 'function' && !currentHasFeature('notificationsWindows')) return;
-        if (d && d.action === 'events_completed') {
-          window.sendNotification('Scraper événements', 'Collecte des événements terminée.');
-        } else if (d && d.action === 'statistics_completed') {
-          window.sendNotification('Scraper classement & profils', 'Collecte classement et profils terminée.');
-        }
-      });
-    }
-  }
-
 });
 
 // ==========================================

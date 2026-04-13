@@ -8,6 +8,7 @@ require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
 
 const TABLES = [
+  'do_events',
   'admin_logs',
   'profiles',
   'user_sessions',

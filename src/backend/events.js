@@ -1,7 +1,7 @@
 /**
  * Gestion des événements DarkOrbit scrapés (événements du jour)
- * Source unique : Supabase shared_events. Enrichissement via multillingues_events.
- * Affichage sidebar, timers en temps réel, mise à jour à la réception de events-updated.
+ * Source Supabase : table do_events (dernier run_id du scraper). Sync table events via upsert_sidebar_events.
+ * Enrichissement : multillingues_events.
  */
 (function () {
   'use strict';
@@ -173,19 +173,6 @@
     return best;
   }
 
-  function findEventInDatabase(rawName) {
-    if (!rawName || typeof rawName !== 'string') return null;
-    if (!_eventsDatabase) return null;
-    var norm = normalizeForLookup(rawName);
-    if (!norm) return null;
-    var db = _eventsDatabase;
-    if (db.byExactTitle && db.byExactTitle[norm]) return db.byExactTitle[norm];
-    var found = _matchEventByKeywords(norm, '', db);
-    if (found) return found;
-    if (window.DEBUG) Logger.debug('[EventMatcher] Aucun match fiable pour :', rawName);
-    return null;
-  }
-
   function _matchEventByImageUrl(imageUrl, db) {
     if (!imageUrl || typeof imageUrl !== 'string') return null;
     var events = (db && db.events) || [];
@@ -229,6 +216,24 @@
   }
 
   function findEventInDatabaseForScraped(ev) {
+    var cid = (ev && (ev.catalogId || ev.catalog_id) || '').toString().trim();
+    if (cid && _eventsDatabase && Array.isArray(_eventsDatabase.events)) {
+      for (var ci = 0; ci < _eventsDatabase.events.length; ci++) {
+        var evDb0 = _eventsDatabase.events[ci];
+        if ((evDb0.id || '').toString().trim() === cid) return evDb0;
+      }
+    }
+    var domId = ev && ev.id != null ? String(ev.id).trim() : '';
+    if (domId && domId.indexOf('free-demo-') !== 0 && _eventsDatabase && Array.isArray(_eventsDatabase.events)) {
+      for (var di = 0; di < _eventsDatabase.events.length; di++) {
+        var evDom = _eventsDatabase.events[di];
+        var doms = evDom.dom_ids;
+        if (!Array.isArray(doms)) continue;
+        for (var dj = 0; dj < doms.length; dj++) {
+          if (String(doms[dj]).trim() === domId) return evDom;
+        }
+      }
+    }
     var name = (ev.name || ev.title || '').trim();
     var desc = (ev.description || '').trim();
     var imageUrl = (ev.imageUrl || '').trim();
@@ -278,14 +283,25 @@
 
   function _dedupeEvents(arr) {
     if (!Array.isArray(arr)) return arr;
-    var seen = {};
-    return arr.filter(function (ev) {
-      var id = String(ev.id || ev.name || '').trim();
-      if (!id) return true;
-      if (seen[id]) return false;
-      seen[id] = true;
-      return true;
-    });
+    var seenId = {};
+    var seenComposite = {};
+    var out = [];
+    for (var i = 0; i < arr.length; i++) {
+      var ev = arr[i];
+      var id = String(ev.id || '').trim();
+      if (id && seenId[id]) continue;
+      var cid = String(ev.catalogId || ev.catalog_id || '').trim();
+      var end = getEndTimestamp(ev);
+      var nameNorm = normalizeForLookup(String(ev.name || ev.title || '').trim());
+      var compKey = null;
+      if (cid && end != null) compKey = 'cid|' + cid + '|' + String(end);
+      else if (nameNorm && end != null) compKey = 'nm|' + nameNorm + '|' + String(end);
+      if (compKey && seenComposite[compKey]) continue;
+      if (id) seenId[id] = true;
+      if (compKey) seenComposite[compKey] = true;
+      out.push(ev);
+    }
+    return out;
   }
 
   function _setCachedEvents(arr) {
@@ -316,31 +332,6 @@
     if (typeof window.updateBoosterAlert === 'function') window.updateBoosterAlert();
     if (typeof window.updateBoosterWidget === 'function') window.updateBoosterWidget();
     if (typeof window.applyBoosterVisibility === 'function') window.applyBoosterVisibility();
-  }
-
-  async function loadVisibleEventsFromSupabase() {
-    try {
-      var supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
-      if (!supabase) return [];
-      var { data, error } = await supabase.rpc('get_visible_events');
-      if (error || !data) return [];
-      var rows = Array.isArray(data) ? data : [];
-      if (window.DEBUG) Logger.debug('[Events] get_visible_events →', rows.length, 'évènement(s)');
-      return rows.map(function (row) {
-        var ed = row.event_data || {};
-        return {
-          id: row.id,
-          name: ed.name || ed.title || '',
-          description: ed.description || '',
-          imageUrl: ed.imageUrl || ed.image || '',
-          endMs: row.expires_at ? new Date(row.expires_at).getTime() : null,
-          expires_at: row.expires_at
-        };
-      });
-    } catch (e) {
-      Logger.error('[Events] get_visible_events — erreur Supabase:', e?.message || e);
-      return [];
-    }
   }
 
   async function upsertEventsToSupabase(events) {
@@ -390,28 +381,60 @@
   }
 
   /**
-   * Charge les événements partagés depuis Supabase (table shared_events).
-   * Appelé uniquement si pas de données locales.
+   * Charge le dernier run d’événements depuis Supabase (table do_events, remplie par le scraper).
    * @returns {Promise<Array>}
    */
   async function loadSharedEvents() {
     try {
       var supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
       if (!supabase) return [];
-      var { data, error } = await supabase.rpc('get_shared_events');
-      if (error || !data) return [];
-      var raw = Array.isArray(data.events_json) ? data.events_json : [];
-      if (window.DEBUG) Logger.debug('[Events] get_shared_events → events_json:', raw.length, 'évènement(s)');
-      if (raw.length === 0) {
-        Logger.warn('[Events] shared_events.events_json est vide — le scraper n\'a peut-être rien trouvé');
+      var { data: headRows, error: errHead } = await supabase
+        .from('do_events')
+        .select('run_id')
+        .order('scraped_at', { ascending: false })
+        .limit(1);
+      if (errHead) {
+        Logger.error('[Events] do_events (head) — Supabase:', errHead.message || errHead);
+        return [];
       }
-      var scrapedAt = (data.uploaded_at && data.uploaded_at !== 'null') ? data.uploaded_at : new Date().toISOString();
-      var withScrapedAt = raw.map(function (ev) {
-        return ev.scrapedAt ? ev : Object.assign({}, ev, { scrapedAt: scrapedAt });
+      if (!headRows || !headRows.length || !headRows[0].run_id) {
+        if (window.DEBUG) Logger.debug('[Events] do_events — aucun enregistrement');
+        return [];
+      }
+      var runId = headRows[0].run_id;
+      var { data: rows, error } = await supabase
+        .from('do_events')
+        .select('id, run_id, scraped_at, dom_id, headline, body, countdown_text, countdown_end_unix, catalog_id, matched')
+        .eq('run_id', runId)
+        .order('dom_id', { ascending: true });
+      if (error) {
+        Logger.error('[Events] do_events erreur — Supabase:', error.message || error);
+        return [];
+      }
+      if (!rows || !rows.length) {
+        Logger.warn('[Events] do_events — run sans lignes — le scraper n\'a peut-être rien trouvé');
+        return [];
+      }
+      if (window.DEBUG) Logger.debug('[Events] do_events →', rows.length, 'évènement(s), run', runId);
+      var raw = rows.map(function (row) {
+        var id = (row.dom_id && String(row.dom_id).trim()) ? String(row.dom_id).trim() : String(row.id);
+        var endTs = row.countdown_end_unix != null && !isNaN(Number(row.countdown_end_unix))
+          ? Number(row.countdown_end_unix)
+          : null;
+        return {
+          id: id,
+          name: row.headline || '',
+          description: row.body || '',
+          timer: row.countdown_text || '',
+          scrapedAt: row.scraped_at || new Date().toISOString(),
+          endTimestamp: endTs,
+          catalogId: row.catalog_id || undefined,
+          matched: !!row.matched
+        };
       });
-      return _dedupeEvents(withScrapedAt);
+      return _dedupeEvents(raw);
     } catch (e) {
-      Logger.error('[Events] shared_events erreur — Supabase:', e?.message || e);
+      Logger.error('[Events] do_events erreur — Supabase:', e?.message || e);
       return [];
     }
   }
@@ -853,30 +876,19 @@
     if (!force && !cacheEmpty && now - _lastRefreshEventsAt < REFRESH_EVENTS_THROTTLE_MS && _lastRefreshEventsAt > 0) return;
     _lastRefreshEventsAt = now;
     loadEventsDatabase().then(function () {
-      loadVisibleEventsFromSupabase().then(function (visible) {
-        if (visible.length > 0) {
-          _setCachedEvents(enrichScrapedEventsWithDb(visible));
-        } else {
-          Logger.warn('[Events] Aucun évènement visible via get_visible_events → fallback get_shared_events');
-          return loadSharedEvents().then(function (sharedEvents) {
-            var raw = Array.isArray(sharedEvents) ? sharedEvents : [];
-            _setCachedEvents(enrichScrapedEventsWithDb(raw));
-            if (raw.length > 0) upsertEventsToSupabase(enrichScrapedEventsWithDb(raw));
-          });
-        }
-      }).then(function () {
-        renderScrapedEvents();
-        if (getScrapedEvents().some(function (e) { return getEndTimestamp(e); })) startCountdownInterval();
-        if (typeof window.updateBoosterAlert === 'function') window.updateBoosterAlert();
-        if (typeof window.updateBoosterWidget === 'function') window.updateBoosterWidget();
-        if (typeof window.applyBoosterVisibility === 'function') window.applyBoosterVisibility();
-      }).catch(function () {
-        loadSharedEvents().then(function (sharedEvents) {
-          var raw = Array.isArray(sharedEvents) ? sharedEvents : [];
-          _setCachedEvents(enrichScrapedEventsWithDb(raw));
-          renderScrapedEvents();
-        }).catch(function () { renderScrapedEvents(); });
+      return loadSharedEvents().then(function (sharedEvents) {
+        var raw = Array.isArray(sharedEvents) ? sharedEvents : [];
+        var enriched = enrichScrapedEventsWithDb(raw);
+        var deduped = _dedupeEvents(enriched);
+        _setCachedEvents(deduped);
+        if (deduped.length > 0) upsertEventsToSupabase(deduped);
       });
+    }).then(function () {
+      renderScrapedEvents();
+      if (getScrapedEvents().some(function (e) { return getEndTimestamp(e); })) startCountdownInterval();
+      if (typeof window.updateBoosterAlert === 'function') window.updateBoosterAlert();
+      if (typeof window.updateBoosterWidget === 'function') window.updateBoosterWidget();
+      if (typeof window.applyBoosterVisibility === 'function') window.applyBoosterVisibility();
     }).catch(function () {
       renderScrapedEvents();
     });
@@ -896,26 +908,6 @@
       bootstrapEventsSidebar();
     });
 
-    if (window.electronScraper) {
-      if (window.electronScraper.onEventsUpdated) {
-        window.electronScraper.onEventsUpdated(function (payload) {
-          var list = payload && Array.isArray(payload.events) ? payload.events : null;
-          if (list && list.length > 0) {
-            setScrapedEventsFromIPC(list).then(function () {
-              refreshEventsFromSupabase(true);
-            });
-          } else {
-            Logger.warn('[Events] events-updated reçu sans événements valides:', payload);
-            refreshEventsFromSupabase(true);
-          }
-        });
-      }
-      if (window.electronScraper.onEventsCollected) {
-        window.electronScraper.onEventsCollected(function () {
-          refreshEventsFromSupabase(true);
-        });
-      }
-    }
   }
 
   // ── Détection booster 50% ──────────────────────────────────────────────────

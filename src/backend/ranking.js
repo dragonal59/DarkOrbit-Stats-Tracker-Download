@@ -3,7 +3,7 @@
 // ==========================================
 // Empreinte debug : dans la console du classement, tapez window.__RANKING_ENGINE_BUILD_ID__
 // Si la valeur n’existe pas ou est différente, l’UI ne charge pas ce fichier (ex. exe issu de build/ obfusqué).
-var RANKING_ENGINE_BUILD_ID = 'hof_servers_profiles_players_2026-04-08';
+var RANKING_ENGINE_BUILD_ID = 'hof_servers_profiles_players_2026-04-10';
 
 const RANKING_LIMIT_DEFAULT = 100;
 const RANKING_LIMIT_MAX = 100;
@@ -195,13 +195,80 @@ function transformPlayerToRow(p, rowServer, uploadedAt, index) {
     galaxy_gates: p.galaxy_gates,
     galaxy_gates_json: p.galaxy_gates_json,
     stats: p.stats != null ? p.stats : null,
-    dostats_updated_at: p.dostats_updated_at
+    dostats_updated_at: p.dostats_updated_at,
+    estimated_rp_previous: (function() {
+      var v = p.estimated_rp_previous;
+      if (v == null) return null;
+      var n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    })(),
+    estimated_rp_delta_scrape: estimatedRpDeltaScrapeFromPayload(p)
   };
 }
 
 /** Supabase limite ~1000 lignes par défaut : .in(user_id, ids) tronquait les profils → grades absents dans le tableau. */
 var PROFILE_USER_ID_BATCH = 250;
 var PROFILE_PLAYERS_SELECT = 'user_id, server, pseudo, company, grade, level, top_user, experience, honor, npc_kills, ship_kills, galaxy_gates, galaxy_gates_json, estimated_rp, total_hours, registered, scraped_at, stats';
+var ESTIMATED_RP_PAIR_SELECT = 'user_id, server, estimated_rp_previous, estimated_rp_last, captured_at_previous, captured_at_last';
+
+function estimatedRpDeltaScrapeFromPayload(p) {
+  if (!p || p.estimated_rp_previous == null || p.estimated_rp == null) return null;
+  var a = Number(p.estimated_rp_previous);
+  var b = Number(p.estimated_rp);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+  return b - a;
+}
+
+/**
+ * Attache les colonnes de profiles_players_estimated_rp_pair sur des lignes profiles_players déjà chargées.
+ * @param {Object} supabase
+ * @param {Array<Object>} ppList
+ */
+async function enrichProfileListWithRpPair(supabase, ppList) {
+  if (!supabase || !ppList || !ppList.length) return;
+  var byServer = {};
+  for (var i = 0; i < ppList.length; i++) {
+    var pp = ppList[i];
+    if (!pp) continue;
+    var s = String(pp.server || '').toLowerCase().trim();
+    var uid = pp.user_id != null ? String(pp.user_id).trim() : '';
+    if (!s || !uid) continue;
+    if (!byServer[s]) byServer[s] = [];
+    var arr = byServer[s];
+    if (arr.indexOf(uid) === -1) arr.push(uid);
+  }
+  var merged = {};
+  for (var srv in byServer) {
+    if (!Object.prototype.hasOwnProperty.call(byServer, srv)) continue;
+    var ids = byServer[srv];
+    for (var off = 0; off < ids.length; off += PROFILE_USER_ID_BATCH) {
+      var chunk = ids.slice(off, off + PROFILE_USER_ID_BATCH);
+      var prp = await supabase
+        .from('profiles_players_estimated_rp_pair')
+        .select(ESTIMATED_RP_PAIR_SELECT)
+        .eq('server', srv)
+        .in('user_id', chunk);
+      if (prp.error || !Array.isArray(prp.data)) continue;
+      for (var j = 0; j < prp.data.length; j++) {
+        var prow = prp.data[j];
+        if (!prow || prow.user_id == null) continue;
+        var pk = String(prow.server || srv).toLowerCase().trim() + ':' + String(prow.user_id).trim();
+        merged[pk] = prow;
+      }
+    }
+  }
+  for (var k = 0; k < ppList.length; k++) {
+    var row = ppList[k];
+    if (!row || row.user_id == null) continue;
+    var rk = String(row.server || '').toLowerCase().trim() + ':' + String(row.user_id).trim();
+    var pr = merged[rk];
+    if (!pr) continue;
+    row.estimated_rp_previous = pr.estimated_rp_previous;
+    row.estimated_rp_last_stored = pr.estimated_rp_last;
+    row.captured_at_previous = pr.captured_at_previous;
+    row.captured_at_last_stored = pr.captured_at_last;
+  }
+}
 
 async function fetchProfilesPlayersBatched(supabase, serverNorm, userIds) {
   var profileMap = {};
@@ -227,6 +294,24 @@ async function fetchProfilesPlayersBatched(supabase, serverNorm, userIds) {
       if (pp && pp.server && pp.user_id) {
         var k = String(pp.server).toLowerCase().trim() + ':' + String(pp.user_id).trim();
         profileMap[k] = pp;
+      }
+    }
+    var prp = await supabase
+      .from('profiles_players_estimated_rp_pair')
+      .select(ESTIMATED_RP_PAIR_SELECT)
+      .eq('server', serverNorm)
+      .in('user_id', chunk);
+    if (!prp.error && Array.isArray(prp.data)) {
+      for (var t = 0; t < prp.data.length; t++) {
+        var prow = prp.data[t];
+        if (!prow || !prow.user_id) continue;
+        var pk = String(prow.server || serverNorm).toLowerCase().trim() + ':' + String(prow.user_id).trim();
+        var target = profileMap[pk];
+        if (!target) continue;
+        target.estimated_rp_previous = prow.estimated_rp_previous;
+        target.estimated_rp_last_stored = prow.estimated_rp_last;
+        target.captured_at_previous = prow.captured_at_previous;
+        target.captured_at_last_stored = prow.captured_at_last;
       }
     }
   }
@@ -428,6 +513,7 @@ async function loadProfilesOnlyRanking(supabase, server, type, limit) {
   if (serverNorm) q = q.eq('server', serverNorm);
   var res = await q.limit(Math.max(limit * 5, 500));
   if (res.error || !Array.isArray(res.data)) return [];
+  await enrichProfileListWithRpPair(supabase, res.data);
   var rows = res.data.map(function(pp, i) {
     var pj = (pp && pp.profile_json && typeof pp.profile_json === 'object') ? pp.profile_json : {};
     var pjStats = (pj.stats && typeof pj.stats === 'object') ? pj.stats : {};
@@ -449,6 +535,7 @@ async function loadProfilesOnlyRanking(supabase, server, type, limit) {
       galaxy_gates: ggTotal,
       galaxy_gates_json: ggDetail,
       estimated_rp: pp.estimated_rp,
+      estimated_rp_previous: pp.estimated_rp_previous,
       total_hours: pp.total_hours,
       registered: pp.registered,
       stats: pp.stats != null ? pp.stats : null,
@@ -555,6 +642,7 @@ async function loadFromNewModel(supabase, server, type, periodKey, limit) {
       galaxy_gates: ggTotal,
       galaxy_gates_json: ggDetail,
       estimated_rp: pp.estimated_rp,
+      estimated_rp_previous: pp.estimated_rp_previous,
       total_hours: pp.total_hours,
       registered: pp.registered,
       dostats_updated_at: ts
@@ -662,6 +750,7 @@ async function loadSharedRankingAllServersSnapshots(supabase, type, limit, perio
         galaxy_gates: ggTotal,
         galaxy_gates_json: ggDetail,
         estimated_rp: pp.estimated_rp,
+        estimated_rp_previous: pp.estimated_rp_previous,
         total_hours: pp.total_hours,
         registered: pp.registered,
         dostats_updated_at: ts
@@ -762,7 +851,14 @@ async function loadDostatsPeriodRanking(supabase, server, type, period, limit) {
         for (var _fci = 0; _fci < top.length; _fci++) {
           var _r = top[_fci];
           if (!_r) continue;
-          var _safeRow = Object.assign({}, _r, { honor: null, xp: null, rank_points: null, estimated_rp: null });
+          var _safeRow = Object.assign({}, _r, {
+            honor: null,
+            xp: null,
+            rank_points: null,
+            estimated_rp: null,
+            estimated_rp_previous: _r.estimated_rp_previous,
+            estimated_rp_delta_scrape: _r.estimated_rp_delta_scrape
+          });
           window.mergeFollowedPlayerStatsCacheFromRow(_safeRow);
         }
       }
@@ -838,6 +934,7 @@ async function enrichImportedWithProfiles(rows, supabase) {
   if (ppRes.data.length === ppLimit) {
     Logger.warn('[Ranking] enrichImportedWithProfiles tronqué — augmenter la limite si nécessaire');
   }
+  await enrichProfileListWithRpPair(supabase, ppRes.data);
   var byUid = {}, byPseudo = {};
   ppRes.data.forEach(function(pp) {
     if (pp.user_id && pp.server) byUid[String(pp.server).toLowerCase().trim() + ':' + String(pp.user_id).trim()] = pp;
@@ -862,6 +959,8 @@ async function enrichImportedWithProfiles(rows, supabase) {
       galaxy_gates: pp.galaxy_gates ?? pjStats.galaxy_gates ?? r.galaxy_gates,
       galaxy_gates_json: pp.galaxy_gates_json ?? pjStats.galaxy_gates_detail ?? r.galaxy_gates_json,
       estimated_rp: pp.estimated_rp ?? r.estimated_rp,
+      estimated_rp_previous: pp.estimated_rp_previous != null ? Number(pp.estimated_rp_previous) : r.estimated_rp_previous,
+      estimated_rp_delta_scrape: estimatedRpDeltaScrapeFromPayload(pp) ?? r.estimated_rp_delta_scrape,
       total_hours: pp.total_hours ?? r.total_hours,
       registered: pp.registered ?? r.registered,
       dostats_updated_at: pp.scraped_at ?? pp.dostats_updated_at ?? r.dostats_updated_at,

@@ -1,6 +1,4 @@
 // Preload Electron — expose config Supabase et IPC au renderer
-// Config injectée par main.js dans process.env AVANT création de la fenêtre
-// (.env, puis build/src/config.supabase.prod.js ou config.supabase.local.js en dev)
 const { contextBridge, ipcRenderer } = require('electron');
 
 const supabaseConfig = {
@@ -16,20 +14,8 @@ contextBridge.exposeInMainWorld('PAYPAL_CONFIG', {
   planId: process.env.PAYPAL_PLAN_ID || ''
 });
 
-contextBridge.exposeInMainWorld('electronScraper', {
-  start: () => ipcRenderer.invoke('scraper:start'),
-  startEventsOnly: () => ipcRenderer.invoke('scraper:startEventsOnly'),
-  pause: (paused) => ipcRenderer.invoke('scraper:pause', paused),
-  stop: () => ipcRenderer.invoke('scraper:stop'),
-  getState: () => ipcRenderer.invoke('scraper:getState'),
-  setUserContext: (userId, accessToken) => ipcRenderer.send('scraper:setUserContext', { userId, accessToken }),
-  onProgress: (cb) => { ipcRenderer.on('scraping-progress', (_e, d) => cb(d)); },
-  // scraping-error : émis par scraper-bridge.sendScrapingError() depuis le main process
-  onError: (cb) => { ipcRenderer.on('scraping-error', (_e, d) => cb(d)); },
-  onRankingsUpdated: (cb) => { ipcRenderer.on('rankings-updated', (_e, d) => cb(d)); },
-  onScrapingFinished: (cb) => { ipcRenderer.on('scraping-finished', (_e, d) => cb(d)); },
-  onEventsCollected: (cb) => { ipcRenderer.on('scraping:events-collected', (_e, d) => cb(d)); },
-  onEventsUpdated: (cb) => { ipcRenderer.on('events-updated', (_e, d) => cb(d)); }
+contextBridge.exposeInMainWorld('electronAuth', {
+  setUserContext: (userId, accessToken) => { ipcRenderer.send('auth:set-user-context', { userId, accessToken }); },
 });
 
 contextBridge.exposeInMainWorld('electronRequestFreshToken', {
@@ -71,27 +57,6 @@ contextBridge.exposeInMainWorld('electronAppUpdater', {
   quitAndInstallConfirmed: () => ipcRenderer.invoke('update:quit-and-install-confirmed'),
 });
 
-contextBridge.exposeInMainWorld('electronClientLauncher', {
-  // CDP interception (client DarkOrbit.exe)
-  launch:   (opts) => ipcRenderer.invoke('client-launcher:launch', opts),
-  stop:     ()     => ipcRenderer.invoke('client-launcher:stop'),
-  getState: ()     => ipcRenderer.invoke('client-launcher:getState'),
-  onPacket:          (cb) => { ipcRenderer.on('client-launcher:packet',           (_e, d) => cb(d)); },
-  onProfileDetected: (cb) => { ipcRenderer.on('client-launcher:profile-detected', (_e, d) => cb(d)); },
-  onFirmFound:       (cb) => { ipcRenderer.on('client-launcher:firm-found',        (_e, d) => cb(d)); },
-  onSaveSuccess:     (cb) => { ipcRenderer.on('client-launcher:save-success',      (_e, d) => cb(d)); },
-
-  // Scan automatisé des profils (BrowserWindow)
-  startScan:    (opts) => ipcRenderer.invoke('client-launcher:start-scan', opts),
-  stopScan:     ()     => ipcRenderer.invoke('client-launcher:stop-scan'),
-  getExePath:   ()     => ipcRenderer.invoke('client-launcher:get-exe-path'),
-  browseExe:    ()     => ipcRenderer.invoke('client-launcher:browse-exe'),
-  collectPlayerStats: (opts) => ipcRenderer.invoke('client-launcher:collect-player-stats', opts),
-  onScanProgress: (cb) => { ipcRenderer.on('client-launcher:scan-progress', (_e, d) => cb(d)); },
-  onScanStats:    (cb) => { ipcRenderer.on('client-launcher:scan-stats',    (_e, d) => cb(d)); },
-  onScanDone:     (cb) => { ipcRenderer.on('client-launcher:scan-done',     (_e, d) => cb(d)); },
-});
-
 contextBridge.exposeInMainWorld('electronPlayerStatsScraper', {
   collectWithLogin: (opts) => ipcRenderer.invoke('player-stats-scraper:collect', opts),
   collectManual: (opts) => ipcRenderer.invoke('player-stats-scraper:collect-manual', opts),
@@ -110,16 +75,4 @@ contextBridge.exposeInMainWorld('electronPlayerStatsCredentials', {
   load: () => ipcRenderer.invoke('player-stats-credentials:load'),
   save: (obj) => ipcRenderer.invoke('player-stats-credentials:save', obj),
   isEncryptionAvailable: () => ipcRenderer.invoke('player-stats-credentials:isEncryptionAvailable'),
-});
-
-contextBridge.exposeInMainWorld('electronDarkorbitAccounts', {
-  list: () => ipcRenderer.invoke('darkorbit-accounts:list'),
-  save: (input) => ipcRenderer.invoke('darkorbit-accounts:save', input),
-  delete: (id) => ipcRenderer.invoke('darkorbit-accounts:delete', id),
-  getAssignments: () => ipcRenderer.invoke('darkorbit-accounts:getAssignments'),
-  saveAssignments: (assignments) => ipcRenderer.invoke('darkorbit-accounts:saveAssignments', assignments),
-  isEncryptionAvailable: () => ipcRenderer.invoke('darkorbit-accounts:isEncryptionAvailable'),
-  getCredentials: (accountId) => ipcRenderer.invoke('darkorbit-accounts:getCredentials', accountId),
-  getAccountForServer: (serverCode) => ipcRenderer.invoke('darkorbit-accounts:getAccountForServer', serverCode),
-  getServers: () => ipcRenderer.invoke('darkorbit-accounts:SERVERS')
 });
