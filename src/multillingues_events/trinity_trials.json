@@ -1,6 +1,7 @@
 {
   "id": "trinity_trials",
   "visible": true,
+  "dom_ids": ["TrinityTrials2601"],
   "image": "img/events/trinity_trials.jpg",
   "image_urls": ["breaking_news_trinitytrials"],
   "names": {

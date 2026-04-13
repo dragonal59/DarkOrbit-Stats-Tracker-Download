@@ -1,6 +1,7 @@
 {
   "id": "discord",
   "visible": true,
+  "dom_ids": ["discord"],
   "image": "img/events/discord.jpg",
   "image_urls": ["discord_s"],
   "names": {

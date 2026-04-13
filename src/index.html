@@ -137,6 +137,10 @@
 <div id="ranking-detail-modal" class="ranking-modal">
   <div class="ranking-modal-body">
     <div class="ranking-modal-header">
+      <div class="ranking-modal-profile-views" data-ranking-detail-profile-views hidden>
+        <span class="ranking-modal-profile-views-count" data-ranking-detail-profile-views-count></span>
+        <button type="button" class="ranking-modal-profile-views-eye" data-ranking-detail-profile-views-btn data-i18n-title="ranking_profile_views_eye_title" data-i18n-aria-label="ranking_profile_views_eye_title" title="" aria-label="">👁</button>
+      </div>
       <div class="ranking-modal-company-block">
         <span data-ranking-detail-company-badge class="ranking-modal-company-badge company-badge company-other"></span>
         <div class="ranking-modal-stat-row ranking-modal-stat-row-compact">
@@ -421,6 +425,9 @@
         <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
         <circle cx="12" cy="7" r="4"></circle>
       </svg>
+    </button>
+    <button type="button" id="discordCommunityBtn" class="header-discord-btn" data-i18n-title="discord_community_tooltip" data-i18n-aria-label="discord_community_tooltip" title="" aria-label="">
+      <img src="img/icon_btn/my_discord.png" alt="" class="header-discord-btn__img" decoding="async">
     </button>
     <h1>🚀 <span data-i18n="app_title">DarkOrbit Stats Tracker Pro</span> <span id="headerUserBadge"></span></h1>
     <p id="headerActiveAccount" class="header-active-account" style="display: none;"></p>

@@ -3076,6 +3076,56 @@ input.true-placeholder:focus::placeholder {
   margin-left: 0;
 }
 
+/* Discord : grand bouton sous la rangée d’icônes (gauche), aligné hauteur ~ bouton recharger */
+.header-discord-btn {
+  position: absolute;
+  top: 64px;
+  left: 20px;
+  z-index: 9998;
+  width: 72px;
+  height: 72px;
+  padding: 2px;
+  box-sizing: border-box;
+  margin: 0;
+  border: 1px solid rgba(88, 101, 242, 0.45);
+  border-radius: 14px;
+  cursor: pointer;
+  display: block;
+  overflow: hidden;
+  background: linear-gradient(145deg, rgba(88, 101, 242, 0.22) 0%, rgba(71, 82, 196, 0.12) 100%);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.header-discord-btn:hover {
+  transform: scale(1.04);
+  border-color: rgba(88, 101, 242, 0.75);
+  box-shadow: 0 6px 20px rgba(88, 101, 242, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+}
+
+.header-discord-btn:active {
+  transform: scale(0.98);
+}
+
+.header-discord-btn__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  pointer-events: none;
+}
+
+@media (max-width: 520px) {
+  .header-discord-btn {
+    width: 60px;
+    height: 60px;
+    top: 60px;
+    left: 16px;
+    border-radius: 12px;
+  }
+}
+
 .messages-badge {
   position: absolute;
   top: -4px;
@@ -4777,7 +4827,84 @@ input.true-placeholder:focus::placeholder {
 .update-critical-title { margin: 0 0 8px; font-size: 1.25rem; }
 .update-critical-version { color: var(--text-secondary); margin-bottom: 16px; }
 .update-critical-changelog { margin-bottom: 16px; font-size: 0.9rem; }
-.update-critical-changelog .update-changelog-section { margin: 12px 0 6px; }
+
+/* Blocs changelog (modale MAJ, « Nouveautés », popup compte) */
+.update-ready-changelog { margin: 12px 0 18px; font-size: 0.9rem; line-height: 1.5; }
+.update-changelog-block {
+  margin-bottom: 20px;
+  padding: 14px 16px 16px;
+  border-radius: 10px;
+  border-left: 4px solid var(--accent, #4facfe);
+  background: rgba(255, 255, 255, 0.04);
+}
+.update-changelog-block:last-child { margin-bottom: 0; }
+.update-changelog-block--new {
+  border-left-color: #22c55e;
+  background: rgba(34, 197, 94, 0.1);
+}
+.update-changelog-block--improve {
+  border-left-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.1);
+}
+.update-changelog-block--fix {
+  border-left-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.12);
+}
+.update-changelog-block-title {
+  margin: 0 0 12px 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.update-changelog-block--new .update-changelog-block-title { color: #4ade80; }
+.update-changelog-block--improve .update-changelog-block-title { color: #7dd3fc; }
+.update-changelog-block--fix .update-changelog-block-title { color: #fbbf24; }
+.update-changelog-block .update-changelog-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  list-style: disc;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.88));
+}
+.update-changelog-block .update-changelog-item {
+  margin: 0 0 10px 0;
+  line-height: 1.55;
+}
+.update-changelog-block .update-changelog-item:last-child { margin-bottom: 0; }
+.update-changelog-empty { margin: 0; color: var(--text-muted); line-height: 1.5; }
+
+/* Modale « Nouveautés de la version » (premier lancement) */
+.update-whatsnew-modal {
+  background: var(--bg-primary, #1a1a2e);
+  border: 1px solid var(--border, #333);
+  border-radius: 14px;
+  max-width: 500px;
+  max-height: 82vh;
+  overflow: auto;
+  padding: 24px 26px 22px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+}
+.update-whatsnew-title {
+  margin: 0 0 20px 0;
+  font-size: 1.2rem;
+  line-height: 1.35;
+  color: var(--text-primary);
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+}
+.update-whatsnew-body { margin-top: 4px; }
+.update-whatsnew-cta {
+  margin-top: 22px;
+  width: 100%;
+  padding: 12px 18px;
+  font-weight: 600;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--accent, #4facfe) 0%, #6366f1 100%);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+}
+.update-whatsnew-cta:hover { filter: brightness(1.08); }
+.update-changelog-popup-body { line-height: 1.5; }
 .update-critical-progress-wrap { margin: 16px 0; }
 .update-critical-progress-bar { height: 8px; background: var(--bg-secondary, #252540); border-radius: 4px; overflow: hidden; }
 .update-critical-progress-fill { height: 100%; background: var(--primary, #6366f1); width: 0%; transition: width 0.2s; }

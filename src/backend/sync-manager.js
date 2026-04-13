@@ -167,6 +167,7 @@ const DataSync = {
     const boosterConfig = UnifiedStorage.get(sk.BOOSTERS || 'darkOrbitBoosters', {});
     const currentStats = UnifiedStorage.get(sk.CURRENT_STATS || 'darkOrbitCurrentStats', {});
     const currentEvents = UnifiedStorage.get(sk.CURRENT_EVENTS, []);
+    const followedPlayers = UnifiedStorage.get(sk.FOLLOWED_PLAYERS || 'darkOrbitFollowedPlayers', []);
     const theme = localStorage?.getItem(sk.THEME || 'darkOrbitTheme') || 'dark';
     const viewMode = localStorage?.getItem(sk.VIEW_MODE || 'darkOrbitViewMode') || 'detailed';
     const language = localStorage?.getItem(sk.LANGUAGE || 'darkOrbitLanguage') || 'fr';
@@ -181,6 +182,7 @@ const DataSync = {
       booster_config_json: boosterConfig,
       current_stats_json: currentStats,
       current_events_json: Array.isArray(currentEvents) ? currentEvents : [],
+      followed_players_json: Array.isArray(followedPlayers) ? followedPlayers : [],
       theme,
       view_mode: viewMode,
       language: language || 'fr',
@@ -300,6 +302,9 @@ const DataSync = {
         if (settingsRow.booster_config_json && typeof settingsRow.booster_config_json === 'object') UnifiedStorage.set(sk.BOOSTERS || 'darkOrbitBoosters', settingsRow.booster_config_json);
         if (settingsRow.current_stats_json && typeof settingsRow.current_stats_json === 'object') UnifiedStorage.set(sk.CURRENT_STATS || 'darkOrbitCurrentStats', settingsRow.current_stats_json);
         if (Array.isArray(settingsRow.current_events_json)) UnifiedStorage.set(sk.CURRENT_EVENTS || 'darkOrbitCurrentEvents', settingsRow.current_events_json);
+        if (settingsRow.followed_players_json != null && Array.isArray(settingsRow.followed_players_json)) {
+          UnifiedStorage.set(sk.FOLLOWED_PLAYERS || 'darkOrbitFollowedPlayers', settingsRow.followed_players_json);
+        }
         if (settingsRow.theme) localStorage?.setItem(sk.THEME || 'darkOrbitTheme', settingsRow.theme);
         if (settingsRow.view_mode) localStorage?.setItem(sk.VIEW_MODE || 'darkOrbitViewMode', settingsRow.view_mode);
         if (settingsRow.language) {
@@ -310,7 +315,7 @@ const DataSync = {
       }
       UnifiedStorage?.set(LAST_SYNC_KEY, Date.now());
       if (typeof UnifiedStorage?.invalidateCache === 'function') {
-        var keysToInvalidate = [sk.EVENTS || 'darkOrbitEvents', sk.SETTINGS || 'darkOrbitSettings', sk.CUSTOM_LINKS || 'darkOrbitCustomLinks', sk.IMPORTED_RANKINGS || 'darkOrbitImportedRankings', sk.BOOSTERS || 'darkOrbitBoosters', sk.CURRENT_STATS || 'darkOrbitCurrentStats', sk.CURRENT_EVENTS || 'darkOrbitCurrentEvents'];
+        var keysToInvalidate = [sk.EVENTS || 'darkOrbitEvents', sk.SETTINGS || 'darkOrbitSettings', sk.CUSTOM_LINKS || 'darkOrbitCustomLinks', sk.IMPORTED_RANKINGS || 'darkOrbitImportedRankings', sk.BOOSTERS || 'darkOrbitBoosters', sk.CURRENT_STATS || 'darkOrbitCurrentStats', sk.CURRENT_EVENTS || 'darkOrbitCurrentEvents', sk.FOLLOWED_PLAYERS || 'darkOrbitFollowedPlayers'];
         keysToInvalidate.forEach(function(k) { if (k) UnifiedStorage.invalidateCache(k); });
       }
       // Rafraîchir toute l'UI concernée par les données synchronisées

@@ -1,6 +1,7 @@
 {
   "id": "vortex_of_greed",
   "visible": true,
+  "dom_ids": ["vog_202508"],
   "image": "img/events/vortex_of_greed.jpg",
   "names": {
     "fr": "Vortex de Cupidité",

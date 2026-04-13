@@ -1,6 +1,7 @@
 {
   "id": "stellar_pathfinder_bundles",
   "visible": true,
+  "dom_ids": ["stellar_pathfinder"],
   "image": "img/events/stellar_pathfinder_bundles.jpg",
   "image_urls": ["stellar_pathfinder"],
   "names": {

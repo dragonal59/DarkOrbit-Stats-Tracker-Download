@@ -1,6 +1,7 @@
 {
   "id": "season_pass_waning_crescent",
   "visible": true,
+  "dom_ids": ["SeasonPass202602"],
   "image": "img/events/season_pass_waning_crescent.jpg",
   "image_urls": ["breaking_news_seasonpass"],
   "names": {

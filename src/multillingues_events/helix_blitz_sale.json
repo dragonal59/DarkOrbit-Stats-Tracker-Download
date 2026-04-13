@@ -1,6 +1,7 @@
 {
   "id": "helix_blitz_sale",
   "visible": true,
+  "dom_ids": ["blitz400_tspenderOli"],
   "image": "img/events/helix_blitz_sale.jpg",
   "image_urls": ["ghh_400"],
   "names": {

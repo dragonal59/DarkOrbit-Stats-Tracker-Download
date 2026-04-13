@@ -1,6 +1,7 @@
 {
   "id": "galaxy_trek",
   "visible": true,
+  "dom_ids": ["galaxytrek202509"],
   "image": "img/events/galaxy_trek.jpg",
   "names": {
     "fr": "Vers l'Inconnu… et au-delà !",

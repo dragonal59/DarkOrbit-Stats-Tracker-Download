@@ -93,6 +93,9 @@ function initAutoUpdater(mainWindowRef, pkg) {
   let mainWindow = mainWindowRef;
   const currentVersion = pkg && pkg.version ? String(pkg.version) : '0.0.0';
   const normalizedCurrentVersion = String(currentVersion || '').trim().replace(/^v/, '');
+  const PERIODIC_CHECK_MS = 30 * 60 * 1000;
+  const AUTO_INSTALL_DELAY_MS = 1500;
+  let _periodicCheckTimer = null;
 
   /** @type {{ version: string, changelogEntry: object|null, releaseType: string, isCritical: boolean } | null} */
   let _pendingUpdateInfo = null;
@@ -211,6 +214,13 @@ function initAutoUpdater(mainWindowRef, pkg) {
         });
         setPendingInstall();
         _pendingUpdateInfo = null;
+        setTimeout(() => {
+          try {
+            if (_autoUpdater) _autoUpdater.quitAndInstall(false, true);
+          } catch (e) {
+            console.warn('[AutoUpdate] auto quitAndInstall:', e?.message || e);
+          }
+        }, AUTO_INSTALL_DELAY_MS);
       });
 
       autoUpdater.on('error', (err) => {
@@ -230,6 +240,13 @@ function initAutoUpdater(mainWindowRef, pkg) {
       } else {
         runInitialCheck();
       }
+      if (_periodicCheckTimer) clearInterval(_periodicCheckTimer);
+      _periodicCheckTimer = setInterval(() => {
+        if (!_autoUpdater) return;
+        _autoUpdater.checkForUpdates().catch((err) => {
+          console.warn('[AutoUpdate] periodic checkForUpdates:', err?.message || err);
+        });
+      }, PERIODIC_CHECK_MS);
     } catch (e) {
       console.warn('[AutoUpdate] setup:', e?.message || e);
     }

@@ -1,6 +1,7 @@
 {
   "id": "agatus_breach",
   "visible": true,
+  "dom_ids": ["agatusBreach202604"],
   "image": "img/events/agatus_breach.jpg",
   "names": {
     "fr": "Brèche d'Agatus",

@@ -34,6 +34,7 @@ var _allTimeRankingCache = {
 // Structure : { [serverCode]: { honor: rows[], xp: rows[], rank_points: rows[] } }
 var _last24hByServer = {};
 var _rpDeltaByServer = {}; // { srv: { userId: deltaRp, _readyRp: true } }
+var _rpDeltasRpcUnavailable = false; // RPC absente sur Supabase (ex. migration non appliquée) — évite les rappels 404
 
 // Même liste que formulaire d'inscription (config.js SERVERS_LIST), avec "Tous les serveurs" en premier
 const RANKING_SERVERS = typeof SERVERS_LIST !== 'undefined' && Array.isArray(SERVERS_LIST) ? ['Tous les serveurs', ...SERVERS_LIST] : ['Tous les serveurs'];
@@ -2022,6 +2023,11 @@ function _ensureRpDeltasForServer(server, followedList, onDone) {
     if (typeof onDone === 'function') onDone(false);
     return;
   }
+  if (_rpDeltasRpcUnavailable) {
+    if (!_rpDeltaByServer[srv] || !_rpDeltaByServer[srv]._readyRp) _rpDeltaByServer[srv] = { _readyRp: true };
+    if (typeof onDone === 'function') onDone(false);
+    return;
+  }
   if (_rpDeltaByServer[srv] && _rpDeltaByServer[srv]._readyRp) {
     if (typeof onDone === 'function') onDone(false);
     return;
@@ -2035,7 +2041,17 @@ function _ensureRpDeltasForServer(server, followedList, onDone) {
   var hadBefore = !!_rpDeltaByServer[srv];
   supabase.rpc('get_rp_deltas', { p_server: srv, p_user_ids: userIds, p_hours: 24 })
     .then(function(res) {
-      if (!res.error && Array.isArray(res.data) && res.data.length > 0) {
+      if (res.error) {
+        var code = res.error.code || '';
+        var msg = String(res.error.message || '') + String(res.error.details || '');
+        if (code === 'PGRST202' || /Could not find the function|get_rp_deltas/i.test(msg)) {
+          _rpDeltasRpcUnavailable = true;
+        }
+        _rpDeltaByServer[srv] = { _readyRp: true };
+        if (typeof onDone === 'function') onDone(false);
+        return;
+      }
+      if (Array.isArray(res.data) && res.data.length > 0) {
         var map = { _readyRp: true };
         res.data.forEach(function(row) {
           if (row.user_id && row.delta != null) map[row.user_id] = Number(row.delta);
@@ -2609,6 +2625,101 @@ if (typeof window !== 'undefined') {
   };
 }
 
+function _rankingProfileViewsTf(key, vars) {
+  var raw = typeof window.i18nT === 'function' ? window.i18nT(key) : key;
+  var s = raw != null ? String(raw) : String(key);
+  if (vars && typeof vars === 'object') {
+    Object.keys(vars).forEach(function (k) {
+      s = s.split('{{' + k + '}}').join(String(vars[k]));
+    });
+  }
+  return s;
+}
+
+function _rankingProfileViewsParseRpcPayload(raw) {
+  if (raw == null) return null;
+  if (typeof raw === 'object' && !Array.isArray(raw)) return raw;
+  if (typeof raw === 'string') {
+    try {
+      return JSON.parse(raw);
+    } catch (_) {
+      return null;
+    }
+  }
+  return null;
+}
+
+function showRankingProfileViewersPopup(viewedServer, viewedGameUserId, targetPseudo) {
+  function esc(s) {
+    var d = document.createElement('div');
+    d.textContent = s != null ? String(s) : '';
+    return d.innerHTML;
+  }
+  var overlay = document.createElement('div');
+  overlay.className = 'ranking-profile-viewers-overlay';
+  var title = _rankingProfileViewsTf('ranking_profile_views_visitors_title', { pseudo: targetPseudo || '—' });
+  var closeLbl = typeof window.i18nT === 'function' ? window.i18nT('close') : 'Fermer';
+  overlay.innerHTML =
+    '<div class="ranking-profile-viewers-modal">' +
+    '<h3>' + esc(title) + '</h3>' +
+    '<div class="ranking-profile-viewers-body" data-rpv-body><p class="ranking-profile-viewers-empty">…</p></div>' +
+    '<div class="ranking-profile-viewers-footer"><button type="button" class="sa-btn" data-rpv-close>' + esc(closeLbl) + '</button></div></div>';
+
+  function close() {
+    try { document.removeEventListener('keydown', onKey); } catch (_) {}
+    overlay.remove();
+  }
+  function onKey(e) {
+    if (e.key === 'Escape') close();
+  }
+  overlay.addEventListener('click', function (e) {
+    if (e.target === overlay) close();
+  });
+  var closeBtn = overlay.querySelector('[data-rpv-close]');
+  if (closeBtn) closeBtn.addEventListener('click', close);
+  document.addEventListener('keydown', onKey);
+  document.body.appendChild(overlay);
+
+  var bodyEl = overlay.querySelector('[data-rpv-body]');
+  var supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+  if (!supabase || !viewedServer || !viewedGameUserId) {
+    bodyEl.innerHTML = '<p class="ranking-profile-viewers-empty">' + esc(_rankingProfileViewsTf('ranking_profile_views_error')) + '</p>';
+    return;
+  }
+  supabase.rpc('list_ranking_profile_viewers', {
+    p_viewed_server: viewedServer,
+    p_viewed_game_user_id: viewedGameUserId
+  }).then(function (res) {
+    var data = _rankingProfileViewsParseRpcPayload(res.data);
+    if (res.error || !data || !data.success) {
+      bodyEl.innerHTML = '<p class="ranking-profile-viewers-empty">' + esc(_rankingProfileViewsTf('ranking_profile_views_error')) + '</p>';
+      return;
+    }
+    var viewers = data.viewers;
+    if (typeof viewers === 'string') {
+      try { viewers = JSON.parse(viewers); } catch (_) { viewers = null; }
+    }
+    if (!Array.isArray(viewers) || viewers.length === 0) {
+      bodyEl.innerHTML = '<p class="ranking-profile-viewers-empty">' + esc(_rankingProfileViewsTf('ranking_profile_views_visitors_empty')) + '</p>';
+      return;
+    }
+    var thPseudo = esc(_rankingProfileViewsTf('ranking_profile_views_col_pseudo'));
+    var thCount = esc(_rankingProfileViewsTf('ranking_profile_views_col_count'));
+    var thFollow = esc(_rankingProfileViewsTf('ranking_profile_views_col_follow'));
+    var lblYes = esc(_rankingProfileViewsTf('ranking_profile_views_follow_yes'));
+    var lblNo = esc(_rankingProfileViewsTf('ranking_profile_views_follow_no'));
+    var rows = viewers.map(function (v) {
+      var followCell = '—';
+      if (v.follows_target === true) followCell = lblYes;
+      else if (v.follows_target === false) followCell = lblNo;
+      return '<tr><td>' + esc(v.pseudo != null ? String(v.pseudo) : '—') + '</td><td>' + esc(String(v.view_count != null ? v.view_count : 0)) + '</td><td>' + followCell + '</td></tr>';
+    }).join('');
+    bodyEl.innerHTML = '<table class="ranking-profile-viewers-table"><thead><tr><th>' + thPseudo + '</th><th>' + thCount + '</th><th>' + thFollow + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  }).catch(function () {
+    bodyEl.innerHTML = '<p class="ranking-profile-viewers-empty">' + esc(_rankingProfileViewsTf('ranking_profile_views_error')) + '</p>';
+  });
+}
+
 function _toastFreeRankingDetailsLocked(playerName) {
   const badge = (typeof getCurrentBadge === 'function' ? getCurrentBadge() : null) || 'FREE';
   if (badge !== 'FREE') return;
@@ -2651,6 +2762,66 @@ function showPlayerDetails(row) {
   if (serverCode) {
     var displayName = typeof SERVER_CODE_TO_DISPLAY !== 'undefined' && SERVER_CODE_TO_DISPLAY[serverCode];
     serverDisplay = displayName ? displayName + ' — ' + serverCode : serverCode;
+  }
+
+  var viewsWrap = modal.querySelector('[data-ranking-detail-profile-views]');
+  var viewsCountEl = modal.querySelector('[data-ranking-detail-profile-views-count]');
+  var viewsBtn = modal.querySelector('[data-ranking-detail-profile-views-btn]');
+  var viewedGameUserId = (row.userId != null ? String(row.userId) : (row.user_id != null ? String(row.user_id) : '')).trim();
+  var isProfileViewsSelf = false;
+  try {
+    var activePv = typeof UserPreferencesAPI !== 'undefined' && UserPreferencesAPI.getActivePlayerInfoSync
+      ? UserPreferencesAPI.getActivePlayerInfoSync()
+      : null;
+    if (activePv) {
+      var apPv = (activePv.player_pseudo || activePv.player_id || '').toString().trim().toLowerCase();
+      var asPv = (activePv.player_server || '').toString().trim().toLowerCase();
+      var rpPv = (row.game_pseudo || row.name || '').toString().trim().toLowerCase();
+      var rsPv = ((row._server || row.server) || '').toString().trim().toLowerCase();
+      if (apPv && asPv && rpPv === apPv && rsPv === asPv) isProfileViewsSelf = true;
+    }
+  } catch (_) {}
+  modal.setAttribute('data-profile-viewed-server', serverCode || '');
+  modal.setAttribute('data-profile-viewed-game-user-id', viewedGameUserId || '');
+  modal.setAttribute('data-profile-viewed-pseudo', pseudo || '');
+  if (viewsWrap && viewsCountEl) {
+    if (viewedGameUserId && serverCode) {
+      viewsWrap.hidden = false;
+      viewsCountEl.textContent = typeof window.i18nT === 'function' ? window.i18nT('messages_loading') : '…';
+      var supabasePv = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+      if (supabasePv) {
+        supabasePv.rpc('record_ranking_profile_view', {
+          p_viewed_server: serverCode,
+          p_viewed_game_user_id: viewedGameUserId,
+          p_skip_record: !!isProfileViewsSelf
+        }).then(function (res) {
+          var pdata = _rankingProfileViewsParseRpcPayload(res.data);
+          if (res.error || !pdata || !pdata.success) {
+            viewsWrap.hidden = true;
+            return;
+          }
+          var total = pdata.total != null ? Number(pdata.total) : 0;
+          viewsCountEl.textContent = _rankingProfileViewsTf('ranking_profile_views_label', { count: total });
+        }).catch(function () {
+          viewsWrap.hidden = true;
+        });
+      } else {
+        viewsWrap.hidden = true;
+      }
+    } else {
+      viewsWrap.hidden = true;
+    }
+  }
+  if (viewsBtn && !viewsBtn._rankingProfileViewsEyeBound) {
+    viewsBtn._rankingProfileViewsEyeBound = true;
+    viewsBtn.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      var srv = modal.getAttribute('data-profile-viewed-server') || '';
+      var gid = modal.getAttribute('data-profile-viewed-game-user-id') || '';
+      var pname = modal.getAttribute('data-profile-viewed-pseudo') || '';
+      if (srv && gid) showRankingProfileViewersPopup(srv, gid, pname);
+    });
   }
 
   var posHonor = (row.honor_rank != null ? String(row.honor_rank) : null) || (row._sortType === 'honor' && row._position ? String(row._position) : null);

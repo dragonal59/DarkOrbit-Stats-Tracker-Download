@@ -1114,16 +1114,6 @@ function initSuperAdmin() {
     for (let i = 0; i < 16; i++) s += chars.charAt(Math.floor(Math.random() * chars.length));
     return s.match(/.{1,4}/g).join('-');
   }
-  /** Valeurs INTERVAL PostgreSQL pour license_keys.expires_after_activation (NULL = permanent). */
-  const EXPIRES_AFTER_ACTIVATION_MAP = {
-    '1d': '1 day',
-    '3d': '3 days',
-    '1w': '7 days',
-    '2w': '14 days',
-    '1m': '30 days',
-    indefinite: null
-  };
-
   document.getElementById('superAdminKeysGenerateBtn')?.addEventListener('click', async () => {
     const badgeSelect = document.getElementById('superAdminKeysBadge');
     const qtyInput = document.getElementById('superAdminKeysQuantity');
@@ -1135,10 +1125,6 @@ function initSuperAdmin() {
     let qty = parseInt(qtyInput.value, 10) || 5;
     qty = Math.max(1, Math.min(100, qty));
     const expiresIn = expiresSelect?.value || 'indefinite';
-    const expiresAfterActivation =
-      Object.prototype.hasOwnProperty.call(EXPIRES_AFTER_ACTIVATION_MAP, expiresIn)
-        ? EXPIRES_AFTER_ACTIVATION_MAP[expiresIn]
-        : null;
     const supabase = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
     if (!supabase) {
       if (typeof showToast === 'function') showToast('Supabase non disponible.', 'error');
@@ -1152,21 +1138,25 @@ function initSuperAdmin() {
         k = generateRandomKey();
       } while (seen.has(k));
       seen.add(k);
-      keys.push({ key: k, badge, expires_after_activation: expiresAfterActivation });
+      keys.push({ key: k, badge, expires_in: expiresIn });
     }
     try {
-      let inserted = 0;
-      for (let j = 0; j < keys.length; j++) {
-        const row = keys[j];
-        const insertPayload = {
-          key: row.key,
-          badge: row.badge,
-          expires_after_activation: row.expires_after_activation
-        };
-        const { error } = await supabase.from('license_keys').insert(insertPayload);
-        if (error) throw error;
-        inserted += 1;
+      const { data: rpcData, error: rpcErr } = await supabase.rpc('insert_license_keys', {
+        p_rows: keys
+      });
+      if (rpcErr) throw rpcErr;
+      const data = typeof rpcData === 'string' ? (() => { try { return JSON.parse(rpcData); } catch (_) { return null; } })() : rpcData;
+      if (!data || data.success === false) {
+        const code = data && data.error;
+        const msg =
+          code === 'forbidden'
+            ? 'Accès refusé (compte SUPERADMIN requis).'
+            : code === 'auth_required'
+              ? 'Session expirée : reconnectez-vous.'
+              : code || 'Échec de la génération.';
+        throw new Error(msg);
       }
+      const inserted = typeof data.inserted === 'number' ? data.inserted : keys.length;
       const i18nT = typeof window !== 'undefined' && typeof window.i18nT === 'function' ? window.i18nT : null;
       const expiresLabelKey =
         expiresIn === '1d'
@@ -1183,7 +1173,8 @@ function initSuperAdmin() {
 
       const expiresLabel = i18nT ? i18nT(expiresLabelKey) : expiresIn;
       const periodPrefix = i18nT ? i18nT('sa_keys_pro_period_line_prefix') : 'Période PRO après activation :';
-      const expiresText = expiresAfterActivation === null ? expiresLabel : `${periodPrefix} ${expiresLabel}`;
+      const expiresText =
+        expiresIn === 'indefinite' ? expiresLabel : `${periodPrefix} ${expiresLabel}`;
 
       const lines = keys.map((r) => `${r.key} — ${expiresText}`);
       outputEl.value = lines.join('\n');

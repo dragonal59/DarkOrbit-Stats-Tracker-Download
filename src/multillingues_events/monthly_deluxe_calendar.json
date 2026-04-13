@@ -1,6 +1,7 @@
 {
   "id": "monthly_deluxe_calendar",
   "visible": true,
+  "dom_ids": ["monthlyDeluxePack102020"],
   "image": "img/events/monthly_deluxe_calendar.jpg",
   "image_urls": ["breaking_news_monthlydeluxepack"],
   "names": {

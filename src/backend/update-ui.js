@@ -33,29 +33,22 @@
 
   function renderChangelogHtml(entry) {
     if (!entry || !entry.changes) return '';
+    function section(items, titleKey, titleFallback, kind) {
+      if (!items || !items.length) return '';
+      var h = '<div class="update-changelog-block update-changelog-block--' + kind + '">';
+      h += '<h4 class="update-changelog-block-title">' + escapeHtml(t(titleKey, titleFallback)) + '</h4>';
+      h += '<ul class="update-changelog-list">';
+      items.forEach(function (s) {
+        h += '<li class="update-changelog-item">' + escapeHtml(String(s)) + '</li>';
+      });
+      h += '</ul></div>';
+      return h;
+    }
     var html = '';
-    if (entry.changes.nouveautés && entry.changes.nouveautés.length) {
-      html += '<p class="update-changelog-section"><strong>' + t('update_cl_new', 'Nouveautés') + '</strong></p><ul>';
-      entry.changes.nouveautés.forEach(function (s) {
-        html += '<li>' + escapeHtml(String(s)) + '</li>';
-      });
-      html += '</ul>';
-    }
-    if (entry.changes.améliorations && entry.changes.améliorations.length) {
-      html += '<p class="update-changelog-section"><strong>' + t('update_cl_improve', 'Améliorations') + '</strong></p><ul>';
-      entry.changes.améliorations.forEach(function (s) {
-        html += '<li>' + escapeHtml(String(s)) + '</li>';
-      });
-      html += '</ul>';
-    }
-    if (entry.changes.corrections && entry.changes.corrections.length) {
-      html += '<p class="update-changelog-section"><strong>' + t('update_cl_fixes', 'Corrections') + '</strong></p><ul>';
-      entry.changes.corrections.forEach(function (s) {
-        html += '<li>' + escapeHtml(String(s)) + '</li>';
-      });
-      html += '</ul>';
-    }
-    return html || '<p>' + t('update_changelog_empty', 'Aucun détail.') + '</p>';
+    html += section(entry.changes.nouveautés, 'update_cl_new', 'Nouveautés', 'new');
+    html += section(entry.changes.améliorations, 'update_cl_improve', 'Améliorations', 'improve');
+    html += section(entry.changes.corrections, 'update_cl_fixes', 'Corrections', 'fix');
+    return html || '<p class="update-changelog-empty">' + escapeHtml(t('update_changelog_empty', 'Aucun détail.')) + '</p>';
   }
 
   function escapeHtml(s) {
@@ -208,7 +201,7 @@
       '<p style="margin:0 0 6px 0;opacity:0.95;">' + escapeHtml(t('update_modal_version', 'Nouvelle version :')) + ' <strong>' + escapeHtml(vLabel) + '</strong></p>' +
       '<p style="margin:0 0 12px 0;font-size:0.9rem;opacity:0.85;">' + escapeHtml(typeLine) + '</p>' +
       critHint +
-      '<div class="update-ready-changelog" style="margin:12px 0 16px 0;font-size:0.9rem;line-height:1.45;">' + changelogHtml + '</div>' +
+      '<div class="update-ready-changelog">' + changelogHtml + '</div>' +
       '<p style="margin:0 0 12px 0;font-size:0.8rem;opacity:0.75;">' + escapeHtml(t('update_restart_hint', 'L’installation fermera et relancera l’application (pas le redémarrage du PC).')) + '</p>' +
       '<div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;">' + buttonsHtml + '</div>' +
       '</div>';
@@ -302,10 +295,10 @@
         overlay.style.cssText = 'position:fixed;inset:0;z-index:99997;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;padding:16px;';
         var title = t('update_whats_new_title', 'Nouveautés de la version') + ' v' + current;
         overlay.innerHTML =
-          '<div class="update-whatsnew-modal" style="background:var(--bg-primary,#1a1a2e);border:1px solid var(--border,#333);border-radius:12px;max-width:480px;max-height:80vh;overflow:auto;padding:20px;">' +
-          '<h3 style="margin-top:0;">' + escapeHtml(title) + '</h3>' +
-          '<div>' + renderChangelogHtml(entry) + '</div>' +
-          '<button type="button" class="sa-btn" style="margin-top:16px;" id="update-whatsnew-ok">' + escapeHtml(t('update_whats_new_cta', 'C’est parti !')) + '</button>' +
+          '<div class="update-whatsnew-modal">' +
+          '<h3 class="update-whatsnew-title">' + escapeHtml(title) + '</h3>' +
+          '<div class="update-whatsnew-body">' + renderChangelogHtml(entry) + '</div>' +
+          '<button type="button" class="sa-btn update-whatsnew-cta" id="update-whatsnew-ok">' + escapeHtml(t('update_whats_new_cta', 'C’est parti !')) + '</button>' +
           '</div>';
         document.body.appendChild(overlay);
         document.getElementById('update-whatsnew-ok').addEventListener('click', function () {

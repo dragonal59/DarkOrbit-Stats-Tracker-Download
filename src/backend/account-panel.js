@@ -975,6 +975,17 @@
     var overlay = modal ? modal.querySelector('.account-panel-overlay') : null;
 
     if (openBtn) openBtn.addEventListener('click', openPanel);
+    var discordBtn = document.getElementById('discordCommunityBtn');
+    if (discordBtn) {
+      discordBtn.addEventListener('click', function () {
+        var url = 'https://discord.gg/sjrPAJXU';
+        if (typeof window.electronAPI !== 'undefined' && window.electronAPI.openExternal) {
+          window.electronAPI.openExternal(url);
+        } else {
+          window.open(url, '_blank', 'noopener,noreferrer');
+        }
+      });
+    }
     if (closeBtn) closeBtn.addEventListener('click', closePanel);
     if (overlay) overlay.addEventListener('click', closePanel);
 

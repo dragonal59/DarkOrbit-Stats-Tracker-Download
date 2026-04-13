@@ -1,6 +1,7 @@
 {
   "id": "apocalypse_box_refresh",
   "visible": true,
+  "dom_ids": ["apoc_refresh_202511"],
   "image": "img/events/apocalypse_box_refresh.jpg",
   "names": {
     "fr": "Actualisation de la boîte de l'apocalypse",
