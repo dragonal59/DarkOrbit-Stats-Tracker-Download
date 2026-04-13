@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "2.5.11",
+      "date": "2026-04-13",
+      "type": "standard",
+      "changes": {
+        "nouveautés": [
+          "Description de la nouvelle fonctionnalité"
+        ],
+        "améliorations": [
+          "Amélioration des performances et de l'interface"
+        ],
+        "corrections": [
+          "L'app ne se connecter plus au compte utilisateur"
+        ]
+      }
+    },
+    {
       "version": "2.5.10",
       "date": "2026-04-13",
       "type": "standard",

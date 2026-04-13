@@ -533,7 +533,9 @@
     if (typeof getSupabaseClient !== 'function') return;
     var supabase = getSupabaseClient();
     if (!supabase) { window.location.href = 'index.html'; return; }
-    var session = await AuthManager.getSession();
+    var session = AuthManager.getValidSession
+      ? await AuthManager.getValidSession()
+      : await AuthManager.getSession();
     if (session) window.location.href = 'index.html';
   });
 })();
