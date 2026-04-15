@@ -216,13 +216,7 @@
   }
 
   function findEventInDatabaseForScraped(ev) {
-    var cid = (ev && (ev.catalogId || ev.catalog_id) || '').toString().trim();
-    if (cid && _eventsDatabase && Array.isArray(_eventsDatabase.events)) {
-      for (var ci = 0; ci < _eventsDatabase.events.length; ci++) {
-        var evDb0 = _eventsDatabase.events[ci];
-        if ((evDb0.id || '').toString().trim() === cid) return evDb0;
-      }
-    }
+    // dom_id (événement scrapé → ev.id) en premier : id bannière unique côté DO ; catalog_id peut être partagé ou incohérent.
     var domId = ev && ev.id != null ? String(ev.id).trim() : '';
     if (domId && domId.indexOf('free-demo-') !== 0 && _eventsDatabase && Array.isArray(_eventsDatabase.events)) {
       for (var di = 0; di < _eventsDatabase.events.length; di++) {
@@ -232,6 +226,13 @@
         for (var dj = 0; dj < doms.length; dj++) {
           if (String(doms[dj]).trim() === domId) return evDom;
         }
+      }
+    }
+    var cid = (ev && (ev.catalogId || ev.catalog_id) || '').toString().trim();
+    if (cid && _eventsDatabase && Array.isArray(_eventsDatabase.events)) {
+      for (var ci = 0; ci < _eventsDatabase.events.length; ci++) {
+        var evDb0 = _eventsDatabase.events[ci];
+        if ((evDb0.id || '').toString().trim() === cid) return evDb0;
       }
     }
     var name = (ev.name || ev.title || '').trim();

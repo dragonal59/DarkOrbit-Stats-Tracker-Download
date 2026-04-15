@@ -1,0 +1,60 @@
+{
+  "id": "astral_ascension_rankings",
+  "visible": true,
+  "dom_ids": [
+    "astralrankings202404_1",
+    "astralrankings202604_1"
+  ],
+  "image": "img/events/astral_ascension_rankings.png",
+  "names": {
+    "fr": "Classement Ascension astrale",
+    "en": "Astral Ascension rankings",
+    "de": "Astrale Aufstieg-Rangliste",
+    "es": "Clasificación Ascensión astral",
+    "ru": "Рейтинг Астрального восхождения",
+    "tr": "Astral Yükseliş sıralaması"
+  },
+  "descriptions": {
+    "fr": "Les failles se sont réveillées ; de redoutables ennemis vous attendent au tournant de votre destin ! Prenez possession du vaisseau inconnu, montrez-leur qui est le patron et obtenez le titre de Coryphée des failles !",
+    "en": "The rifts have awakened; fierce enemies await your impending doom from within! Make the unfamiliar spacecraft your own, show 'em who's boss and claim the title of Luminary of the Rifts!",
+    "de": "Die Risse sind erwacht; furchteinflößende Feinde warten darin auf deinen Untergang! Mach das unbekannte Raumschiff zu deinem, zeig ihnen, wer der Boss ist, und erklimme den Titel Leuchte der Risse!",
+    "es": "¡Las grietas han despertado; dentro de ellas, temibles enemigos aguardan tu inminente perdición! ¡Aprópiate de la nave desconocida, demuéstrales quién manda y reclama el título de Luminaria de las Grietas!",
+    "ru": "Разломы пробудились — внутри тебя поджидают свирепые враги, готовые к твоей гибели! Освой незнакомый корабль, покажи, кто здесь главный, и завоюй титул Светоча Разломов!",
+    "tr": "Yarıklar uyandı; içlerinde seni bekleyen azılı düşmanlar sonu gelecek yıkımına hazırlanıyor! Tanımadığın uzay gemisine hükmet, kimin patron olduğunu göster ve Yarıkların Işığı unvanını kazan!"
+  },
+  "keywords": [
+    "astral ascension rankings",
+    "classement ascension astrale",
+    "clasificación ascensión astral",
+    "astrale aufstieg-rangliste",
+    "рейтинг астрального восхождения",
+    "astral yükseliş sıralaması",
+    "astral ascension",
+    "ascension astrale",
+    "luminary of the rifts",
+    "luminary of the rift",
+    "luminaria de las grietas",
+    "leuchte der risse",
+    "светоча разломов",
+    "yarıkların ışığı",
+    "coryphée des failles",
+    "astralrankings",
+    "astral rankings"
+  ],
+  "exclude_keywords": [
+    "season pass",
+    "pass de saison",
+    "battle pass",
+    "pass bataille",
+    "subscription",
+    "abonnement",
+    "stellar pathfinder",
+    "pathfinder bundles",
+    "pathfinder bundle",
+    "éclaireurs stellaires",
+    "eclaireurs stellaires",
+    "stellar pathfinder paketleri",
+    "paquetes stellar pathfinder",
+    "stellar pathfinder-bundles"
+  ]
+}

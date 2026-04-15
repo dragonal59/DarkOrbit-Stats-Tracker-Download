@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "2.5.13",
+      "date": "2026-04-15",
+      "type": "standard",
+      "changes": {
+        "nouveautés": [
+          "Aucune nouveauté"
+        ],
+        "améliorations": [
+          "Aucune amélioration"
+        ],
+        "corrections": [
+          "Correction de l'affichage des événement."
+        ]
+      }
+    },
+    {
       "version": "2.5.12",
       "date": "2026-04-13",
       "type": "standard",

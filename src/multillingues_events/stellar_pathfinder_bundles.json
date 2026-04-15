@@ -20,5 +20,37 @@
     "ru": "Прокладывайте путь через новые рубежи и весь космос с наборами Stellar Pathfinder! Они полностью укомплектованы, но доступны лишь ограниченное время, так что действуйте сейчас!",
     "tr": "Stellar Pathfinder paketleriyle yeni sınırlar ve kozmos boyunca yolunuzu açın! Tamamen donanımlı ama yalnızca sınırlı bir süre için mevcut, bu yüzden hemen harekete geçin!"
   },
-  "keywords": ["stellar pathfinder bundles", "éclaireurs stellaires", "paquetes stellar pathfinder", "наборы stellar pathfinder", "stellar pathfinder paketleri","abrete paso","nuevas fronteras","exploradores estelares","lotes"],"exclude_keywords":["deep space echoes","ecos del espacio","galaxy trek","hacia lo desconocido"]
+  "keywords": [
+    "stellar pathfinder bundles",
+    "stellar pathfinder bundle",
+    "éclaireurs stellaires",
+    "eclaireurs stellaires",
+    "paquetes stellar pathfinder",
+    "наборы stellar pathfinder",
+    "stellar pathfinder paketleri",
+    "blaze a trail",
+    "fully kitted"
+  ],
+  "exclude_keywords": [
+    "deep space echoes",
+    "ecos del espacio",
+    "galaxy trek",
+    "hacia lo desconocido",
+    "astral ascension",
+    "ascension astrale",
+    "classement ascension astrale",
+    "astral ascension rankings",
+    "astralrankings",
+    "luminary of the rifts",
+    "coryphée des failles",
+    "coryphée",
+    "leuchte der risse",
+    "luminaria de las grietas",
+    "светоча разломов",
+    "réputation",
+    "reputation",
+    "pvp",
+    "galactic strife",
+    "conflit galactique"
+  ]
 }

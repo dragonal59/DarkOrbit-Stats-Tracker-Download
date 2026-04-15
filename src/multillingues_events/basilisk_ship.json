@@ -1,0 +1,44 @@
+{
+  "id": "basilisk_ship",
+  "visible": true,
+  "dom_ids": [
+    "basilisk202309"
+  ],
+  "image": "img/events/basilisk_ship.png",
+  "names": {
+    "fr": "Le vaisseau Basilisk",
+    "en": "The Basilisk Ship",
+    "de": "Das Basilisk-Schiff",
+    "es": "La nave Basilisk",
+    "ru": "Корабль «Василиск»",
+    "tr": "Basilisk Gemisi"
+  },
+  "descriptions": {
+    "fr": "Connu sous le nom de Calamité des étoiles, le vaisseau Basilisk est désormais disponible pour les pilotes. Alimentez vos systèmes avec des toxines et laissez vos ennemis agoniser dans votre sillage.",
+    "en": "Known as the Ruinous Blight of the Stars, the Basilisk ship is now available for pilots. Fuel your systems with toxins and leave enemies in your ruinous wake.",
+    "de": "Das als Verhängnisvolle Plage der Sterne bekannte Basilisk-Schiff ist jetzt für Piloten verfügbar. Speise deine Systeme mit Toxinen und lass deine Feinde in deinem verderblichen Kielwasser zurück.",
+    "es": "Conocida como la Plaga Ruinosa de las Estrellas, la nave Basilisk ya está disponible para los pilotos. Alimenta tus sistemas con toxinas y deja a tus enemigos en tu devastadora estela.",
+    "ru": "Известный как Губительная Чума Звёзд, корабль «Василиск» теперь доступен для пилотов. Питайте свои системы токсинами и оставляйте врагов погибать в вашем разрушительном следу.",
+    "tr": "Yıldızların Yıkıcı Belası olarak bilinen Basilisk gemisi artık pilotlar için mevcut. Sistemlerinizi toksinlerle besleyin ve düşmanlarınızı yıkıcı izinizde çaresiz bırakın."
+  },
+  "keywords": [
+    "basilisk ship",
+    "vaisseau basilisk",
+    "nave basilisk",
+    "basilisk-schiff",
+    "корабль василиск",
+    "basilisk gemisi",
+    "basilisk",
+    "ruinous blight",
+    "calamité des étoiles",
+    "blight of the stars"
+  ],
+  "exclude_keywords": [
+    "season pass",
+    "pass de saison",
+    "battle pass",
+    "pass bataille",
+    "subscription",
+    "abonnement"
+  ]
+}

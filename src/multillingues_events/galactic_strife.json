@@ -1,0 +1,48 @@
+{
+  "id": "galactic_strife",
+  "visible": true,
+  "dom_ids": [
+    "galacticStrife_202604"
+  ],
+  "image": "img/events/galactic_strife.png",
+  "image_urls": [
+    "galactic_strife",
+    "galactic-strife",
+    "galacticStrife"
+  ],
+  "names": {
+    "fr": "Conflit galactique",
+    "en": "Galactic Strife",
+    "de": "Galaktischer Konflikt",
+    "es": "Conflicto galáctico",
+    "ru": "Галактический конфликт",
+    "tr": "Galaktik Çatışma"
+  },
+  "descriptions": {
+    "fr": "C'est parti pour un combat PvP de tous les diables ! Remportez les batailles pour gagner de la réputation, grimper dans les classements et recevoir de précieuses récompenses ! Prouvez que vous êtes le pilote le plus doué de toute la galaxie !",
+    "en": "It's time for an all-out PvP battle! Battle and win to gain Reputation, climb the ranks and get valuable rewards! Show everyone who's the best in the galaxy!",
+    "de": "Es ist Zeit für einen PvP-Kampf auf ganzer Linie! Kämpfe und siege, um Ansehen zu gewinnen, in den Rängen aufzusteigen und wertvolle Belohnungen zu erhalten! Zeig allen, wer der Beste in der Galaxis ist!",
+    "es": "¡Es hora de una batalla PvP sin cuartel! ¡Lucha y gana para obtener Reputación, escalar en los rangos y conseguir valiosas recompensas! ¡Demuestra a todos quién es el mejor de la galaxia!",
+    "ru": "Время для масштабного PvP-сражения! Сражайся и побеждай, чтобы получить репутацию, подняться в рейтинге и завоевать ценные награды! Докажи всем, кто лучший в галактике!",
+    "tr": "Tüm gücünüzle PvP savaşına girme vakti! Savaş ve kazan; İtibar kazan, sıralarda yüksel ve değerli ödüller edin! Galakside en iyinin sen olduğunu herkese kanıtla!"
+  },
+  "keywords": [
+    "galactic strife",
+    "conflit galactique",
+    "conflicto galáctico",
+    "galaktischer konflikt",
+    "галактический конфликт",
+    "galaktik çatışma",
+    "pvp",
+    "reputation",
+    "réputation"
+  ],
+  "exclude_keywords": [
+    "season pass",
+    "pass de saison",
+    "battle pass",
+    "pass bataille",
+    "subscription",
+    "abonnement"
+  ]
+}
